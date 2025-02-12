@@ -13,6 +13,7 @@ LANGUAGE_MODELS_FOLDER = os.path.join(os.environ.get("HOME"),
 with open(Path(__file__).parent / "models.toml", "rb") as f:
     language_config_default = tomllib.load(f)
 
+
 def main(args=None):
 
     parser = argparse.ArgumentParser()
@@ -22,7 +23,22 @@ def main(args=None):
                         default=["en"])
     parser.add_argument("--custom-model")
     parser.add_argument("--custom-url")
+    parser.add_argument("--keyboard", action="store_true")
+    parser.add_argument("--latency", default=0, type=float, help="keyboard latency")
     o = parser.parse_args(args)
+
+    if o.keyboard:
+        try:
+            from voskrealtime.keyboard import type_text
+        except ImportError:
+            exit(1)
+
+        try:
+            import pyperclip
+            PYPERCLIP = True
+        except ImportError:
+            print("Please install pyperclip to use the keyboard feature with non-ascii characters.")
+            PYPERCLIP = False
 
     language_config = {lang: language_config_default[lang] for lang in o.language}
 
@@ -77,6 +93,8 @@ def main(args=None):
                             clear_line()
                             if len(result_dict['text']):
                                 print(result_dict['text'])
+                                if o.keyboard:
+                                    type_text(result_dict['text'] + " ", interval=o.latency) # Simulate typing
 
                         else:
                             partial_result = rec.PartialResult()
