@@ -1,0 +1,30 @@
+[build-system]
+requires = ["setuptools>=42", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "voskrealtime"
+version = "0.1.0"
+description = "Use Vosk to stream in real-time"
+authors = [
+    { name="Mahé Perrette", email="mahe.perrette@gmail.com" }
+]
+readme = "README.md"
+license = { file="LICENSE" }
+requires-python = ">=3.9"
+dependencies = [
+    "vosk",
+    "numpy",
+    "sounddevice",
+]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+]
+
+[project.urls]
+Homepage = "https://github.com/voskrealtime"
+
+[project.scripts]
+voskrealtime = "voskrealtime.streamer:main"
