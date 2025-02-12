@@ -1,62 +1,17 @@
 import os
 from pathlib import Path
 import json
+import tomllib
 import vosk
 import argparse
 from voskrealtime.audio import Microphone
-from voskrealtime.util import clear_line, print_partial
+from voskrealtime.util import clear_line, print_partial, download_model
 
 LANGUAGE_MODELS_FOLDER = os.path.join(os.environ.get("HOME"),
                                       ".local/share/vosk/language-models")
 
-language_config_default = {
-    "en" : {
-        "model": "vosk-model-en-us-0.42-gigaspeech",
-        "url": "https://alphacephei.com/vosk/models/vosk-model-en-us-0.42-gigaspeech.zip",
-        "language": "English (US)",
-        "start message": "Listening... Press Ctrl+C to stop.",
-        "stop message": "Recording stopped."
-    },
-    "fr" : {
-        "model": "vosk-model-fr-0.22",
-        "url": "https://alphacephei.com/vosk/models/vosk-model-fr-0.22.zip",
-        "language": "French",
-        "start message": "En écoute... Appuyez sur Ctrl+C pour arrêter.",
-        "stop message": "Écoute arrêtée."
-    },
-    "de" : {
-        "model": "vosk-model-de-tuda-0.6-900k",
-        "url": "https://alphacephei.com/vosk/models/vosk-model-de-tuda-0.6-900k.zip",
-        "language": "German",
-        "start message": "Hören... Drücken Sie Strg+C, um zu stoppen.",
-        "stop message": "Aufnahme gestoppt."
-    },
-    "it" : {
-        "model": "vosk-model-it-0.22",
-        "url": "https://alphacephei.com/vosk/models/vosk-model-it-0.22.zip",
-        "language": "Italian",
-        "start message": "In ascolto... Premere Ctrl+C per interrompere.",
-        "stop message": "Registrazione interrotta."
-    },
-    "custom" : {
-        "start message": "Listening... Press Ctrl+C to stop.",
-        "stop message": "Recording stopped.",
-        "language": "custom",
-    },
-}
-
-def download_model(url, data_folder):
-    import requests
-    import zipfile
-    import io
-
-    os.makedirs(data_folder, exist_ok=True)
-
-    print(f"Downloading model from {url}...")
-    r = requests.get(url)
-    z = zipfile.ZipFile(io.BytesIO(r.content))
-    z.extractall(data_folder)
-    print(f"Model downloaded and unpacked to {data_folder}")
+with open(Path(__file__).parent / "models.toml", "rb") as f:
+    language_config_default = tomllib.load(f)
 
 def main(args=None):
 

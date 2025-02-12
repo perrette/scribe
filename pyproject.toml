@@ -16,6 +16,8 @@ dependencies = [
     "vosk",
     "numpy",
     "sounddevice",
+    "tqdm",
+    "requests",
 ]
 classifiers = [
     "Programming Language :: Python :: 3",

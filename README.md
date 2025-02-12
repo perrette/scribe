@@ -4,7 +4,13 @@ Vosk Realtime is a speech recognition tool that provides real-time transcription
 
 ## Installation
 
-To install the necessary dependencies, run the following command:
+Install PortAudio library. E.g. on Ubuntu:
+
+```bash
+sudo apt-get install portaudio19-dev
+```
+
+The python dependencies should be dealt with automatically:
 
 ```bash
 git clone https://github.com/yourusername/vosk-realtime.git
@@ -17,12 +23,20 @@ or
 pip install git+https://github.com/yourusername/vosk-realtime.git
 ```
 
+The language models should also download on-the-fly is not present.
+The default data folder is `$HOME/.local/share/vosk/language-models`.
+This can be modified.
+
+
 ## Usage
 
 Here is an example of how to use the `voskrealtime` script:
 
 ```bash
-voskrealtime -l fr en
+voskrealtime -l fr en it de
+voskrealtime -l custom --custom-model vosk-model-cn-0.22
 ```
 
-This will listen to your microphone and print the transcribed text in real-time.
+If you bother cloning the repo you can just edit the [config file](voskrealtime/models.toml) to add more.
+
+This will prompt you for a language, listen to your microphone and print the transcribed text in real-time.
