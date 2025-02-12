@@ -64,7 +64,7 @@ def main(args=None):
                 raise ValueError(language)
             meta = language_config[language]
 
-            print(meta["start message"])
+            print(meta["start_message"])
             rec = recognizers[language]
 
             try:
@@ -87,7 +87,7 @@ def main(args=None):
             except KeyboardInterrupt:
                 pass
 
-            print(meta["stop message"])
+            print(meta["stop_message"])
 
     while True:
         while True:
