@@ -1,6 +1,6 @@
 # Vosk Realtime
 
-Vosk Realtime is a speech recognition tool that provides real-time transcription using the Vosk API.
+Vosk Realtime is a local speech recognition tool that provides real-time transcription using the Vosk package.
 
 ## Installation
 
@@ -13,14 +13,14 @@ sudo apt-get install portaudio19-dev
 The python dependencies should be dealt with automatically:
 
 ```bash
-git clone https://github.com/yourusername/vosk-realtime.git
+git clone https://github.com/perrette/voskrealtime.git
 cd vosk-realtime
 pip install -e .
 ```
 or
 
 ```bash
-pip install git+https://github.com/yourusername/vosk-realtime.git
+pip install git+https://github.com/perrette/voskrealtime.git
 ```
 
 The language models should also download on-the-fly is not present.

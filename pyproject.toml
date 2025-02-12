@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "voskrealtime"
 version = "0.1.0"
-description = "Use Vosk to stream in real-time"
+description = "Vosk Realtime is a local speech recognition tool that provides real-time transcription using the Vosk package."
 authors = [
     { name="Mahé Perrette", email="mahe.perrette@gmail.com" }
 ]
