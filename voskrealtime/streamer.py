@@ -11,8 +11,9 @@ LANGUAGE_MODELS_FOLDER = os.path.join(os.environ.get("HOME"),
                                       ".local/share/vosk/language-models")
 
 with open(Path(__file__).parent / "models.toml", "rb") as f:
-    language_config = tomllib.load(f)
+    language_config_default = tomllib.load(f)
 
+language_config = language_config_default.copy()
 
 # Load the Vosk recognizer
 RECOGNIZER = {}
@@ -103,37 +104,34 @@ def main(args=None):
                         default=LANGUAGE_MODELS_FOLDER,)
     parser.add_argument("-l", "--language", choices=list(language_config), nargs="+",
                         help="Language to use (will skip the prompt). Default to letting you choose interactively.")
-    grp = parser.add_mutually_exclusive_group()
-    grp.add_argument("--custom-model")
-    grp.add_argument("--custom-url")
+    parser.add_argument("--model", nargs="+",
+                        help="Any model from https://alphacephei.com/vosk/models -- will be treated as a language")
+
     parser.add_argument("--keyboard", action="store_true")
     parser.add_argument("--latency", default=0, type=float, help="keyboard latency")
     o = parser.parse_args(args)
 
+    if o.model:
+        for model in o.model:
+            url = f"https://alphacephei.com/vosk/models/{model}.zip"
+
+        language_config[model] = {
+            **language_config_default["en"],
+            "model": model,
+            "url": url,
+            "language": "?",
+        }
+
+        # if model is specified, and language is not, only use that model
+        if o.language is None:
+            o.language = []
+        o.language.extend(o.model)
+
     # remove languages not specified (remove overhead when switching languages)
-    if o.language:
+    if o.language is not None:
         for lang in list(language_config):
             if lang not in o.language:
                 language_config.pop(lang)
-
-    if o.custom_model or o.custom_url:
-
-        if o.custom_url:
-            from urllib.parse import urlparse
-            path = urlparse(o.custom_url).path
-            basename = os.path.basename(path)
-            o.custom_model = basename.replace(".zip", "")
-
-        else:
-            o.custom_url = f"https://alphacephei.com/vosk/models/{o.custom_model}.zip"
-
-        language_config["custom"].update({
-            "model": o.custom_model,
-            "url": o.custom_url,
-            })
-    else:
-        if "custom" in language_config:
-            language_config.pop("custom")
 
     # Set up the microphone for recording
     micro = Microphone()

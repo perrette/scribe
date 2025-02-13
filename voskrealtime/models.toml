@@ -25,8 +25,3 @@ url = "https://alphacephei.com/vosk/models/vosk-model-it-0.22.zip"
 language = "Italian"
 start_message = "In ascolto... Premere Ctrl+C per interrompere."
 stop_message = "Registrazione interrotta."
-
-[custom]
-start_message = "Listening... Press Ctrl+C to stop."
-stop_message = "Recording stopped."
-language = "custom"

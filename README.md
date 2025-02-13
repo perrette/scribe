@@ -35,25 +35,18 @@ The `voskrealtime` script can be used as simply as:
 ```bash
 voskrealtime
 ```
-or
-
-```bash
-voskrealtime -l fr en
-```
-
-to restrict the number of pre-defined languages (en fr de it as of now).
-You may also use [any other vosk model](https://alphacephei.com/vosk/models) via `custom-model` or possibly `custom-url`:
-
-```bash
-voskrealtime -l custom --custom-model vosk-model-cn-0.22
-```
-
-If you bother cloning the repo you can just edit the [config file](voskrealtime/models.toml) to add more.
 
 This will prompt you for a language, listen to your microphone and print the transcribed text in real-time.
 
+It can be extended with [any other vosk model](https://alphacephei.com/vosk/models).
+Several languages and models can be passed to restrict the interactive choice menu:
+
+```bash
+voskrealtime -l fr en --model vosk-model-cn-0.22
+```
+
 Note doing Ctrl-C will exit the current model and let you start a new recording in a new language.
-Mind the memory usage: every of these model adds nearly 10Gb of so RAM usage, so switching between these four will be memory intensive and bring your laptop to crash quickly. Use -l to restrict to one model at a time.
+Mind the memory usage: every of these model adds nearly 10Gb of so RAM usage, so switching between these four will be memory intensive and bring your laptop to crash quickly. Use -l to restrict to one model at a time. Or restart the code.
 
 ### Advanced usage as keyboard replacement:
 
@@ -63,4 +56,4 @@ Use `pip install -e .[keyboard]` to install the optional `pyautogui` dependency 
 voskrealtime --keyboard
 ```
 
-Now the application will (should) also send keys to any application the keyboard (as well as the usual terminal printing).
+Now the application will (should) also send keys to any application the keyboard (as well as the usual terminal printing). This is not a reliable feature. in my system it works in chrome based applications (including vscode) but it does not in firefox and sublime text.
