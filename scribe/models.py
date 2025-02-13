@@ -1,8 +1,7 @@
 import os
 import json
 import numpy as np
-from voskrealtime.util import download_model
-# from voskrealtime.audio import get_duration
+from scribe.util import download_model
 
 VOSK_MODELS_FOLDER = os.path.join(os.environ.get("HOME"),
                                       ".local/share/vosk/language-models")

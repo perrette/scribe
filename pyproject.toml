@@ -3,9 +3,9 @@ requires = ["setuptools>=42", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "voskrealtime"
-version = "0.1.0"
-description = "Vosk Realtime is a local speech recognition tool that provides real-time transcription using the Vosk package."
+name = "scribe"
+version = "0.2.0"
+description = "scribe is a local speech recognition tool that provides real-time transcription using vosk and whisper AI."
 authors = [
     { name="Mahé Perrette", email="mahe.perrette@gmail.com" }
 ]
@@ -13,13 +13,12 @@ readme = "README.md"
 license = { file="LICENSE" }
 requires-python = ">=3.9"
 dependencies = [
-    "vosk",
     "numpy",
     "sounddevice",
     "tqdm",
     "requests",
 ]
-optional-dependencies = { keyboard = ["pynput"], whisper = ["openai-whisper"] }
+optional-dependencies = { keyboard = ["pynput"], whisper = ["openai-whisper"], vosk = ["vosk"] }
 
 classifiers = [
     "Programming Language :: Python :: 3",
@@ -28,7 +27,7 @@ classifiers = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/voskrealtime"
+Homepage = "https://github.com/scribe"
 
 [project.scripts]
-voskrealtime = "voskrealtime.streamer:main"
+scribe = "scribe.streamer:main"

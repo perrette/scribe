@@ -1,9 +1,9 @@
 from pathlib import Path
 import tomllib
 import argparse
-from voskrealtime.audio import Microphone
-from voskrealtime.util import print_partial, clear_line
-from voskrealtime.models import VoskTranscriber, WhisperTranscriber
+from scribe.audio import Microphone
+from scribe.util import print_partial, clear_line
+from scribe.models import VoskTranscriber, WhisperTranscriber
 
 with open(Path(__file__).parent / "models.toml", "rb") as f:
     language_config_default = tomllib.load(f)
@@ -16,7 +16,7 @@ def start_recording(micro, transcriber, keyboard=False, latency=0):
 
     if keyboard:
         try:
-            from voskrealtime.keyboard import type_text
+            from scribe.keyboard import type_text
         except ImportError:
             keyboard = False
             exit(1)
@@ -44,11 +44,11 @@ def main(args=None):
                         e.g. 'vosk-model-small-en-us-0.15'.
                         For whisper, see https://github.com/openai/whisper?tab=readme-ov-file#available-models-and-languages""")
 
-    parser.add_argument("--backend", choices=["vosk", "whisper"], default="vosk",
+    parser.add_argument("--backend", choices=["vosk", "whisper"],
                         help="Choose the backend to use for speech recognition.")
 
     parser.add_argument("-l", "--language", choices=list(language_config["vosk"]),
-                        help="An alias for preselected models.")
+                        help="An alias for preselected models when using the vosk backend.")
 
     parser.add_argument("--samplerate", default=16000, type=int)
     parser.add_argument("--keyboard", action="store_true")
@@ -57,6 +57,17 @@ def main(args=None):
     parser.add_argument("--data-folder", help="Folder to store Vosk models.")
 
     o = parser.parse_args(args)
+
+    if o.backend is None:
+        try:
+            import vosk
+            o.backend = "vosk"
+        except ImportError:
+            try:
+                import whisper
+                o.backend = "whisper"
+            except ImportError:
+                raise ImportError("Please install either vosk or whisper to use this script.")
 
     if not o.model and not o.language:
         if o.backend == "whisper":
