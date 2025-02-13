@@ -19,6 +19,32 @@ class AbstractTranscriber:
     def transcribe_audio(self, audio_data):
         raise NotImplementedError()
 
+    def transcribe_realtime_audio(self, audio_data):
+        raise NotImplementedError()
+
+    def start_recording(self, microphone,
+                        start_message="Recording... Press Ctrl+C to stop.",
+                        stop_message="Stopped recording."):
+
+        with microphone.open_stream():
+            print(start_message)
+
+            try:
+                while True:
+                    while not microphone.q.empty():
+                        data = microphone.q.get()
+                        yield self.transcribe_realtime_audio(data)
+
+            except KeyboardInterrupt:
+                pass
+
+            finally:
+                result = self.finalize()
+                microphone.q.queue.clear()
+                yield result
+
+            print(stop_message)
+
 
 def get_vosk_model(model, data_folder=None, url=None):
     """Load the Vosk recognizer"""
@@ -58,12 +84,11 @@ class VoskTranscriber(AbstractTranscriber):
         if final:
             pass
         elif finalize:
-            final = True
-            result_dict["text"] = result_dict.pop("partial")
+            result_dict["text"] = result_dict.pop("partial", "")
         else:
+            assert not final
             if "text" in result_dict:
                 del result_dict["text"]
-        result_dict["final"] = final
         return result_dict
 
     def transcribe_audio(self, audio_data=None):
@@ -81,11 +106,12 @@ class WhisperTranscriber(AbstractTranscriber):
         super().__init__(model, model_name, language, model_kwargs=model_kwargs, **kwargs)
         self.audio_buffer = b''
 
-    def transcribe_realtime_audio(self, audio_bytes=None, chunks=32000*60):
+    def transcribe_realtime_audio(self, audio_bytes=b"", max_duration=60):
         self.audio_buffer += audio_bytes
 
-        if len(self.audio_buffer) < chunks:
-            return {"partial": f"{len(self.audio_buffer)} bytes received (duration: {len(self.audio_buffer) / 32000:.2f} seconds)"}
+        one_second = self.samplerate * 2 # 16-bit audio, 1 channel  ~ 32000 bytes
+        if len(self.audio_buffer) < max_duration * one_second:
+            return {"partial": f"{len(self.audio_buffer)} bytes received (duration: {len(self.audio_buffer) / one_second:.2f} seconds)"}
 
         else:
             return self.finalize()
@@ -96,6 +122,8 @@ class WhisperTranscriber(AbstractTranscriber):
         return self.model.transcribe(audio_array, fp16=False, language=self.language)
 
     def finalize(self):
+        if len(self.audio_buffer) == 0:
+            return {"text": ""}
         result = self.transcribe_audio(self.audio_buffer)
         self.audio_buffer = b''
         return result

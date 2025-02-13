@@ -21,30 +21,19 @@ def start_recording(micro, transcriber, keyboard=False, latency=0):
             keyboard = False
             exit(1)
 
-    with micro.open_stream():
-        print(language_config["_meta"].get(transcriber.language, {}).get("start_message", f"Recording... Press Ctrl+C to stop."))
+    greetings = { k: v for k, v in language_config["_meta"].get(transcriber.language, {}).items()
+                if v is not None
+    }
 
-        try:
-            while True:
-                while not micro.q.empty():
-                    data = micro.q.get()
-                    result = transcriber.transcribe_realtime_audio(data)
-                    if result.get('text'):
-                        clear_line()
-                        print(result.get('text'))
-                        if keyboard:
-                            type_text(result['text'] + " ", interval=latency) # Simulate typing
-                    else:
-                        print_partial(result.get('partial', ''))
-                        continue
+    for result in transcriber.start_recording(micro, **greetings):
 
-        except KeyboardInterrupt:
-            result = transcriber.finalize()
-            print(result["text"])
+        if result.get('text'):
+            clear_line()
+            print(result.get('text'))
             if keyboard:
-                type_text(result["text"] + " ", interval=latency) # Simulate typing
-
-        print(language_config["_meta"].get(transcriber.language, {}).get("stop_message", f"Stopped recording."))
+                type_text(result['text'] + " ", interval=latency) # Simulate typing
+        else:
+            print_partial(result.get('partial', ''))
 
 
 def main(args=None):
@@ -115,7 +104,6 @@ def main(args=None):
     while True:
         input(f"Press any key to start recording [model: {transcriber.model_name}]")
         start_recording(micro, transcriber, keyboard=o.keyboard, latency=o.latency)
-        micro.q.queue.clear()
 
 if __name__ == "__main__":
     main()

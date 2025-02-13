@@ -40,7 +40,7 @@ by using any of the [available vosk models](https://alphacephei.com/vosk/models)
 This will prompt you for starting recording, listen to your microphone and print the transcribed text in real-time.
 You can interrupt the recording via Ctrl + C and start again by pressing any key.
 
-The [whisper](https://github.com/openai/whisper?tab=readme-ov-file#available-models-and-languages) backend is also available.It is much heavier, cannot do real-time, but is much better. You need to `openai-whisper` dependency. See the link for (very simple) install instructions. The `turbo` model is used by default.
+The [whisper](https://github.com/openai/whisper?tab=readme-ov-file#available-models-and-languages) backend is also available. It is much heavier, cannot do real-time, but it is so much better. You need to `openai-whisper` dependency. See the link for (very simple) install instructions. The `turbo` model is used by default, which can deal with any language.
 
 ```bash
 voskrealtime --backend whisper
