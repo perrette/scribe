@@ -50,10 +50,10 @@ Mind the memory usage: every of these model adds nearly 10Gb of so RAM usage, so
 
 ### Advanced usage as keyboard replacement:
 
-Use `pip install -e .[keyboard]` to install the optional `pyautogui` dependency and `pyperclip` to paste non-ascii characters. pyautogui requires some authorization (I got it to work with `xhost +SI:localuser:$(whoami)`), and `pyperclip` requires additional system libraries (prompted by the package). On Ubuntu: `sudo apt-get install xclip`.
+Use `pip install -e .[keyboard]` to install the optional `pynput` dependency. pynput may require [some configuration](https://pynput.readthedocs.io/en/latest/limitations.html) (I *think* got it to work with `xhost +SI:localuser:$(whoami)` as far as the display is concerned).
 
 ```bash
 voskrealtime --keyboard
 ```
 
-Now the application will (should) also send the interpreted text to any application under focus (as well as the usual terminal printing). This is not a reliable feature. In my system it works in chromium based applications (including vscode) but it does not in firefox and sublime text and any of the rest.
+Now the application will (should) also send the interpreted text to any application under focus (as well as the usual terminal printing). It has [limitations]((https://pynput.readthedocs.io/en/latest/limitations.html)). In my Ubuntu + Wayland system it works in chromium based applications (including vscode) but it does not in firefox and sublime text and any of the rest. Suggestions welcome.

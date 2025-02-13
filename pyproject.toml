@@ -19,7 +19,7 @@ dependencies = [
     "tqdm",
     "requests",
 ]
-optional-dependencies = { keyboard = ["pyautogui", "pyperclip"] }
+optional-dependencies = { keyboard = ["pynput"] }
 
 classifiers = [
     "Programming Language :: Python :: 3",
