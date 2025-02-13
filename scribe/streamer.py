@@ -22,7 +22,7 @@ def start_recording(micro, transcriber, keyboard=False, latency=0):
             exit(1)
 
     greetings = { k: v for k, v in language_config["_meta"].get(transcriber.language, {}).items()
-                if v is not None
+                if v is not None and k.startswith(("start", "stop"))
     }
 
     for result in transcriber.start_recording(micro, **greetings):
