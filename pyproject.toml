@@ -26,9 +26,6 @@ classifiers = [
     "Operating System :: OS Independent",
 ]
 
-[tool.setuptools.package-data]
-scribe = ["*.toml"]
-
 [project.urls]
 Homepage = "https://github.com/scribe"
 
