@@ -2,6 +2,21 @@ import sounddevice as sd
 import queue
 
 
+def get_duration(audio_length_bytes, # bytes
+                sampling_rate = 16000,  # Hz
+                num_channels = 1,  # Mono
+                sample_width = 2,  # 16-bit audio
+                ):
+
+    # Calculate the number of samples
+    num_samples = audio_length_bytes / (num_channels * sample_width)
+
+    # Calculate the duration in seconds
+    duration_seconds = num_samples / sampling_rate
+
+    return duration_seconds
+
+
 class Microphone:
     def __init__(self,
             samplerate = 16000,  # Vosk models typically use a 16kHz sample rate
@@ -31,3 +46,6 @@ class Microphone:
 
     def device_info(self):
         return sd.query_devices(self.device, 'input')
+
+    def get_duraction(self, audio_length_bytes):
+        return get_duration(audio_length_bytes, self.samplerate, self.channels, {'int16':2}[self.dtype])

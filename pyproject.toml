@@ -19,7 +19,7 @@ dependencies = [
     "tqdm",
     "requests",
 ]
-optional-dependencies = { keyboard = ["pynput"] }
+optional-dependencies = { keyboard = ["pynput"], whisper = ["openai-whisper"] }
 
 classifiers = [
     "Programming Language :: Python :: 3",

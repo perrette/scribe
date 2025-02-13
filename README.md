@@ -33,20 +33,18 @@ This can be modified.
 The `voskrealtime` script can be used as simply as:
 
 ```bash
-voskrealtime
+voskrealtime --model vosk-model-en-us-0.42-gigaspeech
 ```
+by using any of the [available vosk models](https://alphacephei.com/vosk/models).
 
-This will prompt you for a language, listen to your microphone and print the transcribed text in real-time.
+This will prompt you for starting recording, listen to your microphone and print the transcribed text in real-time.
+You can interrupt the recording via Ctrl + C and start again by pressing any key.
 
-It can be extended with [any other vosk model](https://alphacephei.com/vosk/models).
-Several languages and models can be passed to restrict the interactive choice menu:
+The [whisper](https://github.com/openai/whisper?tab=readme-ov-file#available-models-and-languages) backend is also available.It is much heavier, cannot do real-time, but is much better. You need to `openai-whisper` dependency. See the link for (very simple) install instructions. The `turbo` model is used by default.
 
 ```bash
-voskrealtime -l fr en --model vosk-model-cn-0.22
+voskrealtime --backend whisper
 ```
-
-Note doing Ctrl-C will exit the current model and let you start a new recording in a new language.
-Mind the memory usage: every of these model adds nearly 10Gb of so RAM usage, so switching between these four will be memory intensive and bring your laptop to crash quickly. Use -l to restrict to one model at a time. Or restart the code.
 
 ### Advanced usage as keyboard replacement:
 

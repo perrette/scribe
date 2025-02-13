@@ -1,40 +1,18 @@
-import os
 from pathlib import Path
-import json
 import tomllib
-import vosk
 import argparse
 from voskrealtime.audio import Microphone
-from voskrealtime.util import clear_line, print_partial, download_model
-
-LANGUAGE_MODELS_FOLDER = os.path.join(os.environ.get("HOME"),
-                                      ".local/share/vosk/language-models")
+from voskrealtime.util import print_partial, clear_line
+from voskrealtime.models import VoskTranscriber, WhisperTranscriber
 
 with open(Path(__file__).parent / "models.toml", "rb") as f:
     language_config_default = tomllib.load(f)
 
 language_config = language_config_default.copy()
 
-# Load the Vosk recognizer
-RECOGNIZER = {}
-
-def get_recognizer(lang, samplerate=16000, data_folder=LANGUAGE_MODELS_FOLDER):
-    if lang in RECOGNIZER:
-        return RECOGNIZER[lang]
-
-    model_path = os.path.join(data_folder, language_config[lang]["model"])
-    if not os.path.exists(model_path):
-        download_model(language_config[lang]["url"], data_folder)
-        assert os.path.exists(model_path)
-
-    model = vosk.Model(model_path)
-    RECOGNIZER[lang] = vosk.KaldiRecognizer(model, samplerate)
-
-    return RECOGNIZER[lang]
-
 
 # Commencer l'enregistrement
-def start_recording(micro, language, keyboard=False, latency=0, data_folder=LANGUAGE_MODELS_FOLDER, **kwargs):
+def start_recording(micro, transcriber, keyboard=False, latency=0):
 
     if keyboard:
         try:
@@ -43,104 +21,100 @@ def start_recording(micro, language, keyboard=False, latency=0, data_folder=LANG
             keyboard = False
             exit(1)
 
-    rec = get_recognizer(language, micro.samplerate, data_folder=data_folder)
-
     with micro.open_stream():
-        if language not in language_config:
-            raise ValueError(language)
-        meta = language_config[language]
-
-        print(meta["start_message"])
+        print(language_config["_meta"].get(transcriber.language, {}).get("start_message", f"Recording... Press Ctrl+C to stop."))
 
         try:
             while True:
                 while not micro.q.empty():
                     data = micro.q.get()
-                    if rec.AcceptWaveform(data):
-                        result = rec.Result()
-                        result_dict = json.loads(result)
+                    result = transcriber.transcribe_realtime_audio(data)
+                    if result.get('text'):
                         clear_line()
-                        if len(result_dict['text']):
-                            print(result_dict['text'])
-                            if keyboard:
-                                type_text(result_dict['text'] + " ", interval=latency) # Simulate typing
-
+                        print(result.get('text'))
+                        if keyboard:
+                            type_text(result['text'] + " ", interval=latency) # Simulate typing
                     else:
-                        partial_result = rec.PartialResult()
-                        partial_result_dict = json.loads(partial_result)
-                        print_partial(partial_result_dict['partial'])
+                        print_partial(result.get('partial', ''))
                         continue
 
         except KeyboardInterrupt:
-            pass
+            result = transcriber.finalize()
+            print(result["text"])
+            if keyboard:
+                type_text(result["text"] + " ", interval=latency) # Simulate typing
 
-        print(meta["stop_message"])
-
-
-def prompt_language():
-    while True:
-        print("""Press a key to start recording:""")
-        for i, (lang, meta) in enumerate(language_config.items()):
-            print(f"({i+1}) {lang}: {meta['language']}")
-        res = input()
-        if res.lower() in ("q", "quit"):
-            exit(0)
-        candidates = {str(i+1): lang for i, lang in enumerate(language_config)}
-        candidates.update({lang.lower(): lang for lang in language_config})
-        if res == "":
-            res = "1"
-        if res not in candidates:
-            print("Invalid input.")
-            continue
-        return candidates[res]
-        break
-
+        print(language_config["_meta"].get(transcriber.language, {}).get("stop_message", f"Stopped recording."))
 
 
 def main(args=None):
 
     parser = argparse.ArgumentParser()
-    parser.add_argument("--data-folder",
-                        default=LANGUAGE_MODELS_FOLDER,)
-    parser.add_argument("-l", "--language", choices=list(language_config), nargs="+",
-                        help="Language to use (will skip the prompt). Default to letting you choose interactively.")
-    parser.add_argument("--model", nargs="+",
-                        help="Any model from https://alphacephei.com/vosk/models -- will be treated as a language")
+    parser.add_argument("--model",
+                        help="""For vosk, any model from https://alphacephei.com/vosk/models,
+                        e.g. 'vosk-model-small-en-us-0.15'.
+                        For whisper, see https://github.com/openai/whisper?tab=readme-ov-file#available-models-and-languages""")
 
+    parser.add_argument("--backend", choices=["vosk", "whisper"], default="vosk",
+                        help="Choose the backend to use for speech recognition.")
+
+    parser.add_argument("-l", "--language", choices=list(language_config["vosk"]),
+                        help="An alias for preselected models.")
+
+    parser.add_argument("--samplerate", default=16000, type=int)
     parser.add_argument("--keyboard", action="store_true")
     parser.add_argument("--latency", default=0, type=float, help="keyboard latency")
+
+    parser.add_argument("--data-folder", help="Folder to store Vosk models.")
+
     o = parser.parse_args(args)
 
-    if o.model:
-        for model in o.model:
-            url = f"https://alphacephei.com/vosk/models/{model}.zip"
+    if not o.model and not o.language:
+        if o.backend == "whisper":
+            o.model = "turbo"
 
-        language_config[model] = {
-            **language_config_default["en"],
-            "model": model,
-            "url": url,
-            "language": "?",
-        }
+        elif o.backend == "vosk":
+            print(f"Please specify a model `--model` or language `-l, --language` for backend {o.backend}).")
+            exit(1)
 
-        # if model is specified, and language is not, only use that model
-        if o.language is None:
-            o.language = []
-        o.language.extend(o.model)
+        else:
+            raise ValueError(f"Unknown backend: {o.backend}")
 
-    # remove languages not specified (remove overhead when switching languages)
-    if o.language is not None:
-        for lang in list(language_config):
-            if lang not in o.language:
-                language_config.pop(lang)
+    if o.language and not o.model:
+        if o.backend == "vosk":
+            try:
+                meta = language_config[o.backend][o.language]
+            except KeyError:
+                    print(f"Language '{o.language}' not found for backend '{o.backend}'.")
+                    print(f"Available languages for backend {o.backend}: ", list(language_config.get(o.backend, {})))
+                    exit(1)
+            o.model = meta["model"]
+        elif o.backend == "whisper":
+            o.model = "turbo"
+            if o.language == "en":
+                o.model += ".en"
+        else:
+            raise ValueError(f"Unknown backend: {o.backend}")
+
+
+    if o.backend == "vosk":
+        transcriber = VoskTranscriber(model_name=o.model,
+                                      language=o.language,
+                                      samplerate=o.samplerate,
+                                      model_kwargs={"data_folder": o.data_folder})
+
+    elif o.backend == "whisper":
+        transcriber = WhisperTranscriber(model_name=o.model, language=o.language, samplerate=o.samplerate)
+
+    else:
+        raise ValueError(f"Unknown backend: {o.backend}")
 
     # Set up the microphone for recording
-    micro = Microphone()
+    micro = Microphone(samplerate=o.samplerate)
 
     while True:
-        language = prompt_language()
-
-        start_recording(micro, language, data_folder=o.data_folder,
-                        samplerate=micro.samplerate, keyboard=o.keyboard, latency=o.latency)
+        input(f"Press any key to start recording [model: {transcriber.model_name}]")
+        start_recording(micro, transcriber, keyboard=o.keyboard, latency=o.latency)
         micro.q.queue.clear()
 
 if __name__ == "__main__":

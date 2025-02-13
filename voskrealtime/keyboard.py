@@ -14,4 +14,6 @@ keyboard = Controller()
 
 def type_text(text, interval=0):
     # Simulate typing a string
+    # import subprocess
+    # subprocess.run(["ydotool", "type", text])
     keyboard.type(text)

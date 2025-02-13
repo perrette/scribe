@@ -1,27 +1,31 @@
-[en]
+[vosk.en]
 model = "vosk-model-en-us-0.42-gigaspeech"
-url = "https://alphacephei.com/vosk/models/vosk-model-en-us-0.42-gigaspeech.zip"
+
+[vosk.fr]
+model = "vosk-model-fr-0.22"
+
+[vosk.de]
+model = "vosk-model-de-tuda-0.6-900k"
+
+[vosk.it]
+model = "vosk-model-it-0.22"
+
+[_meta.en]
 language = "English (US)"
 start_message = "Listening... Press Ctrl+C to stop."
 stop_message = "Recording stopped."
 
-[fr]
-model = "vosk-model-fr-0.22"
-url = "https://alphacephei.com/vosk/models/vosk-model-fr-0.22.zip"
+[_meta.fr]
 language = "French"
 start_message = "En écoute... Appuyez sur Ctrl+C pour arrêter."
 stop_message = "Écoute arrêtée."
 
-[de]
-model = "vosk-model-de-tuda-0.6-900k"
-url = "https://alphacephei.com/vosk/models/vosk-model-de-tuda-0.6-900k.zip"
+[_meta.de]
 language = "German"
 start_message = "Hören... Drücken Sie Strg+C, um zu stoppen."
 stop_message = "Aufnahme gestoppt."
 
-[it]
-model = "vosk-model-it-0.22"
-url = "https://alphacephei.com/vosk/models/vosk-model-it-0.22.zip"
+[_meta.it]
 language = "Italian"
 start_message = "In ascolto... Premere Ctrl+C per interrompere."
 stop_message = "Registrazione interrotta."
