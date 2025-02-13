@@ -20,10 +20,10 @@ pip install -e .[vosk,whisper,keyboard]
 or
 
 ```bash
-pip install git+https://github.com/perrette/scribe.git[vosk,whisper,keyboard]
+pip install "scribe[vosk,whisper,keyboard] @ git+https://github.com/perrette/scribe.git"
 ```
 
-You must install at least one of `vosk` or `whisper`.
+You can leave the optional dependencies but must install at least one of `vosk` or `whisper`.
 
 The `vosk` language models should also download on-the-fly if not present.
 The default data folder is `$HOME/.local/share/vosk/language-models`.
