@@ -18,7 +18,7 @@ dependencies = [
     "tqdm",
     "requests",
 ]
-optional-dependencies = { keyboard = ["pynput"], whisper = ["openai-whisper"], vosk = ["vosk"] }
+optional-dependencies = { keyboard = ["pynput"], whisper = ["openai-whisper"], vosk = ["vosk"], all = ["pynput", "openai-whisper", "vosk"] }
 
 classifiers = [
     "Programming Language :: Python :: 3",

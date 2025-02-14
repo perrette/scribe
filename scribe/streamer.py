@@ -47,7 +47,7 @@ def get_default_backend():
         except ImportError:
             raise ImportError("Please install either vosk or whisper to use this script.")
 
-BACKENDS = ["vosk", "whisper"]
+BACKENDS = ["whisper", "vosk"]
 UNAVAILABLE_BACKENDS = []
 
 
@@ -70,6 +70,9 @@ def get_transcriber(o, prompt=True):
             print(f"Backend {o.backend} is not available.")
             exit(1)
         backend = o.backend
+
+    elif not prompt:
+        backend = choices[0]
 
     else:
         checked_backend = False
@@ -106,16 +109,23 @@ def get_transcriber(o, prompt=True):
                 default_model = choices[0]
 
             print(f"For information about vosk models see: {ansi_link('https://alphacephei.com/vosk/models')}")
-            model = prompt_choices(choices, default=default_model, label="model")
+            if prompt:
+                model = prompt_choices(choices, default=default_model, label="model")
+            else:
+                model = default_model
 
         elif backend == "whisper":
 
             models = ["tiny", "base", "small", "medium", "large", "turbo"]
             english_models = ["tiny.en", "base.en", "small.en", "medium.en"]
-            default_model = "turbo"
+            default_model = "small"
 
-            model = prompt_choices(models, default=default_model, label="model",
-                                    hidden_models=english_models)
+            print("Some models have a specialized English version (.en) which will be selected as default is `-l en` was requested, but can also be requested explicitly below (option not listed). See [documentation](https://github.com/openai/whisper?tab=readme-ov-file#available-models-and-languages).")
+            if prompt:
+                model = prompt_choices(models, default=default_model, label="model",
+                                        hidden_models=english_models)
+            else:
+                model = default_model
 
             model = pick_specialist_model(model, o.language, backend)
 
@@ -127,7 +137,8 @@ def get_transcriber(o, prompt=True):
                                         language=o.language,
                                         samplerate=o.samplerate,
                                         model_kwargs={"data_folder": o.data_folder})
-        except RuntimeError:
+        except Exception as error:
+            print(error)
             print(f"Failed to (down)load model {model}.")
             exit(1)
 
@@ -139,27 +150,34 @@ def get_transcriber(o, prompt=True):
 
     return transcriber
 
-
-def main(args=None):
+def get_parser():
 
     parser = argparse.ArgumentParser()
+    parser.add_argument("--backend", choices=BACKENDS,
+                        help="Choose the backend to use for speech recognition (will be prompted otherwise).")
+
     parser.add_argument("--model",
                         help="""For vosk, any model from https://alphacephei.com/vosk/models,
                         e.g. 'vosk-model-small-en-us-0.15'.
                         For whisper, see https://github.com/openai/whisper?tab=readme-ov-file#available-models-and-languages""")
 
-    parser.add_argument("--backend", choices=BACKENDS,
-                        help="Choose the backend to use for speech recognition (will be prompted otherwise).")
-
     parser.add_argument("-l", "--language", choices=list(language_config["vosk"]),
                         help="An alias for preselected models when using the vosk backend, or 'en' for the English version of whisper models.")
 
-    parser.add_argument("--samplerate", default=16000, type=int)
+    parser.add_argument("--no-prompt", action="store_false", dest="prompt", help="Disable prompts for backend and model selection and jump to recording")
+
+    parser.add_argument("--samplerate", default=16000, type=int, help=argparse.SUPPRESS)
     parser.add_argument("--keyboard", action="store_true")
     parser.add_argument("--latency", default=0, type=float, help="keyboard latency")
 
     parser.add_argument("--data-folder", help="Folder to store Vosk models.")
 
+    return parser
+
+
+def main(args=None):
+
+    parser = get_parser()
     o = parser.parse_args(args)
 
 
@@ -170,22 +188,28 @@ def main(args=None):
 
     while True:
         if transcriber is None:
-            transcriber = get_transcriber(o, prompt=True)
+            transcriber = get_transcriber(o, prompt=o.prompt)
         print(f"[ Model {transcriber.model_name} from {transcriber.backend} selected. ]")
-        # prompt_choices(["record", "change model", "quit"], label="action")
-        print(f"Choose any of the following actions:")
-        print(f"[q] quit")
-        print(f"[e] change model")
-        # print(f"Press",colored("[Enter]", "BOLD"),"to start recording or:")
-        print(colored(f"Press [Enter] or any other key to start recording.", "BOLD"))
+        if o.prompt:
+            print(f"Choose any of the following actions:")
+            print(f"[q] quit")
+            print(f"[e] change model")
+            print(colored(f"Press [Enter] or any other key to start recording.", "BOLD"))
 
-        key = input()
-        if key == "q":
-            exit(0)
-        if key == "e":
-            transcriber = None
-            continue
+            key = input()
+            if key == "q":
+                exit(0)
+            if key == "e":
+                transcriber = None
+                continue
         start_recording(micro, transcriber, keyboard=o.keyboard, latency=o.latency)
+
+        # if we arrived so far, that means we pressed Ctrl + C anyway, and need Enter to move on.
+        # So we leave the wider range of options to change the model.
+        o.prompt = True
+        o.backend = None
+        o.model = None
+        o.language = None
 
 if __name__ == "__main__":
     main()

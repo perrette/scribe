@@ -1,5 +1,5 @@
 import os, sys, platform, shutil, sysconfig
-
+import argparse
 
 def main():
 
@@ -8,8 +8,10 @@ def main():
         print("This package is only supported on Linux systems.", file=sys.stderr)
         sys.exit(0)
 
-    # import argparse
-    # parser = argparse.ArgumentParser()
+    parser = argparse.ArgumentParser("Install the desktop file for the scribe package. Any arguments to this script will be passed on to `scribe`.")
+    o, rest = parser.parse_known_args()
+    o.arguments = rest
+
     PACKAGE_NAME = 'scribe'
 
     HOME = os.environ.get('HOME',os.path.expanduser('~'))
@@ -30,7 +32,7 @@ def main():
         template = f.read()
 
     bin_folder = sysconfig.get_path("scripts")
-    desktop_file = template.format(XDG_SCRIBE_DATA=XDG_SCRIBE_DATA, bin_folder=bin_folder, options='')
+    desktop_file = template.format(XDG_SCRIBE_DATA=XDG_SCRIBE_DATA, bin_folder=bin_folder, options=' '.join(o.arguments))
 
     print("Writing desktop file to", XDG_APP_DATA)
     with open(os.path.join(XDG_APP_DATA, 'scribe.desktop'), "w") as f:
