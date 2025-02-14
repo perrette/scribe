@@ -1,5 +1,6 @@
 import os, sys, platform, shutil, sysconfig
 import argparse
+import scribe_data
 
 def main():
 
@@ -12,31 +13,26 @@ def main():
     o, rest = parser.parse_known_args()
     o.arguments = rest
 
-    PACKAGE_NAME = 'scribe'
+    SOURCE_SCRIBE_DATA = os.path.dirname(scribe_data.__file__)
 
     HOME = os.environ.get('HOME',os.path.expanduser('~'))
     XDG_SHARE = os.environ.get('XDG_DATA_HOME', os.path.join(HOME, '.local','share'))
     XDG_APP_DATA = os.path.join(XDG_SHARE, 'applications')
-    XDG_SCRIBE_DATA = os.path.join(XDG_SHARE, PACKAGE_NAME)
-
 
     # Create the directory if it doesn't exist
-    os.makedirs(XDG_SCRIBE_DATA, exist_ok=True)
     os.makedirs(XDG_APP_DATA, exist_ok=True)
 
-    # Copy your files to the desired location
-    print("Copying files to", XDG_SCRIBE_DATA)
-    shutil.copy('share/icon.jpg', XDG_SCRIBE_DATA)
-
-    with open('templates/scribe.desktop') as f:
+    with open(os.path.join(SOURCE_SCRIBE_DATA, 'templates', 'scribe.desktop')) as f:
         template = f.read()
 
     bin_folder = sysconfig.get_path("scripts")
-    desktop_file = template.format(XDG_SCRIBE_DATA=XDG_SCRIBE_DATA, bin_folder=bin_folder, options=' '.join(o.arguments))
+    icon_folder = os.path.join(SOURCE_SCRIBE_DATA, 'share')
+    desktop_filecontent = template.format(icon_folder=icon_folder, bin_folder=bin_folder, options=' '.join(o.arguments) if o.arguments else '')
 
-    print("Writing desktop file to", XDG_APP_DATA)
-    with open(os.path.join(XDG_APP_DATA, 'scribe.desktop'), "w") as f:
-        f.write(desktop_file)
+    desktop_filepath = os.path.join(XDG_APP_DATA, 'scribe.desktop')
+    print("Writing GNOME desktop file:", desktop_filepath)
+    with open(desktop_filepath, "w") as f:
+        f.write(desktop_filecontent)
 
 
 if __name__ == "__main__":

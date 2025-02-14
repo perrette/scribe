@@ -3,6 +3,6 @@
 Terminal=true
 Type=Application
 Name=Scribe
-Exec={bin_folder}/scribe {options}
-Icon={XDG_SCRIBE_DATA}/icon.jpg
+Exec={bin_folder}/scribe{options}
+Icon={icon_folder}/icon.jpg
 StartupWMClass=crx_mpnasdanpmmopoasdjdcgaaiekailkhb

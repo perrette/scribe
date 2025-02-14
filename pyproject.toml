@@ -36,7 +36,7 @@ keywords = [
 ]
 
 [tool.setuptools]
-packages = [ "scribe" ]
+packages = [ "scribe", "scribe_data" ]
 
 [tool.setuptools_scm]
 write_to = "scribe/_version.py"
