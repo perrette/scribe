@@ -16,7 +16,7 @@ The python dependencies should be dealt with automatically:
 pip install scribe-cli[all]"
 ```
 
-(not the `-cli` suffix for client)
+(note the `-cli` suffix for client)
 
 or for local development:
 
