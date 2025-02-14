@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "scribe"
-version = "0.2.0"
+version = "0.3.0"
 description = "scribe is a local speech recognition tool that provides real-time transcription using vosk and whisper AI."
 authors = [
     { name="Mahé Perrette", email="mahe.perrette@gmail.com" }
@@ -22,8 +22,18 @@ optional-dependencies = { keyboard = ["pynput"], whisper = ["openai-whisper"], v
 
 classifiers = [
     "Programming Language :: Python :: 3",
-    "License :: OSI Approved :: MIT License",
+    "License :: MIT License",
     "Operating System :: OS Independent",
+]
+
+keywords = [
+    "speech recognition",
+    "transcription",
+    "AI",
+    "language",
+    "vosk",
+    "whisper",
+    "openai",
 ]
 
 [tool.setuptools]
