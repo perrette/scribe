@@ -22,7 +22,6 @@ optional-dependencies = { keyboard = ["pynput"], whisper = ["openai-whisper"], v
 
 classifiers = [
     "Programming Language :: Python :: 3",
-    "License :: MIT License",
     "Operating System :: OS Independent",
 ]
 
