@@ -26,8 +26,12 @@ classifiers = [
     "Operating System :: OS Independent",
 ]
 
+[tool.setuptools]
+packages = [ "scribe" ]
+
 [project.urls]
 Homepage = "https://github.com/scribe"
 
 [project.scripts]
 scribe = "scribe.streamer:main"
+scribe-install = "scribe.install_desktop:main"

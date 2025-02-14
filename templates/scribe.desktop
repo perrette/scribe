@@ -1,0 +1,8 @@
+#!/usr/bin/env xdg-open
+[Desktop Entry]
+Terminal=true
+Type=Application
+Name=Scribe
+Exec={bin_folder}/scribe {options}
+Icon={XDG_SCRIBE_DATA}/icon.jpg
+StartupWMClass=crx_mpnasdanpmmopoasdjdcgaaiekailkhb
