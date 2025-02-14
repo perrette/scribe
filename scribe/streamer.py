@@ -102,9 +102,10 @@ def get_transcriber(o, prompt=True):
 
             else:
                 available_models = [language_config[backend][lang]["model"] for lang in available_languages]
-                choices = list(zip(available_models, available_languages)) + ["*"]
+                choices = list(zip(available_models, available_languages)) + [f" * [Any model from {ansi_link('https://alphacephei.com/vosk/models')}]"]
                 default_model = choices[0]
 
+            print(f"For information about vosk models see: {ansi_link('https://alphacephei.com/vosk/models')}")
             model = prompt_choices(choices, default=default_model, label="model")
 
         elif backend == "whisper":
@@ -121,10 +122,14 @@ def get_transcriber(o, prompt=True):
     print(f"Selected model: {model}")
 
     if backend == "vosk":
-        transcriber = VoskTranscriber(model_name=model,
-                                    language=o.language,
-                                    samplerate=o.samplerate,
-                                    model_kwargs={"data_folder": o.data_folder})
+        try:
+            transcriber = VoskTranscriber(model_name=model,
+                                        language=o.language,
+                                        samplerate=o.samplerate,
+                                        model_kwargs={"data_folder": o.data_folder})
+        except RuntimeError:
+            print(f"Failed to (down)load model {model}.")
+            exit(1)
 
     elif backend == "whisper":
         transcriber = WhisperTranscriber(model_name=model, language=o.language, samplerate=o.samplerate)
