@@ -3,7 +3,7 @@ requires = ["setuptools>=61.0", "setuptools_scm[toml]>=6.2", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "scribe"
+name = "scribe-cli"
 dynamic = ["version"]
 description = "scribe is a local speech recognition tool that provides real-time transcription using vosk and whisper AI."
 authors = [
