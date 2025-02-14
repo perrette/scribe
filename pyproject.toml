@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "scribe"
-version = "0.3.0"
+dynamic = ["version"]
 description = "scribe is a local speech recognition tool that provides real-time transcription using vosk and whisper AI."
 authors = [
     { name="Mahé Perrette", email="mahe.perrette@gmail.com" }
@@ -39,8 +39,12 @@ keywords = [
 [tool.setuptools]
 packages = [ "scribe" ]
 
+[tool.setuptools_scm]
+write_to = "papers/_version.py"
+
+
 [project.urls]
-Homepage = "https://github.com/scribe"
+Homepage = "https://github.com/perrette/scribe"
 
 [project.scripts]
 scribe = "scribe.streamer:main"
