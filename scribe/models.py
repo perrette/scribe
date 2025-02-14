@@ -8,6 +8,7 @@ VOSK_MODELS_FOLDER = os.path.join(os.environ.get("HOME"),
 
 
 class AbstractTranscriber:
+    backend = None
     def __init__(self, model, model_name=None, language=None, samplerate=16000, model_kwargs={}):
         self.model_name = model_name
         self.language = language
@@ -66,6 +67,8 @@ def get_vosk_recognizer(model, samplerate=16000):
 
 
 class VoskTranscriber(AbstractTranscriber):
+    backend = "vosk"
+
     def __init__(self, model_name, model=None, model_kwargs={}, **kwargs):
         if model is None:
             model = get_vosk_model(model_name, **model_kwargs)
@@ -98,6 +101,8 @@ class VoskTranscriber(AbstractTranscriber):
 
 
 class WhisperTranscriber(AbstractTranscriber):
+    backend = "whisper"
+
     def __init__(self, model_name, language=None, model=None, model_kwargs={}, **kwargs):
         import whisper
         if model is None:
