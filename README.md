@@ -13,17 +13,20 @@ sudo apt-get install portaudio19-dev
 The python dependencies should be dealt with automatically:
 
 ```bash
+pip install scribe-cli[all]"
+```
+
+(not the `-cli` suffix for client)
+
+or for local development:
+
+```bash
 git clone https://github.com/perrette/scribe.git
 cd scribe
 pip install -e .[all]
 ```
-or
 
-```bash
-pip install "scribe[all] @ git+https://github.com/perrette/scribe.git"
-```
-
-You can leave the optional dependencies but must install at least one of `vosk` or `openai-whisper` packages (see Usage below).
+You can leave the optional dependencies (leave out `[all]`) but must install at least one of `vosk` or `openai-whisper` packages (see Usage below).
 
 The `vosk` language models will download on-the-fly.
 The default data folder is `$HOME/.local/share/vosk/language-models`.
