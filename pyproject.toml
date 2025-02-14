@@ -40,7 +40,7 @@ keywords = [
 packages = [ "scribe" ]
 
 [tool.setuptools_scm]
-write_to = "papers/_version.py"
+write_to = "scribe/_version.py"
 
 
 [project.urls]
