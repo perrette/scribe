@@ -136,6 +136,7 @@ def get_transcriber(o, prompt=True):
             transcriber = VoskTranscriber(model_name=model,
                                         language=o.language,
                                         samplerate=o.samplerate,
+                                        max_duration=None, # vosk keeps going (no timeout)
                                         model_kwargs={"data_folder": o.data_folder})
         except Exception as error:
             print(error)
@@ -143,7 +144,7 @@ def get_transcriber(o, prompt=True):
             exit(1)
 
     elif backend == "whisper":
-        transcriber = WhisperTranscriber(model_name=model, language=o.language, samplerate=o.samplerate)
+        transcriber = WhisperTranscriber(model_name=model, language=o.language, samplerate=o.samplerate, max_duration=o.duration)
 
     else:
         raise ValueError(f"Unknown backend: {backend}")
@@ -167,6 +168,7 @@ def get_parser():
     parser.add_argument("--no-prompt", action="store_false", dest="prompt", help="Disable prompts for backend and model selection and jump to recording")
 
     parser.add_argument("--samplerate", default=16000, type=int, help=argparse.SUPPRESS)
+    parser.add_argument("--duration", default=60, type=int, help="duration in seconds before whisper models start transcribing (default %(default)ss)")
     parser.add_argument("--keyboard", action="store_true")
     parser.add_argument("--latency", default=0, type=float, help="keyboard latency")
 
@@ -194,6 +196,9 @@ def main(args=None):
             print(f"Choose any of the following actions:")
             print(f"[q] quit")
             print(f"[e] change model")
+            print(f"[k] toggle keyboard {'off' if o.keyboard else 'on'}")
+            if transcriber.backend == "whisper":
+                print(f"[t] change duration (currently {transcriber.max_duration}s)")
             print(colored(f"Press [Enter] or any other key to start recording.", "BOLD"))
 
             key = input()
@@ -202,6 +207,17 @@ def main(args=None):
             if key == "e":
                 transcriber = None
                 continue
+            if key == "k":
+                o.keyboard = not o.keyboard
+                continue
+            if key == "t":
+                duration = input(f"Enter new duration in seconds (current: {transcriber.max_duration}): ")
+                try:
+                    o.duration = transcriber.max_duration = int(duration)
+                except:
+                    print("Invalid duration. Must be an integer.")
+                continue
+
         start_recording(micro, transcriber, keyboard=o.keyboard, latency=o.latency)
 
         # if we arrived so far, that means we pressed Ctrl + C anyway, and need Enter to move on.

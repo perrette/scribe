@@ -9,22 +9,37 @@ VOSK_MODELS_FOLDER = os.path.join(os.environ.get("HOME"),
 
 class AbstractTranscriber:
     backend = None
-    def __init__(self, model, model_name=None, language=None, samplerate=16000, model_kwargs={}):
+    def __init__(self, model, model_name=None, language=None, samplerate=16000, max_duration=None, model_kwargs={}):
         self.model_name = model_name
         self.language = language
         self.model = model
         self.model_kwargs = model_kwargs
         self.samplerate = samplerate
+        self.max_duration = max_duration
+        self.one_second_bytes = self.samplerate * 2 # 16-bit audio, 1 channel  ~ 32000 bytes
+        self.audio_buffer = b''
+
+    def get_elapsed(self, size=None):
+        return len(size or self.audio_buffer) / self.one_second_bytes
+
+    def is_overtime(self, elapsed=None, size=None):
+        return self.max_duration and (elapsed or self.get_elapsed(size)) > self.max_duration
+
+    def transcribe_realtime_audio(self, audio_bytes=b""):
+        self.audio_buffer += audio_bytes
+        return {"partial": f"{len(self.audio_buffer)} bytes received (duration: {self.get_elapsed()} seconds)"}
 
     def transcribe_audio(self, audio_data):
         raise NotImplementedError()
 
-    def transcribe_realtime_audio(self, audio_data):
-        raise NotImplementedError()
+    def reset(self):
+        self.audio_buffer = b''
 
     def start_recording(self, microphone,
                         start_message="Recording... Press Ctrl+C to stop.",
                         stop_message="Stopped recording."):
+
+        self.reset()
 
         with microphone.open_stream():
             print(start_message)
@@ -34,6 +49,9 @@ class AbstractTranscriber:
                     while not microphone.q.empty():
                         data = microphone.q.get()
                         yield self.transcribe_realtime_audio(data)
+
+                        if self.is_overtime():
+                            raise KeyboardInterrupt("Overtime: {:.2f} seconds".format(self.get_elapsed()))
 
             except KeyboardInterrupt:
                 pass
@@ -75,7 +93,8 @@ class VoskTranscriber(AbstractTranscriber):
         super().__init__(model, model_name, model_kwargs=model_kwargs, **kwargs)
         self.recognizer = get_vosk_recognizer(model, self.samplerate)
 
-    def transcribe_realtime_audio(self, audio_bytes=b"", finalize=False):
+    def transcribe_realtime_audio(self, audio_bytes=b""):
+        self.audio_buffer += audio_bytes
         final = self.recognizer.AcceptWaveform(audio_bytes)
         if final:
             result = self.recognizer.Result()
@@ -85,19 +104,25 @@ class VoskTranscriber(AbstractTranscriber):
 
         if final:
             pass
-        elif finalize:
-            result_dict["text"] = result_dict.pop("partial", "")
         else:
             assert not final
             if "text" in result_dict:
                 del result_dict["text"]
         return result_dict
 
-    def transcribe_audio(self, audio_data=None):
-        return self.transcribe_realtime_audio(audio_data, finalize=True)
+    def transcribe_audio(self, audio_data=b""):
+        results = self.transcribe_realtime_audio(audio_data)
+        if not results.get("text") and "partial" in results:
+            results["text"] = results.pop("partial", "")
+        return results
+
 
     def finalize(self):
         return self.transcribe_audio(b"")
+
+    def reset(self):
+        super().reset()
+        self.recognizer = get_vosk_recognizer(self.model, self.samplerate)
 
 
 class WhisperTranscriber(AbstractTranscriber):
@@ -108,20 +133,10 @@ class WhisperTranscriber(AbstractTranscriber):
         if model is None:
             model = whisper.load_model(model_name)
         super().__init__(model, model_name, language, model_kwargs=model_kwargs, **kwargs)
-        self.audio_buffer = b''
-
-    def transcribe_realtime_audio(self, audio_bytes=b"", max_duration=60):
-        self.audio_buffer += audio_bytes
-
-        one_second = self.samplerate * 2 # 16-bit audio, 1 channel  ~ 32000 bytes
-        if len(self.audio_buffer) < max_duration * one_second:
-            return {"partial": f"{len(self.audio_buffer)} bytes received (duration: {len(self.audio_buffer) / one_second:.2f} seconds)"}
-
-        else:
-            return self.finalize()
 
     def transcribe_audio(self, audio_bytes):
         print("\nTranscribing...")
+        print("If --keyboard is set, change focus to target app NOW !")
         audio_array = np.frombuffer(audio_bytes, dtype=np.int16).flatten().astype(np.float32) / 32768.0
         return self.model.transcribe(audio_array, fp16=False, language=self.language)
 

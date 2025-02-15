@@ -46,9 +46,9 @@ or until after recording is complete (`whisper`).
 You can interrupt the recording via Ctrl + C and start again or change model.
 
 The default (`whisper`) is excellent at transcribing a full-length audio sequences in [many languages](https://github.com/openai/whisper?tab=readme-ov-file#available-models-and-languages). It is really impressive,
-but it cannot do real-time out of the box, and depending on the model can have relatively long execution time, especially with the `turbo` model (at least on my laptop with CPU only). The `small` model is also excellent and runs much faster. It is selected as default in `scribe` for that reason.
-With the `whisker` model you need to stop the registration manually before the transcription occurs (Ctrl + C), though after
-60 seconds it will stop automatically (and try to continue afterward).
+but it cannot do real-time, and depending on the model can have relatively long execution time, especially with the `turbo` model (at least on my laptop with CPU only). The `small` model is also excellent and runs much faster. It is selected as default in `scribe` for that reason.
+With the `whisker` model you need to stop the registration manually before the transcription occurs (Ctrl + C), though
+there is a maximum duration after which it will stop by itself, which is setup to 60s by default (unless `--duration` is set to something else).
 
 The `vosk` backend is good at
 doing real-time transcription for one language, but tended to make more mistakes in my tests and it does not do punctuation.
