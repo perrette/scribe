@@ -62,7 +62,7 @@ where `--no-prompt` jumps right to the recording (after the first interruption, 
 
 ### Advanced usage as keyboard replacement
 
-By default the content of the transcription is paster to the clipboard, but is not propagated further.
+By default the content of the transcription is pasted to the clipboard, but is not propagated further.
 With the `--keyboard` option `scribe` will attempt to simulate a keyboard and send transcribed characters to the applcation under focus:
 
 ```bash
