@@ -120,7 +120,8 @@ def get_transcriber(o, prompt=True):
             exit(1)
 
     elif backend == "whisper":
-        transcriber = WhisperTranscriber(model_name=model, language=o.language, samplerate=o.samplerate, timeout=o.duration, silence_duration=o.silence)
+        transcriber = WhisperTranscriber(model_name=model, language=o.language, samplerate=o.samplerate,
+                                         timeout=o.duration, silence_duration=o.silence, restart_after_silence=o.restart_after_silence)
 
     else:
         raise ValueError(f"Unknown backend: {backend}")
@@ -235,7 +236,7 @@ def main(args=None):
             if transcriber.backend == "whisper":
                 print(f"[t] change duration (currently {transcriber.timeout}s)")
                 print(f"[b] change silence duration (currently {transcriber.silence_duration}s)")
-                print(f"[a] toggle auto-restart after silence [{toggle[o.restart_after_silence]}] -> [{toggle[not o.restart_after_silence]}]")
+                print(f"[a] toggle auto-restart after silence [{toggle[transcriber.restart_after_silence]}] -> [{toggle[not transcriber.restart_after_silence]}]")
             print(colored(f"Press [Enter] or any other key to start recording.", "BOLD"))
 
             key = input()
@@ -249,6 +250,9 @@ def main(args=None):
                 continue
             if key == "c":
                 o.clipboard = not o.clipboard
+                continue
+            if key == "a":
+                transcriber.restart_after_silence = not transcriber.restart_after_silence
                 continue
             if key == "t":
                 ans = input(f"Enter new duration in seconds (current: {transcriber.timeout}): ")

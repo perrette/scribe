@@ -166,7 +166,7 @@ class WhisperTranscriber(AbstractTranscriber):
         super().__init__(model, model_name, language, model_kwargs=model_kwargs, **kwargs)
 
     def transcribe_audio(self, audio_bytes):
-        print("Transcribing...")
+        print("\nTranscribing...")
         audio_array = np.frombuffer(audio_bytes, dtype=np.int16).flatten().astype(np.float32) / 32768.0
         return self.model.transcribe(audio_array, fp16=False, language=self.language)
 
