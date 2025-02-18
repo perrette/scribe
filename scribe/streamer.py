@@ -12,14 +12,25 @@ language_config = language_config_default.copy()
 
 
 # Commencer l'enregistrement
-def start_recording(micro, transcriber, keyboard=False, latency=0):
+def start_recording(micro, transcriber, clipboard=True, keyboard=False, latency=0):
 
     if keyboard:
         try:
             from scribe.keyboard import type_text
         except ImportError:
             keyboard = False
-            exit(1)
+            print("Keyboard simulation is not available.")
+            return
+
+    if clipboard:
+        try:
+            import pyperclip
+        except ImportError:
+            clipboard = False
+            print("Clipboard simulation is not available.")
+            return
+
+    fulltext = ""
 
     greetings = { k: v for k, v in language_config["_meta"].get(transcriber.language, {}).items()
                 if v is not None and k.startswith(("start", "stop"))
@@ -32,6 +43,11 @@ def start_recording(micro, transcriber, keyboard=False, latency=0):
             print(result.get('text'))
             if keyboard:
                 type_text(result['text'] + " ", interval=latency) # Simulate typing
+
+            if clipboard:
+                fulltext += result['text'] + " "
+                pyperclip.copy(fulltext)
+
         else:
             print_partial(result.get('partial', ''))
 
@@ -170,6 +186,7 @@ def get_parser():
     parser.add_argument("--samplerate", default=16000, type=int, help=argparse.SUPPRESS)
     parser.add_argument("--duration", default=60, type=int, help="duration in seconds before whisper models start transcribing (default %(default)ss)")
     parser.add_argument("--keyboard", action="store_true")
+    parser.add_argument("--no-clipboard", dest="clipboard", action="store_false")
     parser.add_argument("--latency", default=0, type=float, help="keyboard latency")
 
     parser.add_argument("--data-folder", help="Folder to store Vosk models.")
@@ -191,12 +208,13 @@ def main(args=None):
     while True:
         if transcriber is None:
             transcriber = get_transcriber(o, prompt=o.prompt)
-        print(f"[ Model {transcriber.model_name} from {transcriber.backend} selected. ]")
+        print(f"[ Model {transcriber.model_name} from {transcriber.backend} selected. Keyboard [{'on' if o.keyboard else 'off'}]. Clipboard [{'on' if o.clipboard else 'off'}]]")
         if o.prompt:
             print(f"Choose any of the following actions:")
             print(f"[q] quit")
             print(f"[e] change model")
-            print(f"[k] toggle keyboard {'off' if o.keyboard else 'on'}")
+            print(f"[k] toggle keyboard [{'off' if o.keyboard else 'on'}]")
+            print(f"[c] toggle clipboard [{'off' if o.clipboard else 'on'}]")
             if transcriber.backend == "whisper":
                 print(f"[t] change duration (currently {transcriber.max_duration}s)")
             print(colored(f"Press [Enter] or any other key to start recording.", "BOLD"))
@@ -210,6 +228,9 @@ def main(args=None):
             if key == "k":
                 o.keyboard = not o.keyboard
                 continue
+            if key == "c":
+                o.clipboard = not o.clipboard
+                continue
             if key == "t":
                 duration = input(f"Enter new duration in seconds (current: {transcriber.max_duration}): ")
                 try:
@@ -218,7 +239,7 @@ def main(args=None):
                     print("Invalid duration. Must be an integer.")
                 continue
 
-        start_recording(micro, transcriber, keyboard=o.keyboard, latency=o.latency)
+        start_recording(micro, transcriber, clipboard=o.clipboard, keyboard=o.keyboard, latency=o.latency)
 
         # if we arrived so far, that means we pressed Ctrl + C anyway, and need Enter to move on.
         # So we leave the wider range of options to change the model.

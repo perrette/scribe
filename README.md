@@ -1,6 +1,6 @@
 # Scribe
 
-`scribe` is a local speech recognition tool that provides real-time transcription using vosk and whisper AI.
+`scribe` is a local speech recognition tool that provides real-time transcription using vosk and whisper AI, with the goal of serving as a virtual keyboard.
 
 ## Installation
 
@@ -43,7 +43,7 @@ scribe
 and the script will guide you through the choice of backend (`whisper` or `vosk`) and the specific language model.
 After this, you will be prompted to start recording your microphone and print the transcribed text in real-time (`vosk`)
 or until after recording is complete (`whisper`).
-You can interrupt the recording via Ctrl + C and start again or change model.
+You can interrupt the recording via Ctrl + C and start again or change model. The full content of the transcription will be pasted to the clipboard by default, until interruption.
 
 The default (`whisper`) is excellent at transcribing a full-length audio sequences in [many languages](https://github.com/openai/whisper?tab=readme-ov-file#available-models-and-languages). It is really impressive,
 but it cannot do real-time, and depending on the model can have relatively long execution time, especially with the `turbo` model (at least on my laptop with CPU only). The `small` model is also excellent and runs much faster. It is selected as default in `scribe` for that reason.
@@ -62,6 +62,7 @@ where `--no-prompt` jumps right to the recording (after the first interruption, 
 
 ### Advanced usage as keyboard replacement
 
+By default the content of the transcription is paster to the clipboard, but is not propagated further.
 With the `--keyboard` option `scribe` will attempt to simulate a keyboard and send transcribed characters to the applcation under focus:
 
 ```bash

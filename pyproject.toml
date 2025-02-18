@@ -17,6 +17,7 @@ dependencies = [
     "sounddevice",
     "tqdm",
     "requests",
+    "pyperclip",
 ]
 optional-dependencies = { keyboard = ["pynput"], whisper = ["openai-whisper"], vosk = ["vosk"], all = ["pynput", "openai-whisper", "vosk"] }
 
