@@ -152,7 +152,7 @@ def get_transcriber(o, prompt=True):
             transcriber = VoskTranscriber(model_name=model,
                                         language=o.language,
                                         samplerate=o.samplerate,
-                                        max_duration=None, # vosk keeps going (no timeout)
+                                        timeout=None, # vosk keeps going (no timeout)
                                         model_kwargs={"data_folder": o.data_folder})
         except Exception as error:
             print(error)
@@ -160,7 +160,7 @@ def get_transcriber(o, prompt=True):
             exit(1)
 
     elif backend == "whisper":
-        transcriber = WhisperTranscriber(model_name=model, language=o.language, samplerate=o.samplerate, max_duration=o.duration)
+        transcriber = WhisperTranscriber(model_name=model, language=o.language, samplerate=o.samplerate, timeout=o.duration)
 
     else:
         raise ValueError(f"Unknown backend: {backend}")
@@ -216,7 +216,7 @@ def main(args=None):
             print(f"[k] toggle keyboard [{'off' if o.keyboard else 'on'}]")
             print(f"[c] toggle clipboard [{'off' if o.clipboard else 'on'}]")
             if transcriber.backend == "whisper":
-                print(f"[t] change duration (currently {transcriber.max_duration}s)")
+                print(f"[t] change duration (currently {transcriber.timeout}s)")
             print(colored(f"Press [Enter] or any other key to start recording.", "BOLD"))
 
             key = input()
@@ -232,9 +232,9 @@ def main(args=None):
                 o.clipboard = not o.clipboard
                 continue
             if key == "t":
-                duration = input(f"Enter new duration in seconds (current: {transcriber.max_duration}): ")
+                duration = input(f"Enter new duration in seconds (current: {transcriber.timeout}): ")
                 try:
-                    o.duration = transcriber.max_duration = int(duration)
+                    o.duration = transcriber.timeout = int(duration)
                 except:
                     print("Invalid duration. Must be an integer.")
                 continue

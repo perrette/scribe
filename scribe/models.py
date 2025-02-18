@@ -1,6 +1,7 @@
 import os
 import json
 import numpy as np
+import time
 from scribe.util import download_model
 
 VOSK_MODELS_FOLDER = os.path.join(os.environ.get("HOME"),
@@ -9,21 +10,22 @@ VOSK_MODELS_FOLDER = os.path.join(os.environ.get("HOME"),
 
 class AbstractTranscriber:
     backend = None
-    def __init__(self, model, model_name=None, language=None, samplerate=16000, max_duration=None, model_kwargs={}):
+    def __init__(self, model, model_name=None, language=None, samplerate=16000, timeout=None, model_kwargs={}):
         self.model_name = model_name
         self.language = language
         self.model = model
         self.model_kwargs = model_kwargs
         self.samplerate = samplerate
-        self.max_duration = max_duration
+        self.timeout = timeout
         self.one_second_bytes = self.samplerate * 2 # 16-bit audio, 1 channel  ~ 32000 bytes
         self.audio_buffer = b''
+        self.start_time = time.time()
 
-    def get_elapsed(self, size=None):
-        return len(size or self.audio_buffer) / self.one_second_bytes
+    def get_elapsed(self):
+        return time.time() - self.start_time
 
-    def is_overtime(self, elapsed=None, size=None):
-        return self.max_duration and (elapsed or self.get_elapsed(size)) > self.max_duration
+    def is_overtime(self):
+        return time.time() - self.start_time > self.timeout
 
     def transcribe_realtime_audio(self, audio_bytes=b""):
         self.audio_buffer += audio_bytes
