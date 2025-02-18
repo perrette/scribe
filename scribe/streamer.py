@@ -11,56 +11,6 @@ with open(Path(__file__).parent / "models.toml", "rb") as f:
 language_config = language_config_default.copy()
 
 
-# Commencer l'enregistrement
-def start_recording(micro, transcriber, clipboard=True, keyboard=False, latency=0):
-
-    if keyboard:
-        try:
-            from scribe.keyboard import type_text
-        except ImportError:
-            keyboard = False
-            print("Keyboard simulation is not available.")
-            return
-
-        print("\nChange focus to target app during transcription.")
-
-
-    if clipboard:
-        try:
-            import pyperclip
-        except ImportError:
-            clipboard = False
-            print("Clipboard simulation is not available.")
-            return
-
-        print("\nThe full transcription will be copied to clipboard as it becomes available.")
-
-
-    fulltext = ""
-
-    greetings = { k: v for k, v in language_config["_meta"].get(transcriber.language, {}).items()
-                if v is not None and k.startswith(("start", "stop"))
-    }
-
-    for result in transcriber.start_recording(micro, **greetings):
-
-        if result.get('text'):
-            clear_line()
-            print(result.get('text'))
-            if keyboard:
-                type_text(result['text'] + " ", interval=latency) # Simulate typing
-
-            if clipboard:
-                fulltext += result['text'] + " "
-                pyperclip.copy(fulltext)
-
-        else:
-            print_partial(result.get('partial', ''))
-
-    if clipboard:
-        print("Copied to clipboard.")
-
-
 def get_default_backend():
     try:
         import vosk
@@ -162,7 +112,7 @@ def get_transcriber(o, prompt=True):
                                         language=o.language,
                                         samplerate=o.samplerate,
                                         timeout=None, # vosk keeps going (no timeout)
-                                        silence_break_duration=None, # vosk handles silences internally
+                                        silence_duration=None, # vosk handles silences internally
                                         model_kwargs={"data_folder": o.data_folder})
         except Exception as error:
             print(error)
@@ -170,7 +120,7 @@ def get_transcriber(o, prompt=True):
             exit(1)
 
     elif backend == "whisper":
-        transcriber = WhisperTranscriber(model_name=model, language=o.language, samplerate=o.samplerate, timeout=o.duration, silence_break_duration=o.silence)
+        transcriber = WhisperTranscriber(model_name=model, language=o.language, samplerate=o.samplerate, timeout=o.duration, silence_duration=o.silence)
 
     else:
         raise ValueError(f"Unknown backend: {backend}")
@@ -201,10 +151,62 @@ def get_parser():
     group = parser.add_argument_group("whisper options")
     group.add_argument("--duration", default=120, type=int, help="Max duration of the whisper recording (default %(default)ss)")
     group.add_argument("--silence", default=2, type=float, help="silence duration that prompt transcription (whisper) (default %(default)ss)")
+    group.add_argument("--restart-after-silence", action="store_true", help="Restart the recording after a transcription triggered by a silence")
 
     parser.add_argument("--data-folder", help="Folder to store Vosk models.")
 
     return parser
+
+
+# Commencer l'enregistrement
+def start_recording(micro, transcriber, clipboard=True, keyboard=False, latency=0):
+
+    if keyboard:
+        try:
+            from scribe.keyboard import type_text
+        except ImportError:
+            keyboard = False
+            print("Keyboard simulation is not available.")
+            return
+
+        print("\nChange focus to target app during transcription.")
+
+
+    if clipboard:
+        try:
+            import pyperclip
+        except ImportError:
+            clipboard = False
+            print("Clipboard simulation is not available.")
+            return
+
+        print("\nThe full transcription will be copied to clipboard as it becomes available.")
+
+
+    fulltext = ""
+
+    greetings = { k: v for k, v in language_config["_meta"].get(transcriber.language, {}).items()
+                if v is not None and k.startswith(("start", "stop"))
+    }
+
+    for result in transcriber.start_recording(micro, **greetings):
+
+        if result.get('text'):
+            clear_line()
+            print(result.get('text'))
+            if keyboard:
+                type_text(result['text'] + " ", interval=latency) # Simulate typing
+
+            if clipboard:
+                fulltext += result['text'] + " "
+                pyperclip.copy(fulltext)
+
+        else:
+            print_partial(result.get('partial', ''))
+
+    if clipboard:
+        print("Copied to clipboard.")
+
 
 
 def main(args=None):
@@ -218,6 +220,8 @@ def main(args=None):
 
     transcriber = None
 
+    toggle = {True: "On", False: "Off"}
+
     while True:
         if transcriber is None:
             transcriber = get_transcriber(o, prompt=o.prompt)
@@ -226,11 +230,12 @@ def main(args=None):
             print(f"Choose any of the following actions:")
             print(f"[q] quit")
             print(f"[e] change model")
-            print(f"[k] toggle keyboard [{'off' if o.keyboard else 'on'}]")
-            print(f"[c] toggle clipboard [{'off' if o.clipboard else 'on'}]")
+            print(f"[k] toggle keyboard [{toggle[o.keyboard]}] -> [{toggle[not o.keyboard]}]")
+            print(f"[c] toggle clipboard [{toggle[o.clipboard]}] -> [{toggle[not o.clipboard]}]")
             if transcriber.backend == "whisper":
                 print(f"[t] change duration (currently {transcriber.timeout}s)")
-                print(f"[b] change silence break duration (currently {transcriber.silence_break_duration}s)")
+                print(f"[b] change silence duration (currently {transcriber.silence_duration}s)")
+                print(f"[a] toggle auto-restart after silence [{toggle[o.restart_after_silence]}] -> [{toggle[not o.restart_after_silence]}]")
             print(colored(f"Press [Enter] or any other key to start recording.", "BOLD"))
 
             key = input()
@@ -253,9 +258,9 @@ def main(args=None):
                     print("Invalid duration. Must be an integer.")
                 continue
             if key == "b":
-                ans = input(f"Enter new silence break duration in seconds (current: {transcriber.silence_break_duration}): ")
+                ans = input(f"Enter new silence break duration in seconds (current: {transcriber.silence_duration}): ")
                 try:
-                    o.silence = transcriber.silence_break_duration = int(ans)
+                    o.silence = transcriber.silence_duration = int(ans)
                 except:
                     print("Invalid duration. Must be an integer.")
                 continue

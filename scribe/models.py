@@ -18,7 +18,8 @@ VOSK_MODELS_FOLDER = os.path.join(os.environ.get("HOME"),
 
 class AbstractTranscriber:
     backend = None
-    def __init__(self, model, model_name=None, language=None, samplerate=16000, timeout=None, model_kwargs={}, silence_thresh=-40, silence_break_duration=2):
+    def __init__(self, model, model_name=None, language=None, samplerate=16000, timeout=None, model_kwargs={},
+                 silence_thresh=-40, silence_duration=2, restart_after_silence=False):
         self.model_name = model_name
         self.language = language
         self.model = model
@@ -26,7 +27,8 @@ class AbstractTranscriber:
         self.samplerate = samplerate
         self.timeout = timeout
         self.silence_thresh = silence_thresh
-        self.silence_break_duration = silence_break_duration
+        self.silence_duration = silence_duration
+        self.restart_after_silence = restart_after_silence
         self.reset()
 
     def get_elapsed(self):
@@ -44,7 +46,6 @@ class AbstractTranscriber:
 
     def reset(self):
         self.audio_buffer = b''
-        # self.silence_buffer = deque(maxlen=self.silence_break_duration // 64)  # Buffer pour les silences
         self.start_time = time.time()
         self.last_sound_time = time.time()
 
@@ -65,8 +66,15 @@ class AbstractTranscriber:
                         # Vérifier si le segment est un silence
                         if is_silent(data, self.silence_thresh):
                             silence_duration = time.time() - self.last_sound_time
-                            if self.silence_break_duration is not None and silence_duration >= self.silence_break_duration and len(self.audio_buffer) > 0:
-                                raise KeyboardInterrupt("Silence detected for {:.2f} seconds".format(silence_duration))
+
+                            if self.silence_duration is not None and silence_duration >= self.silence_duration and len(self.audio_buffer) > 0:
+                                if self.restart_after_silence:
+                                    result = self.finalize()
+                                    microphone.q.queue.clear()
+                                    self.reset()
+                                    yield result
+                                else:
+                                    raise KeyboardInterrupt("Silence detected: {:.2f} seconds".format(silence_duration))
 
                         else:
                             self.last_sound_time = time.time()
