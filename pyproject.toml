@@ -34,6 +34,8 @@ keywords = [
     "vosk",
     "whisper",
     "openai",
+    "keyboard",
+    "clipboard",
 ]
 
 [tool.setuptools]

@@ -1,8 +1,16 @@
 import os
 import json
-import numpy as np
 import time
+from collections import deque
+import numpy as np
 from scribe.util import download_model
+from scribe.audio import calculate_decibels
+
+def is_silent(data, silence_thresh=-40):
+    """
+    Détermine si un segment audio est un silence en fonction du niveau de volume.
+    """
+    return calculate_decibels(data) < silence_thresh
 
 VOSK_MODELS_FOLDER = os.path.join(os.environ.get("HOME"),
                                       ".local/share/vosk/language-models")
@@ -10,22 +18,22 @@ VOSK_MODELS_FOLDER = os.path.join(os.environ.get("HOME"),
 
 class AbstractTranscriber:
     backend = None
-    def __init__(self, model, model_name=None, language=None, samplerate=16000, timeout=None, model_kwargs={}):
+    def __init__(self, model, model_name=None, language=None, samplerate=16000, timeout=None, model_kwargs={}, silence_thresh=-40, silence_break_duration=2):
         self.model_name = model_name
         self.language = language
         self.model = model
         self.model_kwargs = model_kwargs
         self.samplerate = samplerate
         self.timeout = timeout
-        self.one_second_bytes = self.samplerate * 2 # 16-bit audio, 1 channel  ~ 32000 bytes
-        self.audio_buffer = b''
-        self.start_time = time.time()
+        self.silence_thresh = silence_thresh
+        self.silence_break_duration = silence_break_duration
+        self.reset()
 
     def get_elapsed(self):
         return time.time() - self.start_time
 
     def is_overtime(self):
-        return time.time() - self.start_time > self.timeout
+        return self.timeout is not None and time.time() - self.start_time > self.timeout
 
     def transcribe_realtime_audio(self, audio_bytes=b""):
         self.audio_buffer += audio_bytes
@@ -36,6 +44,9 @@ class AbstractTranscriber:
 
     def reset(self):
         self.audio_buffer = b''
+        # self.silence_buffer = deque(maxlen=self.silence_break_duration // 64)  # Buffer pour les silences
+        self.start_time = time.time()
+        self.last_sound_time = time.time()
 
     def start_recording(self, microphone,
                         start_message="Recording... Press Ctrl+C to stop.",
@@ -50,6 +61,16 @@ class AbstractTranscriber:
                 while True:
                     while not microphone.q.empty():
                         data = microphone.q.get()
+
+                        # Vérifier si le segment est un silence
+                        if is_silent(data, self.silence_thresh):
+                            silence_duration = time.time() - self.last_sound_time
+                            if self.silence_break_duration is not None and silence_duration >= self.silence_break_duration and len(self.audio_buffer) > 0:
+                                raise KeyboardInterrupt("Silence detected for {:.2f} seconds".format(silence_duration))
+
+                        else:
+                            self.last_sound_time = time.time()
+
                         yield self.transcribe_realtime_audio(data)
 
                         if self.is_overtime():
@@ -137,7 +158,6 @@ class WhisperTranscriber(AbstractTranscriber):
         super().__init__(model, model_name, language, model_kwargs=model_kwargs, **kwargs)
 
     def transcribe_audio(self, audio_bytes):
-        print("\nIf --keyboard is set, change focus to target app NOW !")
         print("Transcribing...")
         audio_array = np.frombuffer(audio_bytes, dtype=np.int16).flatten().astype(np.float32) / 32768.0
         return self.model.transcribe(audio_array, fp16=False, language=self.language)

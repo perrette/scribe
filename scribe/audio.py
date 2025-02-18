@@ -1,5 +1,6 @@
-import sounddevice as sd
 import queue
+import numpy as np
+import sounddevice as sd
 
 
 def get_duration(audio_length_bytes, # bytes
@@ -49,3 +50,27 @@ class Microphone:
 
     def get_duraction(self, audio_length_bytes):
         return get_duration(audio_length_bytes, self.samplerate, self.channels, {'int16':2}[self.dtype])
+
+
+
+def calculate_decibels(data_bytes):
+    """
+    Calculate the decibel level of integer-valued audio data.
+
+    :param data_bytes: Audio data as a bytes object.
+    :return: Decibel level of the audio data.
+    """
+    # Normalize the integer samples to the range [-1.0, 1.0]
+    data = np.frombuffer(data_bytes, dtype=np.int16)
+    normalized_data = data / 32768.0
+
+    # Calculate the RMS value
+    rms = np.sqrt(np.mean(np.square(normalized_data)))
+
+    if rms == 0:
+        return -np.inf
+
+    # Convert RMS to decibels
+    db = 20 * np.log10(rms)
+
+    return db
