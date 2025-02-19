@@ -3,26 +3,7 @@ import re
 import tqdm
 import shutil
 from functools import partial
-
-
-class bcolors:
-    # https://stackoverflow.com/a/287944/2192272
-    HEADER = '\033[95m'
-    OKBLUE = '\033[94m'
-    OKGREEN = '\033[92m'
-    WARNING = '\033[93m'
-    FAIL = '\033[91m'
-    ENDC = '\033[0m'
-    BOLD = '\033[1m'
-    UNDERLINE = '\033[4m'
-
-def strip_colors(s):
-    for name, c in vars(bcolors).items():
-        if name.startswith("_"):
-            continue
-        s = s.replace(c, '')
-    return s
-
+from termcolor import colored
 
 def ansi_link(uri, label=None):
     """https://stackoverflow.com/a/71309268/2192272
@@ -35,25 +16,6 @@ def ansi_link(uri, label=None):
     escape_mask = '\033]8;{};{}\033\\{}\033]8;;\033\\'
 
     return escape_mask.format(parameters, uri, label)
-
-def colored(text, color):
-    if hasattr(bcolors, color):
-        color = getattr(bcolors, color)
-    return f"{color}{text}{bcolors.ENDC}"
-
-
-ANSI_LINK_RE = re.compile(r'(?P<ansi_sequence>\033]8;(?P<parameter>.*?);(?P<uri>.*?)\033\\(?P<label>.*?)\033]8;;\033\\)')
-
-def strip_ansi_link(s):
-    for m in ANSI_LINK_RE.findall(s):
-        s = s.replace(m[0], m[3])
-    return s
-
-
-def strip_all(s):
-    s = strip_colors(s)
-    s = strip_ansi_link(s)
-    return s
 
 
 # Function to clear the terminal line
@@ -119,9 +81,9 @@ def format_choice(enum, default=None, unavailable=None):
         value_str = value
 
     if (default is not None and value == default) or (default is None and i == 0):
-        return f'  ' + colored(f'({i+1}) {value_str} [Press Enter]', 'BOLD')
+        return f'  ' + colored(f'({i+1}) {value_str} [Press Enter]', attrs=['bold'])
     elif unavailable and value in unavailable:
-        return f'  ' + colored(f'{" "} {value_str} -> unavailable !!', 'FAIL')
+        return f'  ' + colored(f'{" "} {value_str} -> unavailable !!', attrs=["strike"])
     else:
         return f'  ({i+1}) {value_str}'
 

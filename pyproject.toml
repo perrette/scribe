@@ -19,6 +19,7 @@ dependencies = [
     "requests",
     "pyperclip",
     "unidecode",
+    "termcolor",
 ]
 
 classifiers = [
