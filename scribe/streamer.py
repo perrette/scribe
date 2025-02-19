@@ -47,7 +47,7 @@ def get_transcriber(o, prompt=True):
         backend = o.backend
 
     elif not prompt:
-        backend = choices[0]
+        backend = BACKENDS[0]
 
     else:
         checked_backend = False
