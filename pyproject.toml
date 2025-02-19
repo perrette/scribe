@@ -18,9 +18,13 @@ dependencies = [
     "tqdm",
     "requests",
     "pyperclip",
-    "pystray",
 ]
-optional-dependencies = { keyboard = ["pynput"], whisper = ["openai-whisper"], vosk = ["vosk"], all = ["pynput", "openai-whisper", "vosk"] }
+[project.optional-dependencies]
+keyboard = ["pynput"]
+whisper = ["openai-whisper"]
+vosk = ["vosk"]
+app = ["pystray", "PyGObject"]
+all = ["pynput", "openai-whisper", "vosk", "pystray"]
 
 classifiers = [
     "Programming Language :: Python :: 3",

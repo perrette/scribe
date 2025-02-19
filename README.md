@@ -1,6 +1,15 @@
+[![python](https://img.shields.io/badge/python-3.12-blue.svg)]()
+[![pypi](https://github.com/perrette/scribe/actions/workflows/pypi.yml/badge.svg)](https://pypi.org/project/papers-cli)
+
 # Scribe
 
 `scribe` is a local speech recognition tool that provides real-time transcription using vosk and whisper AI, with the goal of serving as a virtual keyboard.
+
+## Compatibility
+
+In principle `scribe` is compatible with any OS but I develop it under Ubuntu (Wayland) and develop it for my own purposes so glitches are likely on other configurations.
+As of February 19, 2025 python 13 is not supported (I can't recall now which dependency is to blame).
+A test on Mac OS (M1 Air with 8Gb RAM) worked with python 12, though with a much inferior performance compared to my own system (Lenovo T14 Gen 5 with i5 125U 32 Gb RAM).
 
 ## Installation
 
@@ -74,8 +83,7 @@ scribe --keyboard
 ```
 
 It relies on the optional `pynput` dependency (installed together with `scribe` if you used the `[all]` or `[keyboard]` option).
-
-`pynput` may require [some configuration](https://pynput.readthedocs.io/en/latest/limitations.html). It has [limitations]((https://pynput.readthedocs.io/en/latest/limitations.html)).
+Depending on your operating system, `pynput` may require additional configuration to work around its [limitations](https://pynput.readthedocs.io/en/latest/limitations.html).
 
 #### Use the keyboard in Ubuntu
 
@@ -83,7 +91,8 @@ In my Ubuntu + Wayland system the keyboard simulation works out-of-the-box in ch
 
 One workaround is to use the Xorg version of GNOME: in `etc/gdm3/custom.conf` uncomment `# WaylandEnable=false` and restart your computer.
 
-Another workaround with Wayland is to use the low-level `uinput` backend but that requires that `scribe` is run as root (sudo), and likely other configurations like activating the `uinput` system module (`sudo modprobe uinput` for a one-time test, or adding `uinput` to `/etc/modules-load.d/modules.conf` to make that persistent). Moreover, since `uinput` really only simulates key strokes, your keyboard must be set with an appropriate layout, for example to have the letter `é` you'd want a French or Italian layout otherwise the English will drop it or replace with something else. Another caveat I encountered the caveat that the special characters were inserted at the wrong place. Adding a small delay was enough to fix that with the additional parameter `--latency 0.01` Finally if you run as sudo you may need to reset some environment variable so that the list of audio devices (`XDG_RUNTIME_DIR`) and the download folder remain the same. To sum-up, that gives something like:
+Another workaround while staying with Wayland is to use the low-level `uinput` backend of `pynput`, but that requires that `scribe` is run as root (sudo), and likely other configurations like activating the `uinput` system module (`sudo modprobe uinput` for a one-time test, or adding `uinput` to `/etc/modules-load.d/modules.conf` to make that persistent).
+Moreover, the keyboard must be set with an appropriate layout, for example to have the letter `é` you'd want a French or Italian layout otherwise the English will drop it or replace with something else. Another caveat I encountered is that the special characters (`é`) were inserted at the wrong place. Adding a small delay was enough to fix that with the additional parameter `--latency 0.01` Finally if you run as sudo you may need to reset some environment variable so that the list of audio devices (`XDG_RUNTIME_DIR`) and the download folder remain the same. To sum-up, that gives something like:
 ```bash
 sudo modprobe uinput
 sudo HOME=$HOME XDG_RUNTIME_DIR=$XDG_RUNTIME_DIR PYNPUT_BACKEND_KEYBOARD=uinput $(which scribe)  --latency 0.01
