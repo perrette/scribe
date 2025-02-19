@@ -29,8 +29,8 @@ pip install -e .[all]
 You can leave the optional dependencies (leave out `[all]`) but must install at least one of `vosk` or `openai-whisper` packages (see Usage below).
 
 The `vosk` language models will download on-the-fly.
-The default data folder is `$HOME/.local/share/vosk/language-models`.
-This can be modified.
+The default download folder is `$XDG_CACHE_HOME/{backend}` where `$XDG_CACHE_HOME` defaults to `$HOME/.cache` (note for the `whisker` backend
+the default is left to the `openai-whisper` package and might change in the future).
 
 
 ## Usage

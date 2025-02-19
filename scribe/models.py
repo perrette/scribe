@@ -12,8 +12,9 @@ def is_silent(data, silence_thresh=-40):
     """
     return calculate_decibels(data) < silence_thresh
 
-VOSK_MODELS_FOLDER = os.path.join(os.environ.get("HOME"),
-                                      ".local/share/vosk/language-models")
+HOME = os.environ.get('HOME', os.path.expanduser('~'))
+XDG_CACHE_HOME = os.environ.get('XDG_CACHE_HOME', os.path.join(HOME, '.cache'))
+VOSK_MODELS_FOLDER = os.path.join(XDG_CACHE_HOME, "vosk")
 
 class StopRecording(Exception):
     pass
