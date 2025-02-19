@@ -22,7 +22,7 @@ sudo apt-get install portaudio19-dev xclip
 See additional requirements for the [icon tray](#system-tray-icon-experimental) and [keyboard](#virtual-keyboard-experimental) options. The python dependencies should be dealt with automatically:
 
 ```bash
-pip install scribe-cli[all]"
+pip install scribe-cli[all]
 ```
 
 (note the `-cli` suffix for client)
