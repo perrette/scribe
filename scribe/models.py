@@ -55,10 +55,11 @@ class AbstractTranscriber:
 
         self.reset()
 
-        with microphone.open_stream():
-            print(start_message)
+        try:
 
-            try:
+            with microphone.open_stream():
+                print(start_message)
+
                 while True:
                     while not microphone.q.empty():
                         data = microphone.q.get()
@@ -84,15 +85,15 @@ class AbstractTranscriber:
                         if self.is_overtime():
                             raise KeyboardInterrupt("Overtime: {:.2f} seconds".format(self.get_elapsed()))
 
-            except KeyboardInterrupt:
-                pass
+        except KeyboardInterrupt:
+            pass
 
-            finally:
-                result = self.finalize()
-                microphone.q.queue.clear()
-                yield result
+        finally:
+            result = self.finalize()
+            microphone.q.queue.clear()
+            yield result
 
-            print(stop_message)
+        print(stop_message)
 
 
 def get_vosk_model(model, download_root=None, url=None):
