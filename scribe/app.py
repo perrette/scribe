@@ -313,6 +313,7 @@ def main(args=None):
 
         if o.app:
             app = create_app(micro, transcriber, clipboard=o.clipboard, keyboard=o.keyboard, latency=o.latency)
+            print("Starting app...")
             app.run()
         else:
             start_recording(micro, transcriber, clipboard=o.clipboard, keyboard=o.keyboard, latency=o.latency)
