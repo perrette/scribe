@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "scribe-cli"
 dynamic = ["version"]
-description = "scribe is a local speech recognition tool that provides real-time transcription using vosk and whisper AI."
+description = "scribe is a local speech recognition tool that provides real-time transcription using vosk and whisper AI, with the goal of serving as a virtual keyboard on a computer"
 authors = [
     { name="Mahé Perrette", email="mahe.perrette@gmail.com" }
 ]

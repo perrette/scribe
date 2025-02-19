@@ -3,7 +3,7 @@
 
 # Scribe
 
-`scribe` is a local speech recognition tool that provides real-time transcription using vosk and whisper AI, with the goal of serving as a virtual keyboard.
+`scribe` is a local speech recognition tool that provides real-time transcription using vosk and whisper AI, with the goal of serving as a virtual keyboard on a computer.
 
 ## Compatibility
 
@@ -13,13 +13,13 @@ A test on Mac OS (M1 Air with 8Gb RAM) worked with python 12, though with a much
 
 ## Installation
 
-Install PortAudio library. E.g. on Ubuntu:
+Install PortAudio library and xclip library. E.g. on Ubuntu:
 
 ```bash
-sudo apt-get install portaudio19-dev
+sudo apt-get install portaudio19-dev xclip
 ```
 
-The python dependencies should be dealt with automatically:
+See additional requirements for the [icon tray](#system-tray-icon-experimental) and [keyboard](#virtual-keyboard-experimental) options. The python dependencies should be dealt with automatically:
 
 ```bash
 pip install scribe-cli[all]"
@@ -59,8 +59,7 @@ but it cannot do real-time, and depending on the model can have relatively long 
 With the `whisker` model you need to stop the registration manually before the transcription occurs (Ctrl + C), though
 there is a maximum duration after which it will stop by itself, which is setup to 60s by default (unless `--duration` is set to something else).
 
-The `vosk` backend is good at
-doing real-time transcription for one language, but tended to make more mistakes in my tests and it does not do punctuation.
+The `vosk` backend is much faster and very good at doing real-time transcription for one language, but tended to make more mistakes in my tests and it does not do punctuation.
 Use mainly for longer typing session with the [keyboard](#virtual-keyboard-advanced) option, e.g. to make notes.
 There are many [vosk models](https://alphacephei.com/vosk/models) available, and here a few are associated to [a handful of languages](scribe/models.toml) `en`, `fr`, `it`, `de` (so far).
 
@@ -99,7 +98,7 @@ sudo HOME=$HOME XDG_RUNTIME_DIR=$XDG_RUNTIME_DIR PYNPUT_BACKEND_KEYBOARD=uinput 
 ```
 You're on the right path :)
 
-### System try icon (experimental)
+### System tray icon (experimental)
 
 To avoid switching back and forth with the terminal, it's possible to interact with the program via an icon tray.
 To activate start with:
