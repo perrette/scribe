@@ -102,6 +102,7 @@ class AbstractTranscriber:
 def get_vosk_model(model, download_root=None, url=None):
     """Load the Vosk recognizer"""
     import vosk
+    vosk.SetLogLevel(-1)
     if download_root is None:
         download_root = VOSK_MODELS_FOLDER
     model_path = os.path.join(download_root, model)
