@@ -60,7 +60,7 @@ With the `whisker` model you need to stop the registration manually before the t
 there is a maximum duration after which it will stop by itself, which is setup to 60s by default (unless `--duration` is set to something else).
 
 The `vosk` backend is much faster and very good at doing real-time transcription for one language, but tended to make more mistakes in my tests and it does not do punctuation.
-Use mainly for longer typing session with the [keyboard](#virtual-keyboard-advanced) option, e.g. to make notes.
+It becomes really powerful when used for longer or interactive typing session with the [keyboard](#virtual-keyboard-experimental) option, e.g. to make notes or chat with an AI.
 There are many [vosk models](https://alphacephei.com/vosk/models) available, and here a few are associated to [a handful of languages](scribe/models.toml) `en`, `fr`, `it`, `de` (so far).
 
 To skip the initial selection menu you can do:
