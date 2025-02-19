@@ -52,6 +52,7 @@ there is a maximum duration after which it will stop by itself, which is setup t
 
 The `vosk` backend is good at
 doing real-time transcription for one language, but tended to make more mistakes in my tests and it does not do punctuation.
+Use mainly for longer typing session with the [keyboard](#virtual-keyboard-advanced) option, e.g. to make notes.
 There are many [vosk models](https://alphacephei.com/vosk/models) available, and here a few are associated to [a handful of languages](scribe/models.toml) `en`, `fr`, `it`, `de` (so far).
 
 To skip the initial selection menu you can do:
@@ -60,7 +61,7 @@ scribe --backend whisper --model small --no-prompt
 ```
 where `--no-prompt` jumps right to the recording (after the first interruption, you can still choose to change the backend and model).
 
-### Advanced usage as keyboard replacement
+### Virtual keyboard (experimental)
 
 By default the content of the transcription is pasted to the clipboard, and it is up to the user to paste (e.g. Ctrl + V).
 With the `--keyboard` option `scribe` will attempt to simulate a keyboard and send transcribed characters to the applcation under focus:
@@ -78,3 +79,11 @@ It relies on the optional `pynput` dependency (installed together with `scribe` 
 
 If you run Ubuntu (or else?) with GNOME, the script `scribe-install [...]` will create a `scribe.desktop` file and place it under `$HOME/.local/share/applications`
 to make it available from the quick launch menu. Any option will be passed on to `scribe`.
+
+e.g.
+
+```bash
+scribe-install --backend whisper --model small
+```
+
+After that just typing Cmd + scri... at any time from any where will conveniently start the app in its own terminal with the prescribed options.
