@@ -243,7 +243,7 @@ def create_app(micro, transcriber, **kwargs):
     )
 
     # Create the system tray icon
-    icon = pystray.Icon('name', image, "My App", menu)
+    icon = pystray.Icon('scribe', image, "scribe", menu)
 
     return icon
 
