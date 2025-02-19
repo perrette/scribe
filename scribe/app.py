@@ -37,7 +37,26 @@ def pick_specialist_model(model, language, backend):
     return model
 
 
+class DummyTranscriber:
+
+    def __init__(self, backend, model_name):
+        self.backend = backend
+        self.model_name = model_name
+
+    def start_recording(self, micro, **kwargs):
+        while True:
+            try:
+                yield {"text": input()}
+            except KeyboardInterrupt:
+                break
+
+    def __getattr__(self, item):
+        return None
+
 def get_transcriber(o, prompt=True):
+
+    if o.dummy:
+        return DummyTranscriber("whisper", "dummy")
 
     if o.backend:
         checked_backend = check_dependencies(o.backend)
@@ -142,6 +161,8 @@ def get_parser():
 
     parser.add_argument("-l", "--language", choices=list(language_config["vosk"]),
                         help="An alias for preselected models when using the vosk backend, or 'en' for the English version of whisper models.")
+
+    parser.add_argument("--dummy", action="store_true", help=argparse.SUPPRESS)
 
     parser.add_argument("--no-prompt", action="store_false", dest="prompt", help="Disable prompts for backend and model selection and jump to recording")
     parser.add_argument("--app", action="store_true", help="Start in app mode (relies on pystray)")
@@ -279,19 +300,26 @@ def main(args=None):
     while True:
         if transcriber is None:
             transcriber = get_transcriber(o, prompt=o.prompt)
-        print(f">>> Model {transcriber.model_name} from {transcriber.backend} selected. Keyboard [{'on' if o.keyboard else 'off'}]. Clipboard [{'on' if o.clipboard else 'off'}] <<<")
+        print(f"Model [{colored(transcriber.model_name, 'light_blue', attrs=['bold'])}] from [{colored(transcriber.backend, 'light_blue', attrs=['bold'])}] selected.")
         if o.prompt:
-            print(f"Choose any of the following actions (or any command-line toggle flag by name)")
-            print(f"[q] quit")
-            print(f"[e] change model")
-            print(f"[x] toggle app [{toggle[o.app]}] -> [{toggle[not o.app]}]")
-            print(f"[k] toggle keyboard [{toggle[o.keyboard]}] -> [{toggle[not o.keyboard]}]")
-            print(f"[c] toggle clipboard [{toggle[o.clipboard]}] -> [{toggle[not o.clipboard]}]")
+            print(f"Choose any of the following actions")
+            print(f"{colored('[q]', 'light_yellow')} quit")
+            print(f"{colored('[e]', 'light_yellow')} change model")
+            print(f"{colored('[x]', 'light_yellow')} app is {colored(o.app, 'light_blue')} toggle?")
+            print(f"{colored('[k]', 'light_yellow')} keyboard is {colored(o.keyboard, 'light_blue')} toggle?")
+            print(f"{colored('[c]', 'light_yellow')} clipboard is {colored(o.clipboard, 'light_blue')} toggle?")
             if transcriber.backend == "whisper":
-                print(f"[t] change duration (currently {transcriber.timeout}s)")
-                print(f"[b] change silence duration (currently {transcriber.silence_duration}s)")
-                print(f"[a] toggle auto-restart after silence [{toggle[transcriber.restart_after_silence]}] -> [{toggle[not transcriber.restart_after_silence]}]")
-            print(colored(f"Press [Enter] to start recording.", "BOLD"))
+                print(f"{colored('[t]', 'light_yellow')} change duration (currently {colored(transcriber.timeout, 'light_blue')} s)")
+                print(f"{colored('[b]', 'light_yellow')} change silence duration (currently {colored(transcriber.silence_duration, 'light_blue')} s)")
+                print(f"{colored('[a]', 'light_yellow')} auto-restart after silence is {colored(transcriber.restart_after_silence, 'light_blue')} toggle?")
+            exclude_flags = ["keyboard", "clipboard", "app", "prompt", "restart_after_silence"]
+            display_flags = [a.dest for a in parser._actions if a.help != argparse.SUPPRESS]
+            for key, value in vars(o).items():
+                if key not in display_flags or key in exclude_flags or not isinstance(value, bool):
+                    continue
+                print(f"{colored(f'[{key}]', 'light_yellow')} is {colored(value, 'light_blue')} toggle?")
+
+            print(colored(f"Press [Enter] to start recording.", attrs=["bold"]))
 
             key = input()
             if key == "q":
