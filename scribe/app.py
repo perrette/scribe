@@ -167,24 +167,12 @@ def get_parser():
 def start_recording(micro, transcriber, clipboard=True, keyboard=False, latency=0, **greetings):
 
     if keyboard:
-        try:
-            from scribe.keyboard import type_text
-        except ImportError:
-            keyboard = False
-            print("Keyboard simulation is not available.")
-            return
-
+        from scribe.keyboard import type_text
         print("\nChange focus to target app during transcription.")
 
 
     if clipboard:
-        try:
-            import pyperclip
-        except ImportError:
-            clipboard = False
-            print("Clipboard simulation is not available.")
-            return
-
+        import pyperclip
         print("\nThe full transcription will be copied to clipboard as it becomes available.")
 
 
