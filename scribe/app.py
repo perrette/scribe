@@ -3,7 +3,7 @@ import tomllib
 import argparse
 from scribe.audio import Microphone
 from scribe.util import print_partial, clear_line, prompt_choices, check_dependencies, ansi_link, colored
-from scribe.models import VoskTranscriber, WhisperTranscriber
+from scribe.models import VoskTranscriber, WhisperTranscriber, StopRecording
 
 with open(Path(__file__).parent / "models.toml", "rb") as f:
     language_config_default = tomllib.load(f)
@@ -212,6 +212,23 @@ def start_recording(micro, transcriber, clipboard=True, keyboard=False, latency=
         print("Copied to clipboard.")
 
 
+def interrupt_app_thread(icon):
+    """Thanks Le Chat for this solution: https://stackoverflow.com/a/325528/2192272
+    """
+    import ctypes
+    thread = icon._recording_thread
+    # Raise an exception in the thread using ctypes
+    thread_id = thread.ident
+    if thread_id is not None:
+        res = ctypes.pythonapi.PyThreadState_SetAsyncExc(
+            ctypes.c_long(thread_id),
+            ctypes.py_object(StopRecording)
+        )
+        if res > 1:
+            ctypes.pythonapi.PyThreadState_SetAsyncExc(thread_id, 0)
+            print("Failure to raise exception in thread")
+
+
 def create_app(micro, transcriber, **kwargs):
     import pystray
     from pystray import Menu as pystrayMenu, MenuItem as Item
@@ -219,26 +236,38 @@ def create_app(micro, transcriber, **kwargs):
     import PIL.ImageOps
 
     import scribe_data
+    import threading
 
     # Load an image from a file
     image = Image.open(Path(scribe_data.__file__).parent / "share" / "icon.jpg")
 
     def callback_quit(icon, item):
         icon.visible = False
+        ## Here we need to stop the recording thread
+        callback_stop_recording(icon, item)
         icon.stop()
 
+    def callback_stop_recording(icon, item):
+        ## Here we need to stop the recording thread
+        interrupt_app_thread(icon)
+        icon._recording_thread.join()
+
     def callback_record(icon, item):
-        print(f"Clicked {item}")
-        # icon.icon = PIL.ImageOps.invert(icon.icon)
-        # icon.icon = PIL.ImageOps.invert(image)
-        # icon.update_menu()
-        start_recording(micro, transcriber, **kwargs)
-        # icon.icon = image
-        # icon.update_menu()
+        icon._recording_thread = threading.Thread(target=start_recording, args=(micro, transcriber), kwargs=kwargs)
+        icon._recording_thread.start()
+
+    def is_recording(item):
+        return hasattr(icon, "_recording_thread") and icon._recording_thread.is_alive()
+
+    def is_not_recording(item):
+        return not is_recording(item)
+
 
     # Create a menu
     menu = pystrayMenu(
-        Item('Record', callback_record),
+        # Item('Record', callback_record),
+        Item("Record", callback_record, visible=is_not_recording),
+        Item("Stop", callback_stop_recording, visible=is_recording),
         Item('Quit', callback_quit),
     )
 

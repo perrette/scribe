@@ -15,6 +15,8 @@ def is_silent(data, silence_thresh=-40):
 VOSK_MODELS_FOLDER = os.path.join(os.environ.get("HOME"),
                                       ".local/share/vosk/language-models")
 
+class StopRecording(Exception):
+    pass
 
 class AbstractTranscriber:
     backend = None
@@ -85,7 +87,7 @@ class AbstractTranscriber:
                         if self.is_overtime():
                             raise KeyboardInterrupt("Overtime: {:.2f} seconds".format(self.get_elapsed()))
 
-        except KeyboardInterrupt:
+        except (KeyboardInterrupt, StopRecording):
             pass
 
         finally:
