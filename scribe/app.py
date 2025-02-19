@@ -55,8 +55,17 @@ class DummyTranscriber:
 
 def get_transcriber(o, prompt=True):
 
+    whisper_models = ["tiny", "base", "small", "medium", "large", "turbo"]
+    whisper_english_models = ["tiny.en", "base.en", "small.en", "medium.en"]
+
     if o.dummy:
         return DummyTranscriber("whisper", "dummy")
+
+    if o.model and not o.backend:
+        if o.model.startswith("vosk-"):
+            o.backend = "vosk"
+        elif o.model in whisper_models + whisper_english_models:
+            o.backend = "whisper"
 
     if o.backend:
         checked_backend = check_dependencies(o.backend)
@@ -109,15 +118,11 @@ def get_transcriber(o, prompt=True):
                 model = default_model
 
         elif backend == "whisper":
-
-            models = ["tiny", "base", "small", "medium", "large", "turbo"]
-            english_models = ["tiny.en", "base.en", "small.en", "medium.en"]
             default_model = "small"
-
             print("Some models have a specialized English version (.en) which will be selected as default is `-l en` was requested, but can also be requested explicitly below (option not listed). See [documentation](https://github.com/openai/whisper?tab=readme-ov-file#available-models-and-languages).")
             if prompt:
-                model = prompt_choices(models, default=default_model, label="model",
-                                        hidden_models=english_models)
+                model = prompt_choices(whisper_models, default=default_model, label="model",
+                                        hidden_models=whisper_english_models)
             else:
                 model = default_model
 
