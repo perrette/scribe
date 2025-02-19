@@ -1,5 +1,5 @@
 [![python](https://img.shields.io/badge/python-3.12-blue.svg)]()
-[![pypi](https://github.com/perrette/scribe/actions/workflows/pypi.yml/badge.svg)](https://pypi.org/project/papers-cli)
+[![pypi](https://github.com/perrette/scribe/actions/workflows/pypi.yml/badge.svg)](https://pypi.org/project/scribe-cli)
 
 # Scribe
 
