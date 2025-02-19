@@ -2,6 +2,8 @@
 """
 import platform
 import time
+import unidecode
+import logging
 
 try:
     # import pyautogui
@@ -30,10 +32,23 @@ def paste_text():
         keyboard.release('v')
         keyboard.release(Key.ctrl)
 
-def type_text(text, interval=0, paste=False):
+def safe_type_text(text):
+    """I got key errors with the uinput mode, so I'm using unidecode to convert
+    the text to ASCII before typing it."""
+    try:
+        keyboard.type(text)
+    except KeyError:
+        asciitext = unidecode.unidecode(text)
+        logging.warning(f"Key error with {text} -> convert to {asciitext}")
+        keyboard.type(asciitext)
+
+def type_text(text, interval=0, paste=False, ascii=False):
     # Simulate typing a string
     # import subprocess
     # subprocess.run(["ydotool", "type", text])
+
+    if ascii:
+        text = unidecode.unidecode(text)
 
     if paste:
         import pyperclip
@@ -45,7 +60,9 @@ def type_text(text, interval=0, paste=False):
 
     if interval > 0:
         for c in text:
-            keyboard.type(c)
+            # keyboard.type(c)
+            safe_type_text(c)
             time.sleep(interval)
     else:
-        keyboard.type(text)
+        # keyboard.type(text)
+        safe_type_text(text)
