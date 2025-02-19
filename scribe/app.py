@@ -147,6 +147,7 @@ def get_parser():
     parser.add_argument("--app", action="store_true", help="Start in app mode (relies on pystray)")
 
     parser.add_argument("--samplerate", default=16000, type=int, help=argparse.SUPPRESS)
+    parser.add_argument("--microphone-device", help="The device index of the microphone to use.", type=int)
     parser.add_argument("--keyboard", action="store_true")
     parser.add_argument("--no-clipboard", dest="clipboard", action="store_false")
     parser.add_argument("--latency", default=0, type=float, help="keyboard latency")
@@ -280,7 +281,7 @@ def main(args=None):
 
 
     # Set up the microphone for recording
-    micro = Microphone(samplerate=o.samplerate)
+    micro = Microphone(samplerate=o.samplerate, device=o.microphone_device)
 
     transcriber = None
 
