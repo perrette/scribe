@@ -306,8 +306,10 @@ def main(args=None):
             print(f"{colored('[q]', 'light_yellow')} quit")
             print(f"{colored('[e]', 'light_yellow')} change model")
             print(f"{colored('[x]', 'light_yellow')} app is {colored(o.app, 'light_blue')} toggle?")
-            print(f"{colored('[k]', 'light_yellow')} keyboard is {colored(o.keyboard, 'light_blue')} toggle?")
             print(f"{colored('[c]', 'light_yellow')} clipboard is {colored(o.clipboard, 'light_blue')} toggle?")
+            print(f"{colored('[k]', 'light_yellow')} keyboard is {colored(o.keyboard, 'light_blue')} toggle?")
+            if o.keyboard:
+                print(f"{colored('[latency]', 'light_yellow')} between keystrokes is {colored(o.latency, 'light_blue')} s")
             if transcriber.backend == "whisper":
                 print(f"{colored('[t]', 'light_yellow')} change duration (currently {colored(transcriber.timeout, 'light_blue')} s)")
                 print(f"{colored('[b]', 'light_yellow')} change silence duration (currently {colored(transcriber.silence_duration, 'light_blue')} s)")
@@ -326,6 +328,9 @@ def main(args=None):
                 exit(0)
             if key == "e":
                 transcriber = None
+                o.model = None
+                o.backend = None
+                o.language = None
                 continue
             if key == "k":
                 o.keyboard = not o.keyboard
@@ -345,6 +350,13 @@ def main(args=None):
                     o.duration = transcriber.timeout = int(ans)
                 except:
                     print("Invalid duration. Must be an integer.")
+                continue
+            if key == "latency":
+                ans = input(f"Enter new keyboard latency in seconds (current: {o.latency}): ")
+                try:
+                    o.latency = float(ans)
+                except:
+                    print("Invalid latency. Must be a float.")
                 continue
             if key == "b":
                 ans = input(f"Enter new silence break duration in seconds (current: {transcriber.silence_duration}): ")
