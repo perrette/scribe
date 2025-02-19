@@ -163,7 +163,7 @@ def get_parser():
 
 
 # Commencer l'enregistrement
-def start_recording(micro, transcriber, clipboard=True, keyboard=False, latency=0):
+def start_recording(micro, transcriber, clipboard=True, keyboard=False, latency=0, **greetings):
 
     if keyboard:
         try:
@@ -188,10 +188,6 @@ def start_recording(micro, transcriber, clipboard=True, keyboard=False, latency=
 
 
     fulltext = ""
-
-    greetings = { k: v for k, v in language_config["_meta"].get(transcriber.language, {}).items()
-                if v is not None and k.startswith(("start", "stop"))
-    }
 
     for result in transcriber.start_recording(micro, **greetings):
 
@@ -341,11 +337,17 @@ def main(args=None):
                 continue
 
         if o.app:
-            app = create_app(micro, transcriber, clipboard=o.clipboard, keyboard=o.keyboard, latency=o.latency)
+            greetings = dict(
+                start_message = "Listening... Use the try icon menu to stop.",
+            )
+            app = create_app(micro, transcriber, clipboard=o.clipboard, keyboard=o.keyboard, latency=o.latency, **greetings)
             print("Starting app...")
             app.run()
         else:
-            start_recording(micro, transcriber, clipboard=o.clipboard, keyboard=o.keyboard, latency=o.latency)
+            greetings = dict(
+                start_message = "Listening... Press Ctrl+C to stop.",
+            )
+            start_recording(micro, transcriber, clipboard=o.clipboard, keyboard=o.keyboard, latency=o.latency, **greetings)
 
         # if we arrived so far, that means we pressed Ctrl + C anyway, and need Enter to move on.
         # So we leave the wider range of options to change the model.
