@@ -151,6 +151,7 @@ def get_parser():
     parser.add_argument("--keyboard", action="store_true")
     parser.add_argument("--no-clipboard", dest="clipboard", action="store_false")
     parser.add_argument("--latency", default=0, type=float, help="keyboard latency")
+    parser.add_argument("--ascii", action="store_true", help="Use unidecode for keyboard typing in ascii")
 
     group = parser.add_argument_group("whisper options")
     group.add_argument("--duration", default=120, type=int, help="Max duration of the whisper recording (default %(default)ss)")
@@ -164,7 +165,7 @@ def get_parser():
 
 
 # Commencer l'enregistrement
-def start_recording(micro, transcriber, clipboard=True, keyboard=False, latency=0, **greetings):
+def start_recording(micro, transcriber, clipboard=True, keyboard=False, latency=0, ascii=False, **greetings):
 
     if keyboard:
         from scribe.keyboard import type_text
@@ -184,7 +185,7 @@ def start_recording(micro, transcriber, clipboard=True, keyboard=False, latency=
             clear_line()
             print(result.get('text'))
             if keyboard:
-                type_text(result['text'] + " ", interval=latency) # Simulate typing
+                type_text(result['text'] + " ", interval=latency, ascii=ascii) # Simulate typing
 
             if clipboard:
                 fulltext += result['text'] + " "
@@ -280,7 +281,7 @@ def main(args=None):
             transcriber = get_transcriber(o, prompt=o.prompt)
         print(f">>> Model {transcriber.model_name} from {transcriber.backend} selected. Keyboard [{'on' if o.keyboard else 'off'}]. Clipboard [{'on' if o.clipboard else 'off'}] <<<")
         if o.prompt:
-            print(f"Choose any of the following actions:")
+            print(f"Choose any of the following actions (or any command-line toggle flag by name)")
             print(f"[q] quit")
             print(f"[e] change model")
             print(f"[x] toggle app [{toggle[o.app]}] -> [{toggle[not o.app]}]")
@@ -290,7 +291,7 @@ def main(args=None):
                 print(f"[t] change duration (currently {transcriber.timeout}s)")
                 print(f"[b] change silence duration (currently {transcriber.silence_duration}s)")
                 print(f"[a] toggle auto-restart after silence [{toggle[transcriber.restart_after_silence]}] -> [{toggle[not transcriber.restart_after_silence]}]")
-            print(colored(f"Press [Enter] or any other key to start recording.", "BOLD"))
+            print(colored(f"Press [Enter] to start recording.", "BOLD"))
 
             key = input()
             if key == "q":
@@ -324,19 +325,27 @@ def main(args=None):
                 except:
                     print("Invalid duration. Must be an integer.")
                 continue
+            if key:
+                if hasattr(o, key) and isinstance(getattr(o, key), bool):
+                    setattr(o, key, not getattr(o, key))
+                    print(f"Toggle {key} to [{getattr(o, key)}].")
+                print(f"Invalid choice: {key}.")
+                continue
 
         if o.app:
             greetings = dict(
                 start_message = "Listening... Use the try icon menu to stop.",
             )
-            app = create_app(micro, transcriber, clipboard=o.clipboard, keyboard=o.keyboard, latency=o.latency, **greetings)
+            app = create_app(micro, transcriber, clipboard=o.clipboard,
+                             keyboard=o.keyboard, latency=o.latency, ascii=o.ascii, **greetings)
             print("Starting app...")
             app.run()
         else:
             greetings = dict(
                 start_message = "Listening... Press Ctrl+C to stop.",
             )
-            start_recording(micro, transcriber, clipboard=o.clipboard, keyboard=o.keyboard, latency=o.latency, **greetings)
+            start_recording(micro, transcriber, clipboard=o.clipboard,
+                            keyboard=o.keyboard, latency=o.latency, ascii=o.ascii, **greetings)
 
         # if we arrived so far, that means we pressed Ctrl + C anyway, and need Enter to move on.
         # So we leave the wider range of options to change the model.
