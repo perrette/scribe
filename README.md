@@ -64,6 +64,9 @@ where `--no-prompt` jumps right to the recording (after the first interruption, 
 ### Virtual keyboard (experimental)
 
 By default the content of the transcription is pasted to the clipboard, and it is up to the user to paste (e.g. Ctrl + V).
+However with the `vosk` backend and its realtime transcription, it is very handy to have the keys sent directly to the keyboard.
+That can be achieve with the `--keyboard` option.
+
 With the `--keyboard` option `scribe` will attempt to simulate a keyboard and send transcribed characters to the applcation under focus:
 
 ```bash
@@ -72,7 +75,20 @@ scribe --keyboard
 
 It relies on the optional `pynput` dependency (installed together with `scribe` if you used the `[all]` or `[keyboard]` option).
 
-`pynput` may require [some configuration](https://pynput.readthedocs.io/en/latest/limitations.html). It has [limitations]((https://pynput.readthedocs.io/en/latest/limitations.html)). In my Ubuntu + Wayland system it works in chromium based applications (including vscode) but it does not in firefox and sublime text and any of the rest (not even in a terminal !). Workarounds include using the Xorg version of GNOME: in `etc/gdm3/custom.conf` uncomment `# WaylandEnable=false` and restart.
+`pynput` may require [some configuration](https://pynput.readthedocs.io/en/latest/limitations.html). It has [limitations]((https://pynput.readthedocs.io/en/latest/limitations.html)).
+
+#### Use the keyboard in Ubuntu
+
+In my Ubuntu + Wayland system the keyboard simulation works out-of-the-box in chromium based applications (including vscode) but it does not in firefox and sublime text and any of the rest (not even in a terminal !). I am told this is because Chromium runs an X server emulator and so is compatible with the default pynput backend.
+
+One workaround is to use the Xorg version of GNOME: in `etc/gdm3/custom.conf` uncomment `# WaylandEnable=false` and restart your computer.
+
+Another workaround with Wayland is to use the low-level `uinput` backend but that requires that `scribe` is run as root (sudo), and likely other configurations like activating the `uinput` system module (`sudo modprobe uinput` for a one-time test, or adding `uinput` to `/etc/modules-load.d/modules.conf` to make that persistent). Moreover, since `uinput` really only simulates key strokes, your keyboard must be set with an appropriate layout, for example to have the letter `é` you'd want a French or Italian layout otherwise the English will drop it or replace with something else. Another caveat I encountered the caveat that the special characters were inserted at the wrong place. Adding a small delay was enough to fix that with the additional parameter `--latency 0.01` Finally if you run as sudo you may need to reset some environment variable so that the list of audio devices (`XDG_RUNTIME_DIR`) and the download folder remain the same. To sum-up, that gives something like:
+```bash
+sudo modprobe uinput
+sudo HOME=$HOME XDG_RUNTIME_DIR=$XDG_RUNTIME_DIR PYNPUT_BACKEND_KEYBOARD=uinput $(which scribe)  --latency 0.01
+```
+You're on the right path :)
 
 ### System try icon (experimental)
 
