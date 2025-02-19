@@ -19,12 +19,6 @@ dependencies = [
     "requests",
     "pyperclip",
 ]
-[project.optional-dependencies]
-keyboard = ["pynput"]
-whisper = ["openai-whisper"]
-vosk = ["vosk"]
-app = ["pystray", "PyGObject"]
-all = ["pynput", "openai-whisper", "vosk", "pystray"]
 
 classifiers = [
     "Programming Language :: Python :: 3",
@@ -42,6 +36,14 @@ keywords = [
     "keyboard",
     "clipboard",
 ]
+
+[project.optional-dependencies]
+keyboard = ["pynput"]
+whisper = ["openai-whisper"]
+vosk = ["vosk"]
+app = ["pystray", "PyGObject"]
+all = ["pynput", "openai-whisper", "vosk", "pystray"]
+
 
 [tool.setuptools]
 packages = [ "scribe", "scribe_data" ]
