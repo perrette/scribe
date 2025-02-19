@@ -95,16 +95,16 @@ class AbstractTranscriber:
             print(stop_message)
 
 
-def get_vosk_model(model, data_folder=None, url=None):
+def get_vosk_model(model, download_root=None, url=None):
     """Load the Vosk recognizer"""
     import vosk
-    if data_folder is None:
-        data_folder = VOSK_MODELS_FOLDER
-    model_path = os.path.join(data_folder, model)
+    if download_root is None:
+        download_root = VOSK_MODELS_FOLDER
+    model_path = os.path.join(download_root, model)
     if not os.path.exists(model_path):
         if url is None:
             url = f"https://alphacephei.com/vosk/models/{model}.zip"
-        download_model(url, data_folder)
+        download_model(url, download_root)
         assert os.path.exists(model_path)
 
     return vosk.Model(model_path)
@@ -162,7 +162,7 @@ class WhisperTranscriber(AbstractTranscriber):
     def __init__(self, model_name, language=None, model=None, model_kwargs={}, **kwargs):
         import whisper
         if model is None:
-            model = whisper.load_model(model_name)
+            model = whisper.load_model(model_name, **model_kwargs)
         super().__init__(model, model_name, language, model_kwargs=model_kwargs, **kwargs)
 
     def transcribe_audio(self, audio_bytes):

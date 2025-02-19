@@ -6,7 +6,6 @@ try:
 
 except ImportError:
     print("Please install pynput to use the keyboard feature.")
-    print("Alternatively specify [keyboard] optional dependency to voskrealtime, e.g. `pip install -e .[keyboard]`")
     raise
 
 # Create a keyboard controller

@@ -62,7 +62,7 @@ where `--no-prompt` jumps right to the recording (after the first interruption, 
 
 ### Advanced usage as keyboard replacement
 
-By default the content of the transcription is pasted to the clipboard, but is not propagated further.
+By default the content of the transcription is pasted to the clipboard, and it is up to the user to paste (e.g. Ctrl + V).
 With the `--keyboard` option `scribe` will attempt to simulate a keyboard and send transcribed characters to the applcation under focus:
 
 ```bash
@@ -71,8 +71,8 @@ scribe --keyboard
 
 It relies on the optional `pynput` dependency (installed together with `scribe` if you used the `[all]` or `[keyboard]` option).
 
-`pynput` may require [some configuration](https://pynput.readthedocs.io/en/latest/limitations.html) (I *think* got it to work with `xhost +SI:localuser:$(whoami)` as far as the display is concerned). It has [limitations]((https://pynput.readthedocs.io/en/latest/limitations.html)). In my Ubuntu + Wayland system it works in chromium based applications (including vscode) but it does not in firefox and sublime text and any of the rest (not even in a terminal !).
-Workarounds include using the Xorg version of GNOME... Suggestions welcome.
+`pynput` may require [some configuration](https://pynput.readthedocs.io/en/latest/limitations.html). It has [limitations]((https://pynput.readthedocs.io/en/latest/limitations.html)). In my Ubuntu + Wayland system it works in chromium based applications (including vscode) but it does not in firefox and sublime text and any of the rest (not even in a terminal !). Workarounds include using the Xorg version of GNOME: in `etc/gdm3/custom.conf` uncomment `# WaylandEnable=false` and restart.
+
 
 ### Start as an application in Ubuntu
 

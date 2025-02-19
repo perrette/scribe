@@ -113,7 +113,7 @@ def get_transcriber(o, prompt=True):
                                         samplerate=o.samplerate,
                                         timeout=None, # vosk keeps going (no timeout)
                                         silence_duration=None, # vosk handles silences internally
-                                        model_kwargs={"data_folder": o.data_folder})
+                                        model_kwargs={"download_root": o.download_folder_vosk})
         except Exception as error:
             print(error)
             print(f"Failed to (down)load model {model}.")
@@ -121,7 +121,8 @@ def get_transcriber(o, prompt=True):
 
     elif backend == "whisper":
         transcriber = WhisperTranscriber(model_name=model, language=o.language, samplerate=o.samplerate,
-                                         timeout=o.duration, silence_duration=o.silence, restart_after_silence=o.restart_after_silence)
+                                         timeout=o.duration, silence_duration=o.silence, restart_after_silence=o.restart_after_silence,
+                                         model_kwargs={"download_root": o.download_folder_whisper})
 
     else:
         raise ValueError(f"Unknown backend: {backend}")
@@ -154,7 +155,8 @@ def get_parser():
     group.add_argument("--silence", default=2, type=float, help="silence duration that prompt transcription (whisper) (default %(default)ss)")
     group.add_argument("--restart-after-silence", action="store_true", help="Restart the recording after a transcription triggered by a silence")
 
-    parser.add_argument("--data-folder", help="Folder to store Vosk models.")
+    parser.add_argument("--download-folder-vosk", help="Folder to store Vosk models.")
+    parser.add_argument("--download-folder-whisper", help="Folder to store Whisper models.")
 
     return parser
 
