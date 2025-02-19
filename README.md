@@ -74,6 +74,20 @@ It relies on the optional `pynput` dependency (installed together with `scribe` 
 
 `pynput` may require [some configuration](https://pynput.readthedocs.io/en/latest/limitations.html). It has [limitations]((https://pynput.readthedocs.io/en/latest/limitations.html)). In my Ubuntu + Wayland system it works in chromium based applications (including vscode) but it does not in firefox and sublime text and any of the rest (not even in a terminal !). Workarounds include using the Xorg version of GNOME: in `etc/gdm3/custom.conf` uncomment `# WaylandEnable=false` and restart.
 
+### System try icon (experimental)
+
+To avoid switching back and forth with the terminal, it's possible to interact with the program via an icon tray.
+To activate start with:
+```bash
+scribe --app
+```
+or toggle the app option in the interactive menu. The scribe icon will show, with Record or Quit options.
+That option requires `pystray` to be installed. This is included with the `pip install ...[all]` option. In Ubuntu the following dependencies were required to make the menus appear:
+
+```bash
+sudo apt install libcairo-dev libgirepository1.0-dev gir1.2-appindicator3-0.1
+pip install PyGObject
+```
 
 ### Start as an application in Ubuntu
 

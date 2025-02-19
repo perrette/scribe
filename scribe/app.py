@@ -144,6 +144,7 @@ def get_parser():
                         help="An alias for preselected models when using the vosk backend, or 'en' for the English version of whisper models.")
 
     parser.add_argument("--no-prompt", action="store_false", dest="prompt", help="Disable prompts for backend and model selection and jump to recording")
+    parser.add_argument("--app", action="store_true", help="Start in app mode (relies on pystray)")
 
     parser.add_argument("--samplerate", default=16000, type=int, help=argparse.SUPPRESS)
     parser.add_argument("--keyboard", action="store_true")
@@ -211,6 +212,41 @@ def start_recording(micro, transcriber, clipboard=True, keyboard=False, latency=
         print("Copied to clipboard.")
 
 
+def create_app(micro, transcriber, **kwargs):
+    import pystray
+    from pystray import Menu as pystrayMenu, MenuItem as Item
+    from PIL import Image
+    import PIL.ImageOps
+
+    import scribe_data
+
+    # Load an image from a file
+    image = Image.open(Path(scribe_data.__file__).parent / "share" / "icon.jpg")
+
+    def callback_quit(icon, item):
+        icon.visible = False
+        icon.stop()
+
+    def callback_record(icon, item):
+        print(f"Clicked {item}")
+        # icon.icon = PIL.ImageOps.invert(icon.icon)
+        # icon.icon = PIL.ImageOps.invert(image)
+        # icon.update_menu()
+        start_recording(micro, transcriber, **kwargs)
+        # icon.icon = image
+        # icon.update_menu()
+
+    # Create a menu
+    menu = pystrayMenu(
+        Item('Record', callback_record),
+        Item('Quit', callback_quit),
+    )
+
+    # Create the system tray icon
+    icon = pystray.Icon('name', image, "My App", menu)
+
+    return icon
+
 
 def main(args=None):
 
@@ -233,6 +269,7 @@ def main(args=None):
             print(f"Choose any of the following actions:")
             print(f"[q] quit")
             print(f"[e] change model")
+            print(f"[x] toggle app [{toggle[o.app]}] -> [{toggle[not o.app]}]")
             print(f"[k] toggle keyboard [{toggle[o.keyboard]}] -> [{toggle[not o.keyboard]}]")
             print(f"[c] toggle clipboard [{toggle[o.clipboard]}] -> [{toggle[not o.clipboard]}]")
             if transcriber.backend == "whisper":
@@ -253,6 +290,9 @@ def main(args=None):
             if key == "c":
                 o.clipboard = not o.clipboard
                 continue
+            if key == "x":
+                o.app = not o.app
+                continue
             if key == "a":
                 transcriber.restart_after_silence = not transcriber.restart_after_silence
                 continue
@@ -271,7 +311,11 @@ def main(args=None):
                     print("Invalid duration. Must be an integer.")
                 continue
 
-        start_recording(micro, transcriber, clipboard=o.clipboard, keyboard=o.keyboard, latency=o.latency)
+        if o.app:
+            app = create_app(micro, transcriber, clipboard=o.clipboard, keyboard=o.keyboard, latency=o.latency)
+            app.run()
+        else:
+            start_recording(micro, transcriber, clipboard=o.clipboard, keyboard=o.keyboard, latency=o.latency)
 
         # if we arrived so far, that means we pressed Ctrl + C anyway, and need Enter to move on.
         # So we leave the wider range of options to change the model.

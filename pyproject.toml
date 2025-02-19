@@ -18,6 +18,7 @@ dependencies = [
     "tqdm",
     "requests",
     "pyperclip",
+    "pystray",
 ]
 optional-dependencies = { keyboard = ["pynput"], whisper = ["openai-whisper"], vosk = ["vosk"], all = ["pynput", "openai-whisper", "vosk"] }
 
@@ -49,5 +50,5 @@ write_to = "scribe/_version.py"
 Homepage = "https://github.com/perrette/scribe"
 
 [project.scripts]
-scribe = "scribe.streamer:main"
+scribe = "scribe.app:main"
 scribe-install = "scribe.install_desktop:main"
