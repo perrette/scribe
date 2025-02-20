@@ -36,6 +36,10 @@ class AbstractTranscriber:
         self.busy = False
         self.waiting = False
         self.interrupt = False
+        if logger is None:
+            import logging
+            logging.basicConfig(level=logging.INFO)
+            logger = logging.getLogger("scribe")
         self.logger = logger
         self.reset()
 
@@ -57,17 +61,17 @@ class AbstractTranscriber:
         self.start_time = time.time()
 
     def log(self, text):
+        if text.startswith("\n"):
+            print("")
+            text = text[1:]
         if self.logger:
             self.logger.info(text)
         else:
-            if text.startswith("\n"):
-                print("")
-                text = text[1:]
             print(f"[{text}]")
 
     def start_recording(self, microphone,
                         start_message="Recording... Press Ctrl+C to stop.",
-                        stop_message="Done transcribing."):
+                        stop_message="Exit."):
 
         self.reset()
         self.interrupt = False
