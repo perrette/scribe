@@ -4,7 +4,7 @@ import time
 import argparse
 from scribe.audio import Microphone
 from scribe.util import print_partial, clear_line, prompt_choices, check_dependencies, ansi_link, colored
-from scribe.models import VoskTranscriber, WhisperTranscriber, StopRecording
+from scribe.models import VoskTranscriber, WhisperTranscriber
 
 with open(Path(__file__).parent / "models.toml", "rb") as f:
     language_config_default = tomllib.load(f)
@@ -228,22 +228,6 @@ def start_recording(micro, transcriber, clipboard=True, keyboard=False, latency=
         callback()
 
 
-def interrupt_thread(thread, exception_cls):
-    """Thanks Le Chat for this solution: https://stackoverflow.com/a/325528/2192272
-    """
-    import ctypes
-    # Raise an exception in the thread using ctypes
-    thread_id = thread.ident
-    if thread_id is not None:
-        res = ctypes.pythonapi.PyThreadState_SetAsyncExc(
-            ctypes.c_long(thread_id),
-            ctypes.py_object(exception_cls)
-        )
-        if res > 1:
-            ctypes.pythonapi.PyThreadState_SetAsyncExc(thread_id, 0)
-            print("Failure to raise exception in thread")
-
-
 def create_app(micro, transcriber, **kwargs):
     import pystray
     from pystray import Menu as pystrayMenu, MenuItem as Item
@@ -258,29 +242,34 @@ def create_app(micro, transcriber, **kwargs):
     image_recording = Image.open(Path(scribe_data.__file__).parent / "share" / "icon_recording.png")
     image_writing = Image.open(Path(scribe_data.__file__).parent / "share" / "icon_writing.png")
 
+
+    def update_icon(icon, force=False):
+        if transcriber.recording:
+            if force or getattr(icon, "_icon_label", None) != "recording":
+                icon.icon = image_recording
+                icon._icon_label = "recording"
+                icon.update_menu()
+
+        elif transcriber.busy:
+            if force or getattr(icon, "_icon_label", None) != "busy":
+                icon.icon = image_writing
+                icon._icon_label = "busy"
+                icon.update_menu()
+
+        else:
+            if force or getattr(icon, "_icon_label", None) != None:
+                icon.icon = image
+                icon._icon_label = None
+                icon.update_menu()
+
     def start_monitoring(icon):
-        while True:
-            if transcriber.recording:
-                if getattr(icon, "_icon_label", None) != "recording":
-                    icon.icon = image_recording
-                    icon._icon_label = "recording"
-                    icon.update_menu()
+        try:
+            while transcriber.busy:
+                update_icon(icon)
+                time.sleep(0.1)
 
-            elif transcriber.busy:
-                if getattr(icon, "_icon_label", None) != "busy":
-                    icon.icon = image_writing
-                    icon._icon_label = "busy"
-                    icon.update_menu()
-
-            else:
-                if getattr(icon, "_icon_label", None) != None:
-                    icon.icon = image
-                    icon._icon_label = None
-                    icon.update_menu()
-
-            if not transcriber.busy:
-                break
-            time.sleep(0.1)
+        finally:
+            update_icon(icon)
 
     def callback_quit(icon, item):
         icon.visible = False
@@ -291,35 +280,32 @@ def create_app(micro, transcriber, **kwargs):
     def callback_stop_recording(icon, item):
         # Here we need to stop the recording thread
 
-        # Stop the recording loop of the transcriber ==> this will trigger the finalization
-        if hasattr(icon, "_recording_thread") and transcriber.recording:
-            interrupt_thread(icon._recording_thread, StopRecording)
-
-        # Now wait for transcription and clipboard and keyboard typing and callback to finish
-        icon._recording_thread.join()
+        transcriber.recording = False
+        if hasattr(icon, "_recording_thread"):
+            icon._recording_thread.join()
+        if hasattr(icon, "_monitoring_thread"):
+            icon._monitoring_thread.join()
 
     def callback_record(icon, item):
-        kwargs["callback"] = icon.update_menu   # NOTE: the thread will finish AFTER the callback is complete
+        # kwargs["callback"] = icon.update_menu   # NOTE: the thread will finish AFTER the callback is complete
+        if transcriber.busy:
+            print("Still busy recording or transcribing.")
+            return
+
         if hasattr(icon, "_recording_thread") and icon._recording_thread.is_alive():
-            if transcriber.recording:
-                print("Already recording.")
-                return
-            else:
-                print("Waiting for the recording thread to finish.")
-                icon._recording_thread.join()
-                print("Done.")
+            icon._recording_thread.join()
 
         if hasattr(icon, "_monitoring_thread") and icon._monitoring_thread.is_alive():
             icon._monitoring_thread.join()
 
+        transcriber.busy = True  # this is a hack to prevent race conditions between the below threads
         icon._recording_thread = threading.Thread(target=start_recording, args=(micro, transcriber), kwargs=kwargs)
         icon._recording_thread.start()
-        time.sleep(0.1) # let time for the above thread to start (NOTE: not ideal, racing conditions...)
         icon._monitoring_thread = threading.Thread(target=start_monitoring, args=(icon,))
         icon._monitoring_thread.start()
 
     def is_recording(item):
-        return hasattr(icon, "_recording_thread") and icon._recording_thread.is_alive()
+        return transcriber.busy
 
     def is_not_recording(item):
         return not is_recording(item)
