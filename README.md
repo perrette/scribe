@@ -41,7 +41,7 @@ pip install -e .[all]
 You can leave the optional dependencies (leave out `[all]`) but must install at least one of `vosk` or `openai-whisper` packages (see Usage below).
 
 The `vosk` language models will download on-the-fly.
-The default download folder is `$XDG_CACHE_HOME/{backend}` where `$XDG_CACHE_HOME` defaults to `$HOME/.cache` (note for the `whisker` backend
+The default download folder is `$XDG_CACHE_HOME/{backend}` where `$XDG_CACHE_HOME` defaults to `$HOME/.cache` (note for the `whisper` backend
 the default is left to the `openai-whisper` package and might change in the future).
 
 
@@ -59,8 +59,8 @@ You can interrupt the recording via Ctrl + C and start again or change model. Th
 
 The default (`whisper`) is excellent at transcribing a full-length audio sequences in [many languages](https://github.com/openai/whisper?tab=readme-ov-file#available-models-and-languages). It is really impressive,
 but it cannot do real-time, and depending on the model can have relatively long execution time, especially with the `turbo` model (at least on my laptop with CPU only). The `small` model is also excellent and runs much faster. It is selected as default in `scribe` for that reason.
-With the `whisker` model you need to stop the registration manually before the transcription occurs (Ctrl + C), though
-there is a maximum duration after which it will stop by itself, which is setup to 60s by default (unless `--duration` is set to something else).
+With the `whisper` model the registration stops after a 2-second silence is detected. You can also stop the registration manually before the transcription occurs (Ctrl + C or Stop in the `--app` mode).
+By default, the recording will only last 120 seconds. You can fine-tune this behaviour via the `--silence`, `--duration` and `--restart-after-silence` parameters.
 
 The `vosk` backend is much faster and very good at doing real-time transcription for one language, but tended to make more mistakes in my tests and it does not do punctuation.
 It becomes really powerful when used for longer or interactive typing session with the [keyboard](#virtual-keyboard-experimental) option, e.g. to make notes or chat with an AI.
