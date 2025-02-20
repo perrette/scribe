@@ -3,7 +3,9 @@
 
 # Scribe  <img src="scribe_data/share/icon.png" width=48px>
 
-`scribe` is a local speech recognition tool that provides real-time transcription using vosk and whisper AI, with the goal of serving as a virtual keyboard on a computer.
+`scribe` is a speech recognition tool that provides real-time transcription using cutting-edge AI models, with the goal of serving as a virtual keyboard on a computer.
+
+It features local, downloadable models with the `vosk` and `whisper` backends, as well as a client to open AI via `openaiapi` backend (API key required).
 
 ## Compatibility
 
@@ -38,12 +40,10 @@ cd scribe
 pip install -e .[all]
 ```
 
-You can leave the optional dependencies (leave out `[all]`) but must install at least one of `vosk` or `openai-whisper` packages (see Usage below).
+You can leave the optional dependencies (leave out `[all]`) but must install at least one of `vosk` or `openai-whisper` or `openai` packages (see Usage below).
 
-The `vosk` language models will download on-the-fly.
-The default download folder is `$XDG_CACHE_HOME/{backend}` where `$XDG_CACHE_HOME` defaults to `$HOME/.cache` (note for the `whisper` backend
-the default is left to the `openai-whisper` package and might change in the future).
-
+The language models for local backends `vosk` and `whisper` will download on-the-fly.
+The default download folder is `$XDG_CACHE_HOME/{backend}` where `$XDG_CACHE_HOME` defaults to `$HOME/.cache`.
 
 ## Usage
 
@@ -52,7 +52,7 @@ Just type in the terminal:
 ```bash
 scribe
 ```
-and the script will guide you through the choice of backend (`whisper` or `vosk`) and the specific language model.
+and the script will guide you through the choice of backend (`whisper` or `vosk` or `openaiapi`) and the specific language model.
 After this, you will be prompted to start recording your microphone and print the transcribed text in real-time (`vosk`)
 or until after recording is complete (`whisper`).
 You can interrupt the recording via Ctrl + C and start again or change model.
@@ -66,9 +66,9 @@ The `vosk` backend is much faster and very good at doing real-time transcription
 It becomes really powerful when used for longer or interactive typing session with the [keyboard](#virtual-keyboard-experimental) option, e.g. to make notes or chat with an AI.
 There are many [vosk models](https://alphacephei.com/vosk/models) available, and here a few are associated to [a handful of languages](scribe/models.toml) `en`, `fr`, `it`, `de` (so far).
 
-To skip the initial selection menu you can do:
+The `openaiapi` backend uses `whisper-1` model at the time of writing. It requires an API key
 ```bash
-scribe --backend whisper --model small --no-prompt
+scribe --backend openaiapi --api YOURAPIKEY
 ```
 where `--no-prompt` jumps right to the recording (after the first interruption, you can still choose to change the backend and model).
 
