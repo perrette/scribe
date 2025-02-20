@@ -138,15 +138,20 @@ pip install PyGObject
 ## Start as an application in GNOME
 
 If you run Ubuntu (or else?) with GNOME, the script `scribe-install [...]` will create a `scribe.desktop` file and place it under `$HOME/.local/share/applications`
-to make it available from the quick launch menu. Any option will be passed on to `scribe`.
+to make it available from the quick launch menu. Any option will be passed on to `scribe`, with the additional options `--name` and `--no-terminal`.
+`--no-terminal` means no terminal will show up, and it also implies the options `--app --no-prompt`.
 
 e.g.
 
 ```bash
-scribe-install --backend whisper --model small --clipboard --keyboard --restart-after-silence
+scribe-install
+scribe-install --name "Scribe Whisper" --backend whisper --model small --clipboard --restart-after-silence --no-prompt
+scribe-install --name "Scribe Vosk FR" --backend vosk --language fr --keyboard --clipboard --no-terminal
 ```
-
-After that just typing Super + scri... at any time from any where will conveniently start the app in its own terminal with the prescribed options.
+This will install three separate apps:
+- `Super + scribe` : will launch the default version with terminal prompt
+- `Super + whisper` : will launch a present version with the `small` model from `whisper` and start recording right away. You can see what is going on in the terminal and the result is ready to paste from the clipboard
+- `Super + vosk fr` : will launch a preset version for real-time transcription in French with the `vosk` backend, and throughput to the clipboard and the keyboard, not even opening a terminal.
 
 
 ## Fine tuning

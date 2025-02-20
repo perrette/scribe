@@ -1,8 +1,8 @@
 #!/usr/bin/env xdg-open
 [Desktop Entry]
-Terminal=true
+Terminal={terminal}
 Type=Application
-Name=Scribe
+Name={name}
 Exec={bin_folder}/scribe{options}
-Icon={icon_folder}/icon.jpg
-StartupWMClass=crx_mpnasdanpmmopoasdjdcgaaiekailkhb
+Icon={icon_folder}/icon.png
+StartupWMClass={StartupWMClass}
