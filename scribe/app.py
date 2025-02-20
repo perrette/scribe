@@ -112,16 +112,17 @@ def get_transcriber(o, prompt=True):
                 choices = list(zip(available_models, available_languages)) + [f" * [Any model from {ansi_link('https://alphacephei.com/vosk/models')}]"]
                 default_model = choices[0]  # this is a tuple !!
 
-            print(f"For information about vosk models see: {ansi_link('https://alphacephei.com/vosk/models')}")
             if prompt:
+                print(f"For information about vosk models see: {ansi_link('https://alphacephei.com/vosk/models')}")
                 model = prompt_choices(choices, default=default_model, label="model")  # this always returns a string
             else:
                 model = default_model[0] if isinstance(default_model, tuple) else default_model  # tuple -> string
 
         elif backend == "whisper":
             default_model = "small"
-            print("Some models have a specialized English version (.en) which will be selected as default is `-l en` was requested, but can also be requested explicitly below (option not listed). See [documentation](https://github.com/openai/whisper?tab=readme-ov-file#available-models-and-languages).")
             if prompt:
+                # print("Some models have a specialized English version (.en) which will be selected as default is `-l en` was requested, but can also be requested explicitly below (option not listed). See [documentation](https://github.com/openai/whisper?tab=readme-ov-file#available-models-and-languages).")
+                print(f"See {ansi_link('https://github.com/openai/whisper?tab=readme-ov-file#available-models-and-languages')} for available models.")
                 model = prompt_choices(whisper_models, default=default_model, label="model",
                                         hidden_models=whisper_english_models)
             else:
