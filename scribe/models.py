@@ -33,6 +33,7 @@ class AbstractTranscriber:
         self.silence_duration = silence_duration
         self.restart_after_silence = restart_after_silence
         self.recording = False
+        self.busy = False
         self.reset()
 
     def get_elapsed(self):
