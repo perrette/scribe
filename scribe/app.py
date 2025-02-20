@@ -242,6 +242,10 @@ def create_app(micro, transcriber, **kwargs):
     image_recording = Image.open(Path(scribe_data.__file__).parent / "share" / "icon_recording.png")
     image_writing = Image.open(Path(scribe_data.__file__).parent / "share" / "icon_writing.png")
 
+    if transcriber.backend == "vosk":
+        # Recording and writing happen at the same time in this backend
+        # Overlay the writing image on top of the base image
+        image_recording = Image.alpha_composite(image_recording.convert("RGBA"), image_writing.convert("RGBA"))
 
     def update_icon(icon, force=False):
         if transcriber.recording:
