@@ -1,7 +1,7 @@
 [![python](https://img.shields.io/badge/python-3.12-blue.svg)]()
 [![pypi](https://img.shields.io/pypi/v/scribe-cli)](https://pypi.org/project/scribe-cli)
 
-# Scribe
+# Scribe  <img src="scribe_data/share/icon.png" width=48px>
 
 `scribe` is a local speech recognition tool that provides real-time transcription using vosk and whisper AI, with the goal of serving as a virtual keyboard on a computer.
 
@@ -98,7 +98,7 @@ sudo HOME=$HOME XDG_RUNTIME_DIR=$XDG_RUNTIME_DIR PYNPUT_BACKEND_KEYBOARD=uinput 
 ```
 You're on the right path :)
 
-### System tray icon (experimental)
+### System tray icon (experimental) <img src="scribe_data/share/icon.png" width=48px>
 
 To avoid switching back and forth with the terminal, it's possible to interact with the program via an icon tray.
 To activate start with:
