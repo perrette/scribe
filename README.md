@@ -7,7 +7,7 @@
 
 ## Compatibility
 
-In principle `scribe` is compatible with any OS but I develop it under Ubuntu (Wayland) and develop it for my own purposes so glitches are likely on other configurations.
+In principle `scribe` is compatible with any OS but I develop it under Ubuntu (Wayland) for my own purposes so glitches are likely on other configurations.
 As of February 19, 2025 python 13 is not supported (I can't recall now which dependency is to blame).
 A test on Mac OS (M1 Air with 8Gb RAM) worked with python 12, though with a much inferior performance compared to my own system (Lenovo T14 Gen 5 with i5 125U 32 Gb RAM).
 
