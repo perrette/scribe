@@ -301,7 +301,7 @@ def create_app(micro, transcriber, **kwargs):
     def callback_stop_recording(icon, item):
         # Here we need to stop the recording thread
 
-        transcriber.recording = False
+        transcriber.interrupt = True
         if hasattr(icon, "_recording_thread"):
             icon._recording_thread.join()
         if hasattr(icon, "_monitoring_thread"):

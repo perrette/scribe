@@ -35,6 +35,7 @@ class AbstractTranscriber:
         self.recording = False
         self.busy = False
         self.waiting = False
+        self.interrupt = False
         self.reset()
 
     def get_elapsed(self):
@@ -59,6 +60,7 @@ class AbstractTranscriber:
                         stop_message="Done transcribing."):
 
         self.reset()
+        self.interrupt = False
         self.recording = True
         self.waiting = True
         self.busy = True
@@ -73,7 +75,7 @@ class AbstractTranscriber:
             with microphone.open_stream():
                 print(start_message)
 
-                while self.recording:
+                while not self.interrupt:
                     while not microphone.q.empty():
                         data = microphone.q.get()
 
