@@ -104,18 +104,18 @@ def get_transcriber(o, prompt=True):
                     print(f"Or pick one of the pre-defined languages: ", " ".join(available_languages))
                     exit(1)
                 choices = [language_config[backend][o.language]["model"]]
-                default_model = choices[0]
+                default_model = choices[0] # this is a string
 
             else:
                 available_models = [language_config[backend][lang]["model"] for lang in available_languages]
                 choices = list(zip(available_models, available_languages)) + [f" * [Any model from {ansi_link('https://alphacephei.com/vosk/models')}]"]
-                default_model = choices[0]
+                default_model = choices[0]  # this is a tuple !!
 
             print(f"For information about vosk models see: {ansi_link('https://alphacephei.com/vosk/models')}")
             if prompt:
-                model = prompt_choices(choices, default=default_model, label="model")
+                model = prompt_choices(choices, default=default_model, label="model")  # this always returns a string
             else:
-                model = default_model
+                model = default_model[0] if isinstance(default_model, tuple) else default_model  # tuple -> string
 
         elif backend == "whisper":
             default_model = "small"
