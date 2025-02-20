@@ -180,9 +180,9 @@ def get_parser():
     parser.add_argument("--microphone-device", help="The device index of the microphone to use.", type=int)
 
     group = parser.add_argument_group("transcription output")
-    group.add_argument("--clipboard", dest="clipboard", action="store_true")
+    group.add_argument("-c", "--clipboard", dest="clipboard", action="store_true")
     group.add_argument("--no-clipboard", dest="clipboard", action="store_false", help=argparse.SUPPRESS)
-    group.add_argument("--keyboard", action="store_true")
+    group.add_argument("-k", "--keyboard", action="store_true")
     group.add_argument("-o", "--output-file")
 
     group = parser.add_argument_group("keyboard options")
@@ -193,7 +193,7 @@ def get_parser():
     group.add_argument("--duration", default=120, type=float, help="Max duration of the whisper recording (default %(default)ss)")
     group.add_argument("--silence", default=2, type=float, help="silence duration (default %(default)ss)")
     group.add_argument("--silence-db", default=-30, type=float, help="silence magnitude in db (default %(default)ss)")
-    group.add_argument("--restart-after-silence", action="store_true", help="Restart the recording after a transcription triggered by a silence")
+    group.add_argument("-a", "--restart-after-silence", action="store_true", help="Restart the recording after a transcription triggered by a silence")
 
     parser.add_argument("--download-folder-vosk", help="Folder to store Vosk models.")
     parser.add_argument("--download-folder-whisper", help="Folder to store Whisper models.")
