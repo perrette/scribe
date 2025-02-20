@@ -4,8 +4,8 @@ import re
 import time
 import argparse
 from scribe.audio import Microphone
-from scribe.util import print_partial, clear_line, prompt_choices, check_dependencies, ansi_link, colored
-from scribe.models import VoskTranscriber, WhisperTranscriber
+from scribe.util import print_partial, clear_line, prompt_choices, ansi_link, colored
+from scribe.models import VoskTranscriber, WhisperTranscriber, OpenaiAPITranscriber
 
 with open(Path(__file__).parent / "models.toml", "rb") as f:
     language_config_default = tomllib.load(f)
@@ -24,7 +24,7 @@ def get_default_backend():
         except ImportError:
             raise ImportError("Please install either vosk or whisper to use this script.")
 
-BACKENDS = ["whisper", "vosk"]
+BACKENDS = ["whisper", "vosk", "openaiapi"]
 UNAVAILABLE_BACKENDS = []
 
 
@@ -59,6 +59,7 @@ def get_transcriber(o, prompt=True):
 
     whisper_models = ["tiny", "base", "small", "medium", "large", "turbo"]
     whisper_english_models = ["tiny.en", "base.en", "small.en", "medium.en"]
+    whisperapi_models = ["whisper-1"]
 
     if o.dummy:
         return DummyTranscriber("whisper", "dummy")
@@ -68,26 +69,17 @@ def get_transcriber(o, prompt=True):
             o.backend = "vosk"
         elif o.model in whisper_models + whisper_english_models:
             o.backend = "whisper"
+        elif o.model in whisperapi_models:
+            o.backend = "openaiapi"
 
     if o.backend:
-        checked_backend = check_dependencies(o.backend)
-        if not checked_backend:
-            print(f"Backend {o.backend} is not available.")
-            exit(1)
         backend = o.backend
 
     elif not prompt:
         backend = BACKENDS[0]
 
     else:
-        checked_backend = False
-        while not checked_backend:
-            backend = prompt_choices(BACKENDS, o.backend, "backend", UNAVAILABLE_BACKENDS)
-            # raise an error if the user has explicitly selected a backend that is not available
-            checked_backend = check_dependencies(backend, raise_error=backend==o.backend)
-            if not checked_backend:
-                print(f"Backend {o.backend} is not available.")
-                UNAVAILABLE_BACKENDS.append(backend)
+        backend = prompt_choices(BACKENDS, o.backend, "backend", UNAVAILABLE_BACKENDS)
 
     print(f"Selected backend: {backend}")
 
@@ -131,6 +123,13 @@ def get_transcriber(o, prompt=True):
 
             model = pick_specialist_model(model, o.language, backend)
 
+        elif backend == "openaiapi":
+            model = o.model or "whisper-1"
+
+        else:
+            raise ValueError(f"Unknown backend: {backend}")
+
+
     print(f"Selected model: {model}")
 
     if backend == "vosk":
@@ -151,6 +150,12 @@ def get_transcriber(o, prompt=True):
                                          timeout=o.duration, silence_duration=o.silence, silence_thresh=o.silence_db,
                                          restart_after_silence=o.restart_after_silence,
                                          model_kwargs={"download_root": o.download_folder_whisper})
+
+    elif backend == "openaiapi":
+        transcriber = OpenaiAPITranscriber(model_name=model, samplerate=o.samplerate,
+                                         timeout=o.duration, silence_duration=o.silence, silence_thresh=o.silence_db,
+                                         restart_after_silence=o.restart_after_silence, api_key=o.api_key)
+
 
     else:
         raise ValueError(f"Unknown backend: {backend}")
@@ -194,6 +199,10 @@ def get_parser():
     group.add_argument("--silence", default=2, type=float, help="silence duration (default %(default)s s)")
     group.add_argument("--silence-db", default=-30, type=float, help="silence magnitude in decibel (default %(default)s db)")
     group.add_argument("-a", "--restart-after-silence", action="store_true", help="Restart the recording after a transcription triggered by a silence")
+
+    group = parser.add_argument_group("whisper api")
+    group.add_argument("--api-key",
+                        help="API key for the Whisper API backend.")
 
     parser.add_argument("--download-folder-vosk", help="Folder to store Vosk models.")
     parser.add_argument("--download-folder-whisper", help="Folder to store Whisper models.")
