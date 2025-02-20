@@ -9,7 +9,7 @@
 
 In principle `scribe` is compatible with any OS but I develop it under Ubuntu (Wayland) for my own purposes so glitches are likely on other configurations.
 Moreover there are quite a bit of dependencies that rely on very OS-specific protocols under the hood, like access to the microphone, keyboard and clipboard,
-and even though the python dependencies `scribe` are not restricted to a single platform, there may be limitation and additional binaries to install.
+and even though the python dependencies `scribe` relies on are not restricted to a single platform, there may be limitation and additional binaries to install.
 This guide is based on python3.12 running on Ubuntu 24.04 with Gnome + Wayland, which is a relatively standard setting at the time of writing.
 Note as of February 19, 2025 python 13 does not seem to produce any transcription (I am not sure which dependency is to blame).
 A test on Mac OS (M1 Air with 8Gb RAM) worked with python 12, though with a much inferior performance compared to my own system (Lenovo T14 Gen 5 with i5 125U 32 Gb RAM).
