@@ -362,13 +362,15 @@ def main(args=None):
             transcriber = get_transcriber(o, prompt=o.prompt)
         print(f"Model [{colored(transcriber.model_name, 'light_blue', attrs=['bold'])}] from [{colored(transcriber.backend, 'light_blue', attrs=['bold'])}] selected.")
         show_output = ["clipboard", "keyboard", "output_file"]
-        show_options = ["ascii", "app"]
+        show_options = ["ascii", "restart_after_silence"]
         activated_output = [colored(option if type(getattr(o, option)) is bool else f'{option}={getattr(o, option)}', 'light_blue') for option in show_output if getattr(o, option)]
         activated_options = [colored(option if type(getattr(o, option)) is bool else f'{option}={getattr(o, option)}', 'light_blue') for option in show_options if getattr(o, option)]
         if activated_output:
             print(f"Output: {' | '.join(activated_output)}")
         else:
             print(colored(f"No output selected -> terminal only", "light_red"))
+        if o.app:
+            print(colored("App mode enabled", "light_green"))
         if activated_options:
             print(f"Options: {' | '.join(activated_options)}")
         if o.prompt:
@@ -421,7 +423,7 @@ def main(args=None):
                 o.app = not o.app
                 continue
             if key == "a":
-                transcriber.restart_after_silence = not transcriber.restart_after_silence
+                o.restart_after_silence = transcriber.restart_after_silence = not transcriber.restart_after_silence
                 continue
             if key == "t":
                 ans = input(f"Enter new duration in seconds (current: {transcriber.timeout}): ")
