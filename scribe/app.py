@@ -1,5 +1,6 @@
 from pathlib import Path
 import tomllib
+import time
 import argparse
 from scribe.audio import Microphone
 from scribe.util import print_partial, clear_line, prompt_choices, check_dependencies, ansi_link, colored
@@ -253,7 +254,33 @@ def create_app(micro, transcriber, **kwargs):
     import threading
 
     # Load an image from a file
-    image = Image.open(Path(scribe_data.__file__).parent / "share" / "icon.jpg")
+    image = Image.open(Path(scribe_data.__file__).parent / "share" / "icon.png")
+    image_recording = Image.open(Path(scribe_data.__file__).parent / "share" / "icon_recording.png")
+    image_writing = Image.open(Path(scribe_data.__file__).parent / "share" / "icon_writing.png")
+
+    def start_monitoring(icon):
+        while True:
+            if transcriber.recording:
+                if getattr(icon, "_icon_label", None) != "recording":
+                    icon.icon = image_recording
+                    icon._icon_label = "recording"
+                    icon.update_menu()
+
+            elif transcriber.busy:
+                if getattr(icon, "_icon_label", None) != "busy":
+                    icon.icon = image_writing
+                    icon._icon_label = "busy"
+                    icon.update_menu()
+
+            else:
+                if getattr(icon, "_icon_label", None) != None:
+                    icon.icon = image
+                    icon._icon_label = None
+                    icon.update_menu()
+
+            if not transcriber.busy:
+                break
+            time.sleep(0.1)
 
     def callback_quit(icon, item):
         icon.visible = False
@@ -282,8 +309,14 @@ def create_app(micro, transcriber, **kwargs):
                 icon._recording_thread.join()
                 print("Done.")
 
+        if hasattr(icon, "_monitoring_thread") and icon._monitoring_thread.is_alive():
+            icon._monitoring_thread.join()
+
         icon._recording_thread = threading.Thread(target=start_recording, args=(micro, transcriber), kwargs=kwargs)
         icon._recording_thread.start()
+        time.sleep(0.1) # let time for the above thread to start (NOTE: not ideal, racing conditions...)
+        icon._monitoring_thread = threading.Thread(target=start_monitoring, args=(icon,))
+        icon._monitoring_thread.start()
 
     def is_recording(item):
         return hasattr(icon, "_recording_thread") and icon._recording_thread.is_alive()
