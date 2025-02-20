@@ -224,17 +224,16 @@ def start_recording(micro, transcriber, clipboard=True, keyboard=False, latency=
         print("Copied to clipboard.")
 
 
-def interrupt_app_thread(icon):
+def interrupt_thread(thread, exception_cls):
     """Thanks Le Chat for this solution: https://stackoverflow.com/a/325528/2192272
     """
     import ctypes
-    thread = icon._recording_thread
     # Raise an exception in the thread using ctypes
     thread_id = thread.ident
     if thread_id is not None:
         res = ctypes.pythonapi.PyThreadState_SetAsyncExc(
             ctypes.c_long(thread_id),
-            ctypes.py_object(StopRecording)
+            ctypes.py_object(exception_cls)
         )
         if res > 1:
             ctypes.pythonapi.PyThreadState_SetAsyncExc(thread_id, 0)
@@ -261,8 +260,10 @@ def create_app(micro, transcriber, **kwargs):
 
     def callback_stop_recording(icon, item):
         ## Here we need to stop the recording thread
-        interrupt_app_thread(icon)
-        icon._recording_thread.join()
+        if hasattr(icon, "_recording_thread"):
+            interrupt_thread(icon._recording_thread, StopRecording)
+            icon._recording_thread.join()
+        icon.update_menu()
 
     def callback_record(icon, item):
         icon._recording_thread = threading.Thread(target=start_recording, args=(micro, transcriber), kwargs=kwargs)
