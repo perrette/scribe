@@ -127,7 +127,8 @@ To activate start with:
 ```bash
 scribe --app
 ```
-or toggle the app option in the interactive menu. The scribe icon will show, with Record or Quit options.
+or toggle the app option in the interactive menu. The scribe icon will show, with Record, Stop or Quit options. The icon will change based on what the app is doing.
+For the vosk model, there are only two states : recording + transcribing or Idle. For the whisper model there are three states visible from the icon: recording, transcribing and idle/waiting.
 That option requires `pystray` to be installed. This is included with the `pip install ...[all]` option. In Ubuntu the following dependencies were required to make the menus appear:
 
 ```bash
@@ -150,8 +151,8 @@ scribe-install --name "Scribe Vosk FR" --backend vosk --language fr --keyboard -
 ```
 This will install three separate apps:
 - `Super + scribe` : will launch the default version with terminal prompt
-- `Super + whisper` : will launch a present version with the `small` model from `whisper` and start recording right away. You can see what is going on in the terminal and the result is ready to paste from the clipboard
-- `Super + vosk fr` : will launch a preset version for real-time transcription in French with the `vosk` backend, and throughput to the clipboard and the keyboard, not even opening a terminal.
+- `Super + whisper` : will launch a present version with the `small` model from `whisper` and start recording right away. You can see what is going on in the terminal and the result is ready to paste from the clipboard.
+- `Super + vosk fr` : will launch a preset version for real-time transcription in French with the `vosk` backend, and throughput to the clipboard and the keyboard, not even opening a terminal (you need to press Record in the tray icon menu to start the recording).
 
 
 ## Fine tuning

@@ -22,7 +22,7 @@ class StopRecording(Exception):
 class AbstractTranscriber:
     backend = None
     def __init__(self, model, model_name=None, language=None, samplerate=16000, timeout=None, model_kwargs={},
-                 silence_thresh=-40, silence_duration=2, restart_after_silence=False):
+                 silence_thresh=-40, silence_duration=2, restart_after_silence=False, logger=None):
         self.model_name = model_name
         self.language = language
         self.model = model
@@ -36,6 +36,7 @@ class AbstractTranscriber:
         self.busy = False
         self.waiting = False
         self.interrupt = False
+        self.logger = logger
         self.reset()
 
     def get_elapsed(self):
@@ -55,6 +56,15 @@ class AbstractTranscriber:
         self.audio_buffer = b''
         self.start_time = time.time()
 
+    def log(self, text):
+        if self.logger:
+            self.logger.info(text)
+        else:
+            if text.startswith("\n"):
+                print("")
+                text = text[1:]
+            print(f"[{text}]")
+
     def start_recording(self, microphone,
                         start_message="Recording... Press Ctrl+C to stop.",
                         stop_message="Done transcribing."):
@@ -73,7 +83,7 @@ class AbstractTranscriber:
         try:
 
             with microphone.open_stream():
-                print(start_message)
+                self.log(start_message)
 
                 while not self.interrupt:
                     while not microphone.q.empty():
@@ -107,7 +117,7 @@ class AbstractTranscriber:
 
                         else:
                             if not previous_waiting:
-                                print("Silence detected...waiting for more audio")
+                                self.log("Silence detected...waiting for more audio")
 
                         if self.is_overtime():
                             raise StopRecording("Overtime: {:.2f} seconds".format(self.get_elapsed()))
@@ -125,7 +135,7 @@ class AbstractTranscriber:
             self.busy = False
             yield result
 
-        print(stop_message)
+        self.log(stop_message)
 
 
 def get_vosk_model(model, download_root=None, url=None):
@@ -200,7 +210,7 @@ class WhisperTranscriber(AbstractTranscriber):
         super().__init__(model, model_name, language, model_kwargs=model_kwargs, **kwargs)
 
     def transcribe_audio(self, audio_bytes):
-        print("\nTranscribing...")
+        self.log("\nTranscribing")
         audio_array = np.frombuffer(audio_bytes, dtype=np.int16).flatten().astype(np.float32) / 32768.0
         return self.model.transcribe(audio_array, fp16=False, language=self.language)
 
