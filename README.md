@@ -55,7 +55,7 @@ scribe
 and the script will guide you through the choice of backend (`whisper` or `vosk`) and the specific language model.
 After this, you will be prompted to start recording your microphone and print the transcribed text in real-time (`vosk`)
 or until after recording is complete (`whisper`).
-You can interrupt the recording via Ctrl + C and start again or change model. The full content of the transcription will be pasted to the clipboard by default, until interruption.
+You can interrupt the recording via Ctrl + C and start again or change model.
 
 The default (`whisper`) is excellent at transcribing a full-length audio sequences in [many languages](https://github.com/openai/whisper?tab=readme-ov-file#available-models-and-languages). It is really impressive,
 but it cannot do real-time, and depending on the model can have relatively long execution time, especially with the `turbo` model (at least on my laptop with CPU only). The `small` model is also excellent and runs much faster. It is selected as default in `scribe` for that reason.
@@ -72,19 +72,38 @@ scribe --backend whisper --model small --no-prompt
 ```
 where `--no-prompt` jumps right to the recording (after the first interruption, you can still choose to change the backend and model).
 
+## Output media
+
+By default the transcription is printed on the terminal, but other output media are supported.
+
+### Clipboard
+
+The most straightforward is the clipboard:
+
+```bash
+scribe --clipboard
+```
+The content of the (full) transcription is then pasted to the clipboard, and it is up to the user to paste (e.g. Ctrl + V).
+
+### Output file
+
+Alternatively an output file can be indicated:
+
+```bash
+ --keyboard -o transcription.txt
+```
+
 ### Virtual keyboard (experimental)
 
-By default the content of the transcription is pasted to the clipboard, and it is up to the user to paste (e.g. Ctrl + V).
-However with the `vosk` backend and its realtime transcription, it is very handy to have the keys sent directly to the keyboard.
-That can be achieve with the `--keyboard` option.
-
-With the `--keyboard` option `scribe` will attempt to simulate a keyboard and send transcribed characters to the applcation under focus:
+With the `--keyboard` option `scribe` will attempt to simulate a keyboard and send transcribed characters to the application under focus:
 
 ```bash
 scribe --keyboard
 ```
 
-It relies on the optional `pynput` dependency (installed together with `scribe` if you used the `[all]` or `[keyboard]` option).
+This can be extremely useful with the `vosk` backend and its realtime transcription, or alternatively with the `--restart` option with the `whisper` backend.
+
+The `--keyboard` option relies on the optional `pynput` dependency (installed together with `scribe` if you used the `[all]` or `[keyboard]` option).
 Depending on your operating system, `pynput` may require additional configuration to work around its [limitations](https://pynput.readthedocs.io/en/latest/limitations.html).
 
 #### Use the keyboard with Wayland (default for Ubuntu 24.04)
@@ -124,7 +143,7 @@ to make it available from the quick launch menu. Any option will be passed on to
 e.g.
 
 ```bash
-scribe-install --backend whisper --model small
+scribe-install --backend whisper --model small --clipboard --keyboard --restart-after-silence
 ```
 
 After that just typing Cmd + scri... at any time from any where will conveniently start the app in its own terminal with the prescribed options.

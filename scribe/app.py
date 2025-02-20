@@ -1,5 +1,6 @@
 from pathlib import Path
 import tomllib
+import re
 import time
 import argparse
 from scribe.audio import Microphone
@@ -177,10 +178,16 @@ def get_parser():
 
     parser.add_argument("--samplerate", default=16000, type=int, help=argparse.SUPPRESS)
     parser.add_argument("--microphone-device", help="The device index of the microphone to use.", type=int)
-    parser.add_argument("--keyboard", action="store_true")
-    parser.add_argument("--no-clipboard", dest="clipboard", action="store_false")
-    parser.add_argument("--latency", default=0.01, type=float, help="keyboard latency")
-    parser.add_argument("--ascii", action="store_true", help="Use unidecode for keyboard typing in ascii")
+
+    group = parser.add_argument_group("transcription output")
+    group.add_argument("--clipboard", dest="clipboard", action="store_true")
+    group.add_argument("--no-clipboard", dest="clipboard", action="store_false", help=argparse.SUPPRESS)
+    group.add_argument("--keyboard", action="store_true")
+    group.add_argument("-o", "--output-file")
+
+    group = parser.add_argument_group("keyboard options")
+    group.add_argument("--latency", default=0.01, type=float, help="keyboard latency")
+    group.add_argument("--ascii", action="store_true", help="Use unidecode for keyboard typing in ascii")
 
     group = parser.add_argument_group("whisper options")
     group.add_argument("--duration", default=120, type=float, help="Max duration of the whisper recording (default %(default)ss)")
@@ -195,17 +202,15 @@ def get_parser():
 
 
 # Commencer l'enregistrement
-def start_recording(micro, transcriber, clipboard=True, keyboard=False, latency=0, ascii=False, callback=None, **greetings):
+def start_recording(micro, transcriber, clipboard=True, keyboard=False, latency=0, ascii=False, output_file=None, callback=None, **greetings):
 
     if keyboard:
         from scribe.keyboard import type_text
         print("\nChange focus to target app during transcription.")
 
-
     if clipboard:
         import pyperclip
         print("\nThe full transcription will be copied to clipboard as it becomes available.")
-
 
     fulltext = ""
 
@@ -217,15 +222,16 @@ def start_recording(micro, transcriber, clipboard=True, keyboard=False, latency=
             if keyboard:
                 type_text(result['text'] + " ", interval=latency, ascii=ascii) # Simulate typing
 
+            if output_file:
+                with open(output_file, "a") as f:
+                    f.write(result['text'] + "\n")
+
             if clipboard:
                 fulltext += result['text'] + " "
                 pyperclip.copy(fulltext.strip())
 
         else:
             print_partial(result.get('partial', ''))
-
-    if clipboard:
-        print("Copied to clipboard.")
 
     if callback:
         callback()
@@ -355,17 +361,24 @@ def main(args=None):
         if transcriber is None:
             transcriber = get_transcriber(o, prompt=o.prompt)
         print(f"Model [{colored(transcriber.model_name, 'light_blue', attrs=['bold'])}] from [{colored(transcriber.backend, 'light_blue', attrs=['bold'])}] selected.")
-        show_options = ["clipboard", "keyboard", "ascii", "app"]
-        activated_options = [colored(option, 'light_blue') for option in show_options if getattr(o, option)]
-        print(f"Options: {' | '.join(activated_options)}")
+        show_output = ["clipboard", "keyboard", "output_file"]
+        show_options = ["ascii", "app"]
+        activated_output = [colored(option if type(getattr(o, option)) is bool else f'{option}={getattr(o, option)}', 'light_blue') for option in show_output if getattr(o, option)]
+        activated_options = [colored(option if type(getattr(o, option)) is bool else f'{option}={getattr(o, option)}', 'light_blue') for option in show_options if getattr(o, option)]
+        if activated_output:
+            print(f"Output: {' | '.join(activated_output)}")
+        else:
+            print(colored(f"No output selected -> terminal only", "light_red"))
+        if activated_options:
+            print(f"Options: {' | '.join(activated_options)}")
         if o.prompt:
             print(f"Choose any of the following actions")
-            print(f"{colored('[q]', 'light_yellow')} quit")
             print(f"{colored('[e]', 'light_yellow')} change model")
+            print(f"{colored('[f]', 'light_yellow')} output file is {colored(repr(o.output_file), 'light_blue')}")
+            print(f"{colored('[c]', 'light_yellow')} clipboard is {colored(o.clipboard, 'light_blue')} toggle?")
+            print(f"{colored('[k]', 'light_yellow')} keyboard is {colored(o.keyboard, 'light_blue')} toggle?")
+            print(f"{colored('[x]', 'light_yellow')} app is {colored(o.app, 'light_blue')} toggle?")
             if details:
-                print(f"{colored('[x]', 'light_yellow')} app is {colored(o.app, 'light_blue')} toggle?")
-                print(f"{colored('[c]', 'light_yellow')} clipboard is {colored(o.clipboard, 'light_blue')} toggle?")
-                print(f"{colored('[k]', 'light_yellow')} keyboard is {colored(o.keyboard, 'light_blue')} toggle?")
                 if o.keyboard:
                     print(f"{colored('[latency]', 'light_yellow')} between keystrokes is {colored(o.latency, 'light_blue')} s")
                 if transcriber.backend == "whisper":
@@ -379,21 +392,22 @@ def main(args=None):
                     if key not in display_flags or key in exclude_flags or not isinstance(value, bool):
                         continue
                     print(f"{colored(f'[{key}]', 'light_yellow')} is {colored(value, 'light_blue')} toggle?")
-                print(f"{colored('[o]', 'light_yellow')} hide options")
+                print(f"{colored('[-]', 'light_yellow')} hide options")
             else:
-                print(f"{colored('[o]', 'light_yellow')} show options")
-
+                print(f"{colored('[-]', 'light_yellow')} show more options")
+            print(f"{colored('[q]', 'light_yellow')} quit")
             print(colored(f"Press [Enter] to start recording.", attrs=["bold"]))
 
             key = input()
             if key == "q":
                 exit(0)
-            if key == "o":
+            if len(key) > 0 and key.strip() in ["", ".", "-", "+", 'o', '\x1b[A', '\x1b[B', '\x1b[C', '\x1b[D']:  # arrow keys
                 details = not details
                 continue
             if key == "e":
                 transcriber = None
                 o.model = None
+                o.dummy = False
                 o.backend = None
                 o.language = None
                 continue
@@ -437,18 +451,27 @@ def main(args=None):
                 except:
                     print("Invalid duration. Must be a float.")
                 continue
+            if key == "f":
+                ans = input(f"Enter output file (current: {o.output_file}): ")
+                invalid_regex = re.compile(r'[^A-Za-z0-9_\-\\\/\.]')
+                if not invalid_regex.search(ans):
+                    o.output_file = ans
+                else:
+                    print(f"Invalid characters: {' '.join(map(repr, invalid_regex.findall(ans)))}")
+                    print(f"Invalid file name: {repr(ans)}")
+                continue
             if key:
                 if hasattr(o, key) and isinstance(getattr(o, key), bool):
                     setattr(o, key, not getattr(o, key))
                     print(f"Toggle {key} to [{getattr(o, key)}].")
-                print(f"Invalid choice: {key}.")
+                print(f"Invalid choice: {repr(key)}")
                 continue
 
         if o.app:
             greetings = dict(
                 start_message = "Listening... Use the try icon menu to stop.",
             )
-            app = create_app(micro, transcriber, clipboard=o.clipboard,
+            app = create_app(micro, transcriber, clipboard=o.clipboard, output_file=o.output_file,
                              keyboard=o.keyboard, latency=o.latency, ascii=o.ascii, **greetings)
             print("Starting app...")
             app.run()
@@ -456,7 +479,7 @@ def main(args=None):
             greetings = dict(
                 start_message = "Listening... Press Ctrl+C to stop.",
             )
-            start_recording(micro, transcriber, clipboard=o.clipboard,
+            start_recording(micro, transcriber, clipboard=o.clipboard, output_file=o.output_file,
                             keyboard=o.keyboard, latency=o.latency, ascii=o.ascii, **greetings)
 
         # if we arrived so far, that means we pressed Ctrl + C anyway, and need Enter to move on.
