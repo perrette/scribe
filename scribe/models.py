@@ -32,6 +32,7 @@ class AbstractTranscriber:
         self.silence_thresh = silence_thresh
         self.silence_duration = silence_duration
         self.restart_after_silence = restart_after_silence
+        self.recording = False
         self.reset()
 
     def get_elapsed(self):
@@ -57,6 +58,8 @@ class AbstractTranscriber:
                         stop_message="Stopped recording."):
 
         self.reset()
+        self.recording = True
+        self.busy = True
 
         try:
 
@@ -88,12 +91,16 @@ class AbstractTranscriber:
                         if self.is_overtime():
                             raise KeyboardInterrupt("Overtime: {:.2f} seconds".format(self.get_elapsed()))
 
+                    time.sleep(0.1) # avoid overheating
+
         except (KeyboardInterrupt, StopRecording):
             pass
 
         finally:
+            self.recording = False
             result = self.finalize()
             microphone.q.queue.clear()
+            self.busy = False
             yield result
 
         print(stop_message)
