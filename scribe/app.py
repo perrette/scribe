@@ -206,11 +206,11 @@ def start_recording(micro, transcriber, clipboard=True, keyboard=False, latency=
 
     if keyboard:
         from scribe.keyboard import type_text
-        print("\nChange focus to target app during transcription.")
+        transcriber.log("Change focus to target app during transcription.")
 
     if clipboard:
         import pyperclip
-        print("\nThe full transcription will be copied to clipboard as it becomes available.")
+        transcriber.log("The full transcription will be copied to clipboard as it becomes available.")
 
     fulltext = ""
 
@@ -310,7 +310,7 @@ def create_app(micro, transcriber, **kwargs):
     def callback_record(icon, item):
         # kwargs["callback"] = icon.update_menu   # NOTE: the thread will finish AFTER the callback is complete
         if transcriber.busy:
-            print("Still busy recording or transcribing.")
+            transcriber.log("Still busy recording or transcribing.")
             return
 
         if hasattr(icon, "_recording_thread") and icon._recording_thread.is_alive():
