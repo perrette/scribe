@@ -120,7 +120,7 @@ sudo HOME=$HOME XDG_RUNTIME_DIR=$XDG_RUNTIME_DIR PYNPUT_BACKEND_KEYBOARD=uinput 
 ```
 You're on the right path :)
 
-### System tray icon (experimental) <img src="scribe_data/share/icon.png" width=48px>
+## System tray icon (experimental) <img src="scribe_data/share/icon.png" width=48px>
 
 To avoid switching back and forth with the terminal, it's possible to interact with the program via an icon tray.
 To activate start with:
@@ -135,7 +135,7 @@ sudo apt install libcairo-dev libgirepository1.0-dev gir1.2-appindicator3-0.1
 pip install PyGObject
 ```
 
-### Start as an application in GNOME
+## Start as an application in GNOME
 
 If you run Ubuntu (or else?) with GNOME, the script `scribe-install [...]` will create a `scribe.desktop` file and place it under `$HOME/.local/share/applications`
 to make it available from the quick launch menu. Any option will be passed on to `scribe`.
@@ -146,4 +146,14 @@ e.g.
 scribe-install --backend whisper --model small --clipboard --keyboard --restart-after-silence
 ```
 
-After that just typing Cmd + scri... at any time from any where will conveniently start the app in its own terminal with the prescribed options.
+After that just typing Super + scri... at any time from any where will conveniently start the app in its own terminal with the prescribed options.
+
+
+## Fine tuning
+
+There are a number of options to control the silence threshold, duration and more.
+Best is to check the available options in the online help:
+
+```bash
+scribe --help
+```
