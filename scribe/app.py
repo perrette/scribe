@@ -191,7 +191,7 @@ def get_parser():
 
 
 # Commencer l'enregistrement
-def start_recording(micro, transcriber, clipboard=True, keyboard=False, latency=0, ascii=False, **greetings):
+def start_recording(micro, transcriber, clipboard=True, keyboard=False, latency=0, ascii=False, callback=None, **greetings):
 
     if keyboard:
         from scribe.keyboard import type_text
@@ -222,6 +222,9 @@ def start_recording(micro, transcriber, clipboard=True, keyboard=False, latency=
 
     if clipboard:
         print("Copied to clipboard.")
+
+    if callback:
+        callback()
 
 
 def interrupt_thread(thread, exception_cls):
@@ -259,13 +262,26 @@ def create_app(micro, transcriber, **kwargs):
         icon.stop()
 
     def callback_stop_recording(icon, item):
-        ## Here we need to stop the recording thread
-        if hasattr(icon, "_recording_thread"):
+        # Here we need to stop the recording thread
+
+        # Stop the recording loop of the transcriber ==> this will trigger the finalization
+        if hasattr(icon, "_recording_thread") and transcriber.recording:
             interrupt_thread(icon._recording_thread, StopRecording)
-            icon._recording_thread.join()
-        icon.update_menu()
+
+        # Now wait for transcription and clipboard and keyboard typing and callback to finish
+        icon._recording_thread.join()
 
     def callback_record(icon, item):
+        kwargs["callback"] = icon.update_menu   # NOTE: the thread will finish AFTER the callback is complete
+        if hasattr(icon, "_recording_thread") and icon._recording_thread.is_alive():
+            if transcriber.recording:
+                print("Already recording.")
+                return
+            else:
+                print("Waiting for the recording thread to finish.")
+                icon._recording_thread.join()
+                print("Done.")
+
         icon._recording_thread = threading.Thread(target=start_recording, args=(micro, transcriber), kwargs=kwargs)
         icon._recording_thread.start()
 
@@ -278,7 +294,6 @@ def create_app(micro, transcriber, **kwargs):
 
     # Create a menu
     menu = pystrayMenu(
-        # Item('Record', callback_record),
         Item("Record", callback_record, visible=is_not_recording),
         Item("Stop", callback_stop_recording, visible=is_recording),
         Item('Quit', callback_quit),
