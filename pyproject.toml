@@ -44,7 +44,8 @@ keyboard = ["pynput"]
 whisper = ["openai-whisper"]
 vosk = ["vosk"]
 app = ["pystray", "PyGObject"]
-all = ["pynput", "openai-whisper", "vosk", "pystray"]
+openai = ["openai", "soundfile"]
+all = ["pynput", "openai-whisper", "openai", "soundfile", "vosk", "pystray"]
 
 
 [tool.setuptools]
