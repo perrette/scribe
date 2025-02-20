@@ -216,7 +216,7 @@ def start_recording(micro, transcriber, clipboard=True, keyboard=False, latency=
 
             if clipboard:
                 fulltext += result['text'] + " "
-                pyperclip.copy(fulltext)
+                pyperclip.copy(fulltext.strip())
 
         else:
             print_partial(result.get('partial', ''))
