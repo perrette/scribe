@@ -34,6 +34,7 @@ class AbstractTranscriber:
         self.restart_after_silence = restart_after_silence
         self.recording = False
         self.busy = False
+        self.waiting = False
         self.reset()
 
     def get_elapsed(self):
@@ -52,7 +53,6 @@ class AbstractTranscriber:
     def reset(self):
         self.audio_buffer = b''
         self.start_time = time.time()
-        self.last_sound_time = time.time()
 
     def start_recording(self, microphone,
                         start_message="Recording... Press Ctrl+C to stop.",
@@ -60,7 +60,13 @@ class AbstractTranscriber:
 
         self.reset()
         self.recording = True
+        self.waiting = True
         self.busy = True
+        if self.silence_duration is not None:
+            self.last_sound_time = time.time() - self.silence_duration
+        else:
+            self.last_sound_time = time.time()
+        previous_waiting = self.waiting
 
         try:
 
@@ -75,19 +81,31 @@ class AbstractTranscriber:
                         if is_silent(data, self.silence_thresh):
                             silence_duration = time.time() - self.last_sound_time
 
-                            if self.silence_duration is not None and silence_duration >= self.silence_duration and len(self.audio_buffer) > 0:
+                            previous_waiting = self.waiting
+                            self.waiting = self.silence_duration is not None and silence_duration >= self.silence_duration
+
+                            if self.waiting and len(self.audio_buffer) > 0:
                                 if self.restart_after_silence:
+                                    self.recording = False # for the system tray icon
                                     result = self.finalize()
                                     microphone.q.queue.clear()
                                     self.reset()
                                     yield result
+                                    self.recording = True # for the system tray icon
                                 else:
                                     raise StopRecording("Silence detected: {:.2f} seconds".format(silence_duration))
 
                         else:
                             self.last_sound_time = time.time()
+                            self.waiting = False
 
-                        yield self.transcribe_realtime_audio(data)
+                        # don't accumulate very long silences
+                        if not self.waiting:
+                            yield self.transcribe_realtime_audio(data)
+
+                        else:
+                            if not previous_waiting:
+                                print("Silence detected...waiting for more audio")
 
                         if self.is_overtime():
                             raise StopRecording("Overtime: {:.2f} seconds".format(self.get_elapsed()))
@@ -98,6 +116,7 @@ class AbstractTranscriber:
             pass
 
         finally:
+            self.waiting = False
             self.recording = False
             result = self.finalize()
             microphone.q.queue.clear()

@@ -147,7 +147,8 @@ def get_transcriber(o, prompt=True):
 
     elif backend == "whisper":
         transcriber = WhisperTranscriber(model_name=model, language=o.language, samplerate=o.samplerate,
-                                         timeout=o.duration, silence_duration=o.silence, restart_after_silence=o.restart_after_silence,
+                                         timeout=o.duration, silence_duration=o.silence, silence_thresh=o.silence_db,
+                                         restart_after_silence=o.restart_after_silence,
                                          model_kwargs={"download_root": o.download_folder_whisper})
 
     else:
@@ -178,12 +179,13 @@ def get_parser():
     parser.add_argument("--microphone-device", help="The device index of the microphone to use.", type=int)
     parser.add_argument("--keyboard", action="store_true")
     parser.add_argument("--no-clipboard", dest="clipboard", action="store_false")
-    parser.add_argument("--latency", default=0, type=float, help="keyboard latency")
+    parser.add_argument("--latency", default=0.01, type=float, help="keyboard latency")
     parser.add_argument("--ascii", action="store_true", help="Use unidecode for keyboard typing in ascii")
 
     group = parser.add_argument_group("whisper options")
-    group.add_argument("--duration", default=120, type=int, help="Max duration of the whisper recording (default %(default)ss)")
-    group.add_argument("--silence", default=2, type=float, help="silence duration that prompt transcription (whisper) (default %(default)ss)")
+    group.add_argument("--duration", default=120, type=float, help="Max duration of the whisper recording (default %(default)ss)")
+    group.add_argument("--silence", default=2, type=float, help="silence duration (default %(default)ss)")
+    group.add_argument("--silence-db", default=-30, type=float, help="silence magnitude in db (default %(default)ss)")
     group.add_argument("--restart-after-silence", action="store_true", help="Restart the recording after a transcription triggered by a silence")
 
     parser.add_argument("--download-folder-vosk", help="Folder to store Vosk models.")
@@ -249,7 +251,15 @@ def create_app(micro, transcriber, **kwargs):
         image_recording = Image.alpha_composite(image_recording.convert("RGBA"), image_writing.convert("RGBA"))
 
     def update_icon(icon, force=False):
-        if transcriber.recording:
+        if transcriber.recording and transcriber.waiting:
+            # this is the situation with the whisper backend when the microphone is recording
+            # but we wait for the speaker to speak (silence)
+            if force or getattr(icon, "_icon_label", None) != None:
+                icon.icon = image
+                icon._icon_label = None
+                icon.update_menu()
+
+        elif transcriber.recording:
             if force or getattr(icon, "_icon_label", None) != "recording":
                 icon.icon = image_recording
                 icon._icon_label = "recording"
@@ -361,6 +371,7 @@ def main(args=None):
                 if transcriber.backend == "whisper":
                     print(f"{colored('[t]', 'light_yellow')} change duration (currently {colored(transcriber.timeout, 'light_blue')} s)")
                     print(f"{colored('[b]', 'light_yellow')} change silence (currently {colored(transcriber.silence_duration, 'light_blue')} s)")
+                    print(f"{colored('[db]', 'light_yellow')} change backround noise (currently {colored(transcriber.silence_thresh, 'light_blue')} db)")
                     print(f"{colored('[a]', 'light_yellow')} auto-restart after silence is {colored(transcriber.restart_after_silence, 'light_blue')} toggle?")
                 exclude_flags = ["keyboard", "clipboard", "app", "prompt", "restart_after_silence"]
                 display_flags = [a.dest for a in parser._actions if a.help != argparse.SUPPRESS]
@@ -401,9 +412,9 @@ def main(args=None):
             if key == "t":
                 ans = input(f"Enter new duration in seconds (current: {transcriber.timeout}): ")
                 try:
-                    o.duration = transcriber.timeout = int(ans)
+                    o.duration = transcriber.timeout = float(ans)
                 except:
-                    print("Invalid duration. Must be an integer.")
+                    print("Invalid duration. Must be a float.")
                 continue
             if key == "latency":
                 ans = input(f"Enter new keyboard latency in seconds (current: {o.latency}): ")
@@ -415,9 +426,16 @@ def main(args=None):
             if key == "b":
                 ans = input(f"Enter new silence break duration in seconds (current: {transcriber.silence_duration}): ")
                 try:
-                    o.silence = transcriber.silence_duration = int(ans)
+                    o.silence = transcriber.silence_duration = float(ans)
                 except:
-                    print("Invalid duration. Must be an integer.")
+                    print("Invalid duration. Must be a float.")
+                continue
+            if key == "db":
+                ans = input(f"Enter new background noise threshold to detect silence (current: {transcriber.silence_thresh}): ")
+                try:
+                    o.silence_db = transcriber.silence_thresh = float(ans)
+                except:
+                    print("Invalid duration. Must be a float.")
                 continue
             if key:
                 if hasattr(o, key) and isinstance(getattr(o, key), bool):
