@@ -56,7 +56,7 @@ class AbstractTranscriber:
 
     def start_recording(self, microphone,
                         start_message="Recording... Press Ctrl+C to stop.",
-                        stop_message="Stopped recording."):
+                        stop_message="Done transcribing."):
 
         self.reset()
         self.recording = True
@@ -67,7 +67,7 @@ class AbstractTranscriber:
             with microphone.open_stream():
                 print(start_message)
 
-                while True:
+                while self.recording:
                     while not microphone.q.empty():
                         data = microphone.q.get()
 
@@ -82,7 +82,7 @@ class AbstractTranscriber:
                                     self.reset()
                                     yield result
                                 else:
-                                    raise KeyboardInterrupt("Silence detected: {:.2f} seconds".format(silence_duration))
+                                    raise StopRecording("Silence detected: {:.2f} seconds".format(silence_duration))
 
                         else:
                             self.last_sound_time = time.time()
@@ -90,7 +90,7 @@ class AbstractTranscriber:
                         yield self.transcribe_realtime_audio(data)
 
                         if self.is_overtime():
-                            raise KeyboardInterrupt("Overtime: {:.2f} seconds".format(self.get_elapsed()))
+                            raise StopRecording("Overtime: {:.2f} seconds".format(self.get_elapsed()))
 
                     time.sleep(0.1) # avoid overheating
 
