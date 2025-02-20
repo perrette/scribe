@@ -339,38 +339,47 @@ def main(args=None):
     micro = Microphone(samplerate=o.samplerate, device=o.microphone_device)
 
     transcriber = None
-
-    toggle = {True: "On", False: "Off"}
+    details = False
 
     while True:
         if transcriber is None:
             transcriber = get_transcriber(o, prompt=o.prompt)
         print(f"Model [{colored(transcriber.model_name, 'light_blue', attrs=['bold'])}] from [{colored(transcriber.backend, 'light_blue', attrs=['bold'])}] selected.")
+        show_options = ["clipboard", "keyboard", "ascii", "app"]
+        activated_options = [colored(option, 'light_blue') for option in show_options if getattr(o, option)]
+        print(f"Options: {' | '.join(activated_options)}")
         if o.prompt:
             print(f"Choose any of the following actions")
             print(f"{colored('[q]', 'light_yellow')} quit")
             print(f"{colored('[e]', 'light_yellow')} change model")
-            print(f"{colored('[x]', 'light_yellow')} app is {colored(o.app, 'light_blue')} toggle?")
-            print(f"{colored('[c]', 'light_yellow')} clipboard is {colored(o.clipboard, 'light_blue')} toggle?")
-            print(f"{colored('[k]', 'light_yellow')} keyboard is {colored(o.keyboard, 'light_blue')} toggle?")
-            if o.keyboard:
-                print(f"{colored('[latency]', 'light_yellow')} between keystrokes is {colored(o.latency, 'light_blue')} s")
-            if transcriber.backend == "whisper":
-                print(f"{colored('[t]', 'light_yellow')} change duration (currently {colored(transcriber.timeout, 'light_blue')} s)")
-                print(f"{colored('[b]', 'light_yellow')} change silence duration (currently {colored(transcriber.silence_duration, 'light_blue')} s)")
-                print(f"{colored('[a]', 'light_yellow')} auto-restart after silence is {colored(transcriber.restart_after_silence, 'light_blue')} toggle?")
-            exclude_flags = ["keyboard", "clipboard", "app", "prompt", "restart_after_silence"]
-            display_flags = [a.dest for a in parser._actions if a.help != argparse.SUPPRESS]
-            for key, value in vars(o).items():
-                if key not in display_flags or key in exclude_flags or not isinstance(value, bool):
-                    continue
-                print(f"{colored(f'[{key}]', 'light_yellow')} is {colored(value, 'light_blue')} toggle?")
+            if details:
+                print(f"{colored('[x]', 'light_yellow')} app is {colored(o.app, 'light_blue')} toggle?")
+                print(f"{colored('[c]', 'light_yellow')} clipboard is {colored(o.clipboard, 'light_blue')} toggle?")
+                print(f"{colored('[k]', 'light_yellow')} keyboard is {colored(o.keyboard, 'light_blue')} toggle?")
+                if o.keyboard:
+                    print(f"{colored('[latency]', 'light_yellow')} between keystrokes is {colored(o.latency, 'light_blue')} s")
+                if transcriber.backend == "whisper":
+                    print(f"{colored('[t]', 'light_yellow')} change duration (currently {colored(transcriber.timeout, 'light_blue')} s)")
+                    print(f"{colored('[b]', 'light_yellow')} change silence (currently {colored(transcriber.silence_duration, 'light_blue')} s)")
+                    print(f"{colored('[a]', 'light_yellow')} auto-restart after silence is {colored(transcriber.restart_after_silence, 'light_blue')} toggle?")
+                exclude_flags = ["keyboard", "clipboard", "app", "prompt", "restart_after_silence"]
+                display_flags = [a.dest for a in parser._actions if a.help != argparse.SUPPRESS]
+                for key, value in vars(o).items():
+                    if key not in display_flags or key in exclude_flags or not isinstance(value, bool):
+                        continue
+                    print(f"{colored(f'[{key}]', 'light_yellow')} is {colored(value, 'light_blue')} toggle?")
+                print(f"{colored('[o]', 'light_yellow')} hide options")
+            else:
+                print(f"{colored('[o]', 'light_yellow')} show options")
 
             print(colored(f"Press [Enter] to start recording.", attrs=["bold"]))
 
             key = input()
             if key == "q":
                 exit(0)
+            if key == "o":
+                details = not details
+                continue
             if key == "e":
                 transcriber = None
                 o.model = None
