@@ -87,7 +87,7 @@ scribe --keyboard
 It relies on the optional `pynput` dependency (installed together with `scribe` if you used the `[all]` or `[keyboard]` option).
 Depending on your operating system, `pynput` may require additional configuration to work around its [limitations](https://pynput.readthedocs.io/en/latest/limitations.html).
 
-#### Use the keyboard in Ubuntu
+#### Use the keyboard with Wayland (default for Ubuntu 24.04)
 
 In my Ubuntu + Wayland system the keyboard simulation works out-of-the-box in chromium based applications (including vscode) but it does not in firefox and sublime text and any of the rest (not even in a terminal !). I am told this is because Chromium runs an X server emulator and so is compatible with the default pynput backend.
 
