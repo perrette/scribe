@@ -16,7 +16,7 @@ Basically check the pages of the dependencies for more info (i.e. pynput for the
     - at the time of writing, `openai-whisper` does not install.
 
 - Ubuntu:
-    - issues with wayland: see caveates in the Use the [keyboard section](#use-the-keyboard-with-wayland).
+    - see caveats in the use of the keyboard under Wayland [keyboard section](#use-the-keyboard-with-wayland).
 - MacOS:
     - tested on a Macbook Air M1 8Gb RAM, with python 3.12. It runs, but poorly, presumably because of the low memory: prefer the `openaiapi` backend for such machines
     - I expect better memory specs will have the local models run fine
@@ -49,7 +49,7 @@ pip install -e .[all]
 
 You can leave the optional dependencies (leave out `[all]`) but must install at least one of `vosk` or `openai-whisper` or `openai` packages (see Usage below).
 
-At the time of writing `openai-whisper` does not install on `python 3.13`. You can install the packages manually and skip that package.
+At the time of writing `openai-whisper` does not install on `python 3.13`. You can install the packages manually and skip that package. This makes the `whisper` API unavailable.
 
 ### Manual selection of the dependencies
 
@@ -57,7 +57,7 @@ At the time of writing `openai-whisper` does not install on `python 3.13`. You c
 # language models (at least one must be installed !)
 pip install vosk
 pip install openai soundfile  # openaiapi
-pip install whisper-openai   # FAILS IN PYTHON 3.13 on Ubuntu
+pip install openai-whisper   # FAILS IN PYTHON 3.13 on Ubuntu
 
 # PortAUDIO (sounddevice)
 pip install sounddevice # automatically installed as required dependency
