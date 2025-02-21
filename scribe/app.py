@@ -380,7 +380,7 @@ def create_app(micro, transcriber, other_transcribers=None, **kwargs):
     title = f"scribe :: {modeltitle}"
 
     menus = []
-    menus.append(Item(f"Record" if len(other_transcribers_dict) <= 1 else f"Record", callback_record, visible=is_not_recording))
+    menus.append(Item(f"Record", callback_record, visible=is_not_recording))
     menus.append(Item("Stop", callback_stop_recording, visible=is_recording))
     menus.append(Item("Choose Model", pystrayMenu(
         *(Item(f"{name}", callback_set_model, checked=is_checked) for name in other_transcribers_dict)))
