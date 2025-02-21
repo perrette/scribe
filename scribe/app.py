@@ -204,13 +204,17 @@ def get_parser():
     group.add_argument("--silence", default=2, type=float, help="silence duration (default %(default)s s)")
     group.add_argument("--silence-db", default=-30, type=float, help="silence magnitude in decibel (default %(default)s db)")
     group.add_argument("-a", "--restart-after-silence", action="store_true", help="Restart the recording after a transcription triggered by a silence")
+    group.add_argument("--download-folder-whisper", help="Folder to store Whisper models.")
 
     group = parser.add_argument_group("whisper api")
     group.add_argument("--api-key",
                         help="API key for the Whisper API backend.")
 
+    group = parser.add_argument_group("App")
+    group.add_argument("--vosk-models", nargs="*", help="vosk models available for the app mode", default=vosk_models)
+    group.add_argument("--whisper-models", nargs="*", help="whisper models available for the app mode", default=whisper_models)
+
     parser.add_argument("--download-folder-vosk", help="Folder to store Vosk models.")
-    parser.add_argument("--download-folder-whisper", help="Folder to store Whisper models.")
 
     return parser
 
@@ -525,8 +529,8 @@ def main(args=None):
 
             app = create_app(micro, transcriber, other_transcribers=[
                 {**vars(o), "backend": "openaiapi", "model": "whisper-1"},
-                *[{**vars(o), "backend": "whisper", "model": model} for model in whisper_models],
-                *[{**vars(o), "backend": "vosk", "model": model} for model in vosk_models]],
+                *[{**vars(o), "backend": "whisper", "model": model} for model in o.whisper_models],
+                *[{**vars(o), "backend": "vosk", "model": model} for model in o.vosk_models]],
                              clipboard=o.clipboard, output_file=o.output_file,
                              keyboard=o.keyboard, latency=o.latency, ascii=o.ascii, **greetings)
             print("Starting app...")

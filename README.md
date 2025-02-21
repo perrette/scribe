@@ -128,8 +128,8 @@ To activate start with:
 scribe --app
 ```
 or toggle the app option in the interactive menu. The scribe icon will show, with Record and other options. The icon will change based on what the app is doing. It is possible to choose from a set
-of predefined models, or to Quit and choose from the terminal before pressing Enter again.
-For the vosk model, there are only two states : recording + transcribing or Idle. For the whisper model there are three states visible from the icon: recording, transcribing and idle/waiting.
+of predefined models (controlled by `--vosk-models` and `whisper-models`) and options, or to Quit and choose from the terminal before pressing Enter again.
+For the vosk model, there are only two states : recording + transcribing or Idle. For the whisper model there are three states visible from the icon: recording/waiting, transcribing and idle.
 That option requires `pystray` to be installed. This is included with the `pip install ...[all]` option. In Ubuntu the following dependencies were required to make the menus appear:
 
 ```bash
@@ -152,13 +152,10 @@ scribe-install --clipboard  --api YOUROPENAIAPIKEY
 ```
 (`--api` is optional and only useful if you plan to use `openaiapi` backend later on)
 
-And to make an app running outside the terminal:
-
+It is also possible to run an app fully outside the terminal:
 ```bash
-scribe-install --backend openaiapi --name "Scribe App" --keyboard --clipboard --app --no-prompt --no-terminal --restart-after-silence --api YOUROPENAIAPIKEY
+scribe-install --backend openaiapi --name "Scribe App" --keyboard --clipboard --app --no-prompt --no-terminal --restart-after-silence --api YOUROPENAIAPIKEY  --vosk-models vosk-model-fr-0.22 --whisper-models small turbo
 ```
-This will install two separate apps (names "Scribe" and "Scribe App")
-
 
 ## Fine tuning
 
