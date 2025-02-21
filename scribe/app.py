@@ -272,15 +272,7 @@ def create_app(micro, transcriber, other_transcribers=None, **kwargs):
 
     def update_icon(icon, force=False):
         transcriber = icon._transcriber
-        if transcriber.recording and transcriber.waiting:
-            # this is the situation with the whisper backend when the microphone is recording
-            # but we wait for the speaker to speak (silence)
-            if force or getattr(icon, "_icon_label", None) != None:
-                icon.icon = image
-                icon._icon_label = None
-                icon.update_menu()
-
-        elif transcriber.recording:
+        if transcriber.recording:
             if force or getattr(icon, "_icon_label", None) != "recording":
                 icon.icon = image_recording
                 icon._icon_label = "recording"
