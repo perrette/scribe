@@ -21,6 +21,7 @@ class StopRecording(Exception):
 
 class AbstractTranscriber:
     backend = None
+    _frozen_options = frozenset()
     def __init__(self, model, model_name=None, language=None, samplerate=16000, timeout=None, model_kwargs={},
                  silence_thresh=-40, silence_duration=2, restart_after_silence=False, logger=None):
         self.model_name = model_name
@@ -165,8 +166,10 @@ def get_vosk_recognizer(model, samplerate=16000):
 
 class VoskTranscriber(AbstractTranscriber):
     backend = "vosk"
+    _frozen_options = frozenset(["restart_after_silence", "silence_duration", "silence_thresh"])
 
     def __init__(self, model_name, model=None, model_kwargs={}, **kwargs):
+        kwargs["silence_thresh"] = -np.inf  # disable silence detection (this is handled by Vosk)
         if model is None:
             model = get_vosk_model(model_name, **model_kwargs)
         super().__init__(model, model_name, model_kwargs=model_kwargs, **kwargs)
