@@ -54,6 +54,9 @@ class AbstractTranscriber:
         return self.timeout is not None and time.time() - self.start_time > self.timeout
 
     def transcribe_realtime_audio(self, audio_bytes=b""):
+        """This method is generic and assumes the underlying model does not handle real-time audio.
+        The Vosk model handles real-time audio, so this method is overridden in the VoskTranscriber class.
+        """
 
         # Vérifier si le segment est un silence
         if is_silent(audio_bytes, self.silence_thresh):
