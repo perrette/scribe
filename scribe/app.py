@@ -344,6 +344,9 @@ def create_app(micro, transcriber, other_transcribers=None, **kwargs):
 
     def callback_set_model(icon, item):
         transcriber = icon._transcriber
+        if transcriber.model_name == str(item):
+            transcriber.log(f"Already using model {str(item)}")
+            return
         callback_stop_recording(icon, item)
         model_name = str(item)
         meta = other_transcribers_dict[model_name]
