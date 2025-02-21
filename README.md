@@ -109,8 +109,7 @@ The `openaiapi` backend uses `whisper-1` model at the time of writing. It requir
 export OPENAI_API_KEY=YOURAPIKEY
 scribe --backend openaiapi
 ```
-The `openaiapi` backend is lightweight and handy if you have an API (you can create one for free for testing) and a low-spec computer.
-
+The `openaiapi` backend is lightweight and handy if you have an API (you can create one for free for testing) and a low-spec computer (and don't care too much about privacy, obviously).
 
 ## Output media
 
