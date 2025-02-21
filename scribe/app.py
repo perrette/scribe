@@ -357,18 +357,9 @@ def create_app(micro, transcriber, other_transcribers=None, **kwargs):
         # icon.menu.items[0].__name__ = f"Record [{str(item)}]"
         icon._model_selection = False
         icon.update_menu()
-        icon.notify(f"Set {transcriber.backend} {transcriber.model_name}")
-
-    def callback_info(icon, item):
-        transcriber = icon._transcriber
-        # icon.notify(f"scribe {transcriber.backend} {transcriber.model_name}")
-        title = f"""{transcriber.backend} :: {transcriber.model_name}"""
-        info = [name for name in kwargs if isinstance(kwargs[name], bool) and kwargs[name]]
-        icon.notify(" | ".join(info), title=title)
 
     def callback_toggle_option(icon, item):
         kwargs[str(item)] = not kwargs[str(item)]
-        callback_info(icon, item)
 
     def is_model_selection(item):
         return icon._model_selection
@@ -379,6 +370,12 @@ def create_app(micro, transcriber, other_transcribers=None, **kwargs):
     def is_not_recording(item):
         return not is_recording(item) and not is_model_selection(item)
 
+    def is_checked(item):
+        return icon._transcriber.model_name == str(item)
+
+    def is_checked_option(item):
+        return kwargs[str(item)]
+
     modeltitle = f"{transcriber.backend} :: {transcriber.model_name}"
     title = f"scribe :: {modeltitle}"
 
@@ -386,12 +383,11 @@ def create_app(micro, transcriber, other_transcribers=None, **kwargs):
     menus.append(Item(f"Record" if len(other_transcribers_dict) <= 1 else f"Record", callback_record, visible=is_not_recording))
     menus.append(Item("Stop", callback_stop_recording, visible=is_recording))
     menus.append(Item("Choose Model", pystrayMenu(
-        *(Item(f"{name}", callback_set_model) for name in other_transcribers_dict)))
+        *(Item(f"{name}", callback_set_model, checked=is_checked) for name in other_transcribers_dict)))
     )
     menus.append(Item("Toggle Options", pystrayMenu(
-        *(Item(f"{name}", callback_toggle_option) for name in kwargs if isinstance(kwargs[name], bool))))
+        *(Item(f"{name}", callback_toggle_option, checked=is_checked_option) for name in kwargs if isinstance(kwargs[name], bool))))
     )
-    menus.append(Item(f"Info", callback_info))
     menus.append(Item('Quit', callback_quit))
 
     # Create a menu

@@ -155,7 +155,7 @@ scribe-install --clipboard  --api YOUROPENAIAPIKEY
 And to make an app running outside the terminal:
 
 ```bash
-scribe-install --backend openaiapi --name "Scribe App" --keyboard --clipboard --app --no-prompt --no-terminal  --api YOUROPENAIAPIKEY
+scribe-install --backend openaiapi --name "Scribe App" --keyboard --clipboard --app --no-prompt --no-terminal --restart-after-silence --api YOUROPENAIAPIKEY
 ```
 This will install two separate apps (names "Scribe" and "Scribe App")
 
