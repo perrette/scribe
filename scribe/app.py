@@ -3,6 +3,7 @@ import tomllib
 import re
 import time
 import argparse
+from typing import Iterable
 from scribe.audio import Microphone
 from scribe.util import print_partial, clear_line, prompt_choices, ansi_link, colored
 from scribe.models import VoskTranscriber, WhisperTranscriber, OpenaiAPITranscriber
@@ -361,15 +362,16 @@ def create_app(micro, transcriber, other_transcribers=None, transcriber_options=
         callback_stop_recording(icon, item)
         if str(item) in transcriber_options:
             # toggle the option on the current transcriber
-            if hasattr(icon._transcriber, str(item)):
-                newvalue = not getattr(icon._transcriber, str(item))
-                setattr(icon._transcriber, str(item), newvalue)
-                # set the option on the other transcribers as well
-                if other_transcribers:
-                    for name in other_transcribers_dict:
-                        meta = other_transcribers_dict[name]
-                        if str(item) in meta:
-                            meta[str(item)] = newvalue
+            if str(item) in icon._transcriber._frozen_options or type(getattr(icon._transcriber, str(item), None)) is not bool:
+                return
+            newvalue = not getattr(icon._transcriber, str(item))
+            setattr(icon._transcriber, str(item), newvalue)
+            # set the option on the other transcribers as well
+            if other_transcribers:
+                for name in other_transcribers_dict:
+                    meta = other_transcribers_dict[name]
+                    if str(item) in meta:
+                        meta[str(item)] = newvalue
 
         else:
             kwargs[str(item)] = not kwargs[str(item)]
@@ -391,11 +393,7 @@ def create_app(micro, transcriber, other_transcribers=None, transcriber_options=
 
     def is_option_visible(item):
         if str(item) in transcriber_options:
-            if other_transcribers:
-                # only if it is a valid option for the transcriber
-                return str(item) in other_transcribers_dict.get(icon._transcriber.model_name, {})
-            else:
-                return True # it was passed explicitly for a single transcriber, so assume it is valid
+            return str(item) not in icon._transcriber._frozen_options
         return True
 
     modeltitle = f"{transcriber.backend} :: {transcriber.model_name}"
@@ -425,6 +423,8 @@ def create_app(micro, transcriber, other_transcribers=None, transcriber_options=
 
     return icon
 
+def _filter_options(d: dict, exclude: Iterable) -> dict:
+    return {k: v for k, v in d.items() if k not in exclude}
 
 def main(args=None):
 
@@ -558,7 +558,7 @@ def main(args=None):
             app = create_app(micro, transcriber, other_transcribers=[
                 {**vars(o), "backend": "openaiapi", "model": "whisper-1"},
                 *[{**vars(o), "backend": "whisper", "model": model} for model in o.whisper_models],
-                *[{**vars(o), "backend": "vosk", "model": model} for model in o.vosk_models]],
+                *[{**_filter_options(vars(o), exclude=VoskTranscriber._frozen_options), "backend": "vosk", "model": model} for model in o.vosk_models]],
                              clipboard=o.clipboard, output_file=o.output_file,
                              keyboard=o.keyboard, latency=o.latency, ascii=o.ascii,
                              transcriber_options=["restart_after_silence"], **greetings)
