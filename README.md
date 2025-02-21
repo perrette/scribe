@@ -90,7 +90,7 @@ The content of the (full) transcription is then pasted to the clipboard, and it 
 Alternatively an output file can be indicated:
 
 ```bash
- --keyboard -o transcription.txt
+scribe -o transcription.txt
 ```
 
 ### Virtual keyboard (experimental)
