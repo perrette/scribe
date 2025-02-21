@@ -326,8 +326,8 @@ def create_app(micro, transcriber, other_transcribers=None, **kwargs):
     def callback_record(icon, item):
         transcriber = icon._transcriber
         if transcriber.busy:
-            transcriber.log("Still busy recording or transcribing.")
-            return
+            # transcriber.log("Still busy recording or transcribing.")
+            return callback_stop_recording(icon, item)  # play / stop behavior
 
         if hasattr(icon, "_recording_thread") and icon._recording_thread.is_alive():
             icon._recording_thread.join()
@@ -380,7 +380,7 @@ def create_app(micro, transcriber, other_transcribers=None, **kwargs):
     title = f"scribe :: {modeltitle}"
 
     menus = []
-    menus.append(Item(f"Record", callback_record, visible=is_not_recording))
+    menus.append(Item(f"Record", callback_record, visible=is_not_recording, default=True))
     menus.append(Item("Stop", callback_stop_recording, visible=is_recording))
     menus.append(Item("Choose Model", pystrayMenu(
         *(Item(f"{name}", callback_set_model, checked=is_checked) for name in other_transcribers_dict)))
