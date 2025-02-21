@@ -363,6 +363,7 @@ def create_app(micro, transcriber, other_transcribers=None, transcriber_options=
         if str(item) in transcriber_options:
             # toggle the option on the current transcriber
             if str(item) in icon._transcriber._frozen_options or type(getattr(icon._transcriber, str(item), None)) is not bool:
+                print("Skipped setting option", item)
                 return
             newvalue = not getattr(icon._transcriber, str(item))
             setattr(icon._transcriber, str(item), newvalue)
@@ -375,6 +376,7 @@ def create_app(micro, transcriber, other_transcribers=None, transcriber_options=
 
         else:
             kwargs[str(item)] = not kwargs[str(item)]
+            print("Option set [", item, "] to", kwargs[str(item)])
 
     def is_model_selection(item):
         return icon._model_selection
@@ -385,11 +387,15 @@ def create_app(micro, transcriber, other_transcribers=None, transcriber_options=
     def is_not_recording(item):
         return not is_recording(item) and not is_model_selection(item)
 
-    def is_checked(item):
+    def is_checked_model(item):
         return icon._transcriber.model_name == str(item)
 
     def is_checked_option(item):
-        return getattr(icon._transcriber, str(item), False) if str(item in transcriber_options) else kwargs[str(item)]
+        if not is_option_visible(item):
+            return False
+        if str(item) in transcriber_options:
+            return getattr(icon._transcriber, str(item))
+        return kwargs[str(item)]
 
     def is_option_visible(item):
         if str(item) in transcriber_options:
@@ -405,7 +411,7 @@ def create_app(micro, transcriber, other_transcribers=None, transcriber_options=
     menus.append(Item(f"Record", callback_record, visible=is_not_recording, default=True))
     menus.append(Item("Stop", callback_stop_recording, visible=is_recording))
     menus.append(Item("Choose Model", pystrayMenu(
-        *(Item(f"{name}", callback_set_model, checked=is_checked) for name in other_transcribers_dict)))
+        *(Item(f"{name}", callback_set_model, checked=is_checked_model) for name in other_transcribers_dict)))
     )
     menus.append(Item("Toggle Options", pystrayMenu(
         *(Item(f"{name}", callback_toggle_option, checked=is_checked_option, visible=is_option_visible) for name in options)))
