@@ -55,49 +55,54 @@ class DummyTranscriber:
     def __getattr__(self, item):
         return None
 
-def get_transcriber(o, prompt=True):
+whisper_models = ["tiny", "base", "small", "medium", "large", "turbo"]
+whisper_english_models = ["tiny.en", "base.en", "small.en", "medium.en"]
+whisperapi_models = ["whisper-1"]
+vosk_models = [language_config["vosk"][lang]["model"] for lang in language_config["vosk"]]
 
-    whisper_models = ["tiny", "base", "small", "medium", "large", "turbo"]
-    whisper_english_models = ["tiny.en", "base.en", "small.en", "medium.en"]
-    whisperapi_models = ["whisper-1"]
 
-    if o.dummy:
+def get_transcriber(model=None, backend=None, dummy=False, prompt=True, language=None,
+                    samplerate=None, duration=None, silence=None, silence_db=None, restart_after_silence=None,
+                    api_key=None,
+                    download_folder_vosk=None, download_folder_whisper=None, **kwargs):
+
+    if dummy:
         return DummyTranscriber("whisper", "dummy")
 
-    if o.model and not o.backend:
-        if o.model.startswith("vosk-"):
-            o.backend = "vosk"
-        elif o.model in whisper_models + whisper_english_models:
-            o.backend = "whisper"
-        elif o.model in whisperapi_models:
-            o.backend = "openaiapi"
+    if model and not backend:
+        if model.startswith("vosk-"):
+            backend = "vosk"
+        elif model in whisper_models + whisper_english_models:
+            backend = "whisper"
+        elif model in whisperapi_models:
+            backend = "openaiapi"
 
-    if o.backend:
-        backend = o.backend
+    if backend:
+        backend = backend
 
     elif not prompt:
         backend = BACKENDS[0]
 
     else:
-        backend = prompt_choices(BACKENDS, o.backend, "backend", UNAVAILABLE_BACKENDS)
+        backend = prompt_choices(BACKENDS, backend, "backend", UNAVAILABLE_BACKENDS)
 
     print(f"Selected backend: {backend}")
 
-    if o.model:
-        model = pick_specialist_model(o.model, o.language, backend)
+    if model:
+        model = pick_specialist_model(model, language, backend)
 
     else:
 
         if backend == "vosk":
             available_languages = list(language_config[backend])
-            if o.language:
-                if o.language not in available_languages:
-                    print(f"Language '{o.language}' is not pre-defined (yet) for backend '{backend}'.")
+            if language:
+                if language not in available_languages:
+                    print(f"Language '{language}' is not pre-defined (yet) for backend '{backend}'.")
                     print(f"Yet it may actually exist.")
                     print(f"Please choose the model explictly from {ansi_link('https://alphacephei.com/vosk/models')}.")
                     print(f"Or pick one of the pre-defined languages: ", " ".join(available_languages))
                     exit(1)
-                choices = [language_config[backend][o.language]["model"]]
+                choices = [language_config[backend][language]["model"]]
                 default_model = choices[0] # this is a string
 
             else:
@@ -121,10 +126,10 @@ def get_transcriber(o, prompt=True):
             else:
                 model = default_model
 
-            model = pick_specialist_model(model, o.language, backend)
+            model = pick_specialist_model(model, language, backend)
 
         elif backend == "openaiapi":
-            model = o.model or "whisper-1"
+            model = model or "whisper-1"
 
         else:
             raise ValueError(f"Unknown backend: {backend}")
@@ -135,26 +140,26 @@ def get_transcriber(o, prompt=True):
     if backend == "vosk":
         try:
             transcriber = VoskTranscriber(model_name=model,
-                                        language=o.language,
-                                        samplerate=o.samplerate,
+                                        language=language,
+                                        samplerate=samplerate,
                                         timeout=None, # vosk keeps going (no timeout)
                                         silence_duration=None, # vosk handles silences internally
-                                        model_kwargs={"download_root": o.download_folder_vosk})
+                                        model_kwargs={"download_root": download_folder_vosk})
         except Exception as error:
             print(error)
             print(f"Failed to (down)load model {model}.")
             exit(1)
 
     elif backend == "whisper":
-        transcriber = WhisperTranscriber(model_name=model, language=o.language, samplerate=o.samplerate,
-                                         timeout=o.duration, silence_duration=o.silence, silence_thresh=o.silence_db,
-                                         restart_after_silence=o.restart_after_silence,
-                                         model_kwargs={"download_root": o.download_folder_whisper})
+        transcriber = WhisperTranscriber(model_name=model, language=language, samplerate=samplerate,
+                                         timeout=duration, silence_duration=silence, silence_thresh=silence_db,
+                                         restart_after_silence=restart_after_silence,
+                                         model_kwargs={"download_root": download_folder_whisper})
 
     elif backend == "openaiapi":
-        transcriber = OpenaiAPITranscriber(model_name=model, samplerate=o.samplerate,
-                                         timeout=o.duration, silence_duration=o.silence, silence_thresh=o.silence_db,
-                                         restart_after_silence=o.restart_after_silence, api_key=o.api_key)
+        transcriber = OpenaiAPITranscriber(model_name=model, samplerate=samplerate,
+                                         timeout=duration, silence_duration=silence, silence_thresh=silence_db,
+                                         restart_after_silence=restart_after_silence, api_key=api_key)
 
 
     else:
@@ -246,7 +251,7 @@ def start_recording(micro, transcriber, clipboard=True, keyboard=False, latency=
         callback()
 
 
-def create_app(micro, transcriber, **kwargs):
+def create_app(micro, transcriber, other_transcribers=None, **kwargs):
     import pystray
     from pystray import Menu as pystrayMenu, MenuItem as Item
     from PIL import Image
@@ -266,6 +271,7 @@ def create_app(micro, transcriber, **kwargs):
         image_recording = Image.alpha_composite(image_recording.convert("RGBA"), image_writing.convert("RGBA"))
 
     def update_icon(icon, force=False):
+        transcriber = icon._transcriber
         if transcriber.recording and transcriber.waiting:
             # this is the situation with the whisper backend when the microphone is recording
             # but we wait for the speaker to speak (silence)
@@ -293,6 +299,7 @@ def create_app(micro, transcriber, **kwargs):
                 icon.update_menu()
 
     def start_monitoring(icon):
+        transcriber = icon._transcriber
         try:
             while transcriber.busy:
                 update_icon(icon)
@@ -308,8 +315,8 @@ def create_app(micro, transcriber, **kwargs):
         icon.stop()
 
     def callback_stop_recording(icon, item):
+        transcriber = icon._transcriber
         # Here we need to stop the recording thread
-
         transcriber.interrupt = True
         if hasattr(icon, "_recording_thread"):
             icon._recording_thread.join()
@@ -317,7 +324,7 @@ def create_app(micro, transcriber, **kwargs):
             icon._monitoring_thread.join()
 
     def callback_record(icon, item):
-        # kwargs["callback"] = icon.update_menu   # NOTE: the thread will finish AFTER the callback is complete
+        transcriber = icon._transcriber
         if transcriber.busy:
             transcriber.log("Still busy recording or transcribing.")
             return
@@ -334,22 +341,67 @@ def create_app(micro, transcriber, **kwargs):
         icon._monitoring_thread = threading.Thread(target=start_monitoring, args=(icon,))
         icon._monitoring_thread.start()
 
+    if other_transcribers:
+        other_transcribers_dict = {meta["model"]: meta for meta in other_transcribers}
+    else:
+        other_transcribers_dict = {}
+
+    def callback_set_model(icon, item):
+        transcriber = icon._transcriber
+        callback_stop_recording(icon, item)
+        model_name = str(item)
+        meta = other_transcribers_dict[model_name]
+        icon._transcriber = transcriber = get_transcriber(**meta)
+        icon.title = f"scribe :: {transcriber.backend} :: {transcriber.model_name}"
+        print("Set", transcriber.backend, transcriber.model_name)
+        # icon.menu.items[0].__name__ = f"Record [{str(item)}]"
+        icon._model_selection = False
+        icon.update_menu()
+        icon.notify(f"Set {transcriber.backend} {transcriber.model_name}")
+
+    def callback_info(icon, item):
+        transcriber = icon._transcriber
+        # icon.notify(f"scribe {transcriber.backend} {transcriber.model_name}")
+        title = f"""{transcriber.backend} :: {transcriber.model_name}"""
+        info = [name for name in kwargs if isinstance(kwargs[name], bool) and kwargs[name]]
+        icon.notify(" | ".join(info), title=title)
+
+    def callback_toggle_option(icon, item):
+        kwargs[str(item)] = not kwargs[str(item)]
+        callback_info(icon, item)
+
+    def is_model_selection(item):
+        return icon._model_selection
+
     def is_recording(item):
-        return transcriber.busy
+        return icon._transcriber.busy
 
     def is_not_recording(item):
-        return not is_recording(item)
+        return not is_recording(item) and not is_model_selection(item)
 
+    modeltitle = f"{transcriber.backend} :: {transcriber.model_name}"
+    title = f"scribe :: {modeltitle}"
+
+    menus = []
+    menus.append(Item(f"Record" if len(other_transcribers_dict) <= 1 else f"Record", callback_record, visible=is_not_recording))
+    menus.append(Item("Stop", callback_stop_recording, visible=is_recording))
+    menus.append(Item("Choose Model", pystrayMenu(
+        *(Item(f"{name}", callback_set_model) for name in other_transcribers_dict)))
+    )
+    menus.append(Item("Toggle Options", pystrayMenu(
+        *(Item(f"{name}", callback_toggle_option) for name in kwargs if isinstance(kwargs[name], bool))))
+    )
+    menus.append(Item(f"Info", callback_info))
+    menus.append(Item('Quit', callback_quit))
 
     # Create a menu
-    menu = pystrayMenu(
-        Item("Record", callback_record, visible=is_not_recording),
-        Item("Stop", callback_stop_recording, visible=is_recording),
-        Item('Quit', callback_quit),
-    )
+    menu = pystrayMenu(*menus)
 
     # Create the system tray icon
-    icon = pystray.Icon('scribe', image, "scribe", menu)
+    icon = pystray.Icon('scribe', image, title, menu)
+    icon._model_selection = False
+    icon._transcriber = transcriber
+    del transcriber
 
     return icon
 
@@ -368,7 +420,7 @@ def main(args=None):
 
     while True:
         if transcriber is None:
-            transcriber = get_transcriber(o, prompt=o.prompt)
+            transcriber = get_transcriber(**vars(o))
         print(f"Model [{colored(transcriber.model_name, 'light_blue', attrs=['bold'])}] from [{colored(transcriber.backend, 'light_blue', attrs=['bold'])}] selected.")
         show_output = ["clipboard", "keyboard", "output_file"]
         show_options = ["ascii", "restart_after_silence"]
@@ -482,7 +534,12 @@ def main(args=None):
             greetings = dict(
                 start_message = "Listening... Use the try icon menu to stop.",
             )
-            app = create_app(micro, transcriber, clipboard=o.clipboard, output_file=o.output_file,
+
+            app = create_app(micro, transcriber, other_transcribers=[
+                {**vars(o), "backend": "openaiapi", "model": "whisper-1"},
+                *[{**vars(o), "backend": "whisper", "model": model} for model in whisper_models],
+                *[{**vars(o), "backend": "vosk", "model": model} for model in vosk_models]],
+                             clipboard=o.clipboard, output_file=o.output_file,
                              keyboard=o.keyboard, latency=o.latency, ascii=o.ascii, **greetings)
             print("Starting app...")
             app.run()
