@@ -242,6 +242,7 @@ class OpenaiAPITranscriber(WhisperTranscriber):
     def transcribe_audio(self, audio_bytes):
         self.log("\nTranscribing")
         import io
+        import openai
         import soundfile as sf
         audio_data = np.frombuffer(audio_bytes, dtype=np.int16).flatten().astype(np.float32) / 32768.0
         # Write the audio data to an in-memory file in WAV format
@@ -249,8 +250,12 @@ class OpenaiAPITranscriber(WhisperTranscriber):
         sf.write(buffer, audio_data, self.samplerate, format='WAV')
         buffer.seek(0)
         buffer.name = "audio.wav"  # Set a filename with a valid extension
-        transcription = self.model.audio.transcriptions.create(
-            model=self.model_name,
-            file=buffer,
-        )
+        try:
+            transcription = self.model.audio.transcriptions.create(
+                model=self.model_name,
+                file=buffer,
+            )
+        except openai.BadRequestError as e:
+            self.log(f"Error: {e}")
+            return {"text": ""}
         return {"text": transcription.text}

@@ -127,7 +127,8 @@ To activate start with:
 ```bash
 scribe --app
 ```
-or toggle the app option in the interactive menu. The scribe icon will show, with Record, Stop or Quit options. The icon will change based on what the app is doing.
+or toggle the app option in the interactive menu. The scribe icon will show, with Record and other options. The icon will change based on what the app is doing. It is possible to choose from a set
+of predefined models, or to Quit and choose from the terminal before pressing Enter again.
 For the vosk model, there are only two states : recording + transcribing or Idle. For the whisper model there are three states visible from the icon: recording, transcribing and idle/waiting.
 That option requires `pystray` to be installed. This is included with the `pip install ...[all]` option. In Ubuntu the following dependencies were required to make the menus appear:
 
@@ -142,17 +143,19 @@ If you run Ubuntu (or else?) with GNOME, the script `scribe-install [...]` will 
 to make it available from the quick launch menu. Any option will be passed on to `scribe`, with the additional options `--name` and `--no-terminal`.
 `--no-terminal` means no terminal will show up, and it also implies the options `--app --no-prompt`.
 
-e.g.
+In a relatively basic form
 
 ```bash
-scribe-install
-scribe-install --name "Scribe Whisper" --backend whisper --model small --clipboard --restart-after-silence --no-prompt
-scribe-install --name "Scribe Vosk FR" --backend vosk --language fr --keyboard --clipboard --no-terminal
+scribe-install --clipboard  --api YOUROPENAIAPIKEY
 ```
-This will install three separate apps:
-- `Super + scribe` : will launch the default version with terminal prompt
-- `Super + whisper` : will launch a present version with the `small` model from `whisper` and start recording right away. You can see what is going on in the terminal and the result is ready to paste from the clipboard.
-- `Super + vosk fr` : will launch a preset version for real-time transcription in French with the `vosk` backend, and throughput to the clipboard and the keyboard, not even opening a terminal (you need to press Record in the tray icon menu to start the recording).
+(`--api` is optional and only useful if you plan to use `openaiapi` backend later on)
+
+And to make an app running outside the terminal:
+
+```bash
+scribe-install --backend openaiapi --name "Scribe App" --keyboard --clipboard --app --no-prompt --no-terminal  --api YOUROPENAIAPIKEY
+```
+This will install two separate apps (names "Scribe" and "Scribe App")
 
 
 ## Fine tuning
