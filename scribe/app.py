@@ -255,7 +255,7 @@ def start_recording(micro, transcriber, clipboard=True, keyboard=False, latency=
         callback()
 
 
-def create_app(micro, transcriber, other_transcribers=None, **kwargs):
+def create_app(micro, transcriber, other_transcribers=None, transcriber_options=[], **kwargs):
     import pystray
     from pystray import Menu as pystrayMenu, MenuItem as Item
     from PIL import Image
@@ -359,7 +359,20 @@ def create_app(micro, transcriber, other_transcribers=None, **kwargs):
 
     def callback_toggle_option(icon, item):
         callback_stop_recording(icon, item)
-        kwargs[str(item)] = not kwargs[str(item)]
+        if str(item) in transcriber_options:
+            # toggle the option on the current transcriber
+            if hasattr(icon._transcriber, str(item)):
+                newvalue = not getattr(icon._transcriber, str(item))
+                setattr(icon._transcriber, str(item), newvalue)
+                # set the option on the other transcribers as well
+                if other_transcribers:
+                    for name in other_transcribers_dict:
+                        meta = other_transcribers_dict[name]
+                        if str(item) in meta:
+                            meta[str(item)] = newvalue
+
+        else:
+            kwargs[str(item)] = not kwargs[str(item)]
 
     def is_model_selection(item):
         return icon._model_selection
@@ -374,10 +387,21 @@ def create_app(micro, transcriber, other_transcribers=None, **kwargs):
         return icon._transcriber.model_name == str(item)
 
     def is_checked_option(item):
-        return kwargs[str(item)]
+        return getattr(icon._transcriber, str(item), False) if str(item in transcriber_options) else kwargs[str(item)]
+
+    def is_option_visible(item):
+        if str(item) in transcriber_options:
+            if other_transcribers:
+                # only if it is a valid option for the transcriber
+                return str(item) in other_transcribers_dict.get(icon._transcriber.model_name, {})
+            else:
+                return True # it was passed explicitly for a single transcriber, so assume it is valid
+        return True
 
     modeltitle = f"{transcriber.backend} :: {transcriber.model_name}"
     title = f"scribe :: {modeltitle}"
+
+    options = [name for name in kwargs if isinstance(kwargs[name], bool)] + [name for name in transcriber_options if isinstance(getattr(transcriber, name), bool)]
 
     menus = []
     menus.append(Item(f"Record", callback_record, visible=is_not_recording, default=True))
@@ -386,7 +410,7 @@ def create_app(micro, transcriber, other_transcribers=None, **kwargs):
         *(Item(f"{name}", callback_set_model, checked=is_checked) for name in other_transcribers_dict)))
     )
     menus.append(Item("Toggle Options", pystrayMenu(
-        *(Item(f"{name}", callback_toggle_option, checked=is_checked_option) for name in kwargs if isinstance(kwargs[name], bool))))
+        *(Item(f"{name}", callback_toggle_option, checked=is_checked_option, visible=is_option_visible) for name in options)))
     )
     menus.append(Item('Quit', callback_quit))
 
@@ -536,7 +560,8 @@ def main(args=None):
                 *[{**vars(o), "backend": "whisper", "model": model} for model in o.whisper_models],
                 *[{**vars(o), "backend": "vosk", "model": model} for model in o.vosk_models]],
                              clipboard=o.clipboard, output_file=o.output_file,
-                             keyboard=o.keyboard, latency=o.latency, ascii=o.ascii, **greetings)
+                             keyboard=o.keyboard, latency=o.latency, ascii=o.ascii,
+                             transcriber_options=["restart_after_silence"], **greetings)
             print("Starting app...")
             app.run()
         else:
