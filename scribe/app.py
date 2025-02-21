@@ -355,6 +355,7 @@ def create_app(micro, transcriber, other_transcribers=None, **kwargs):
         icon.update_menu()
 
     def callback_toggle_option(icon, item):
+        callback_stop_recording(icon, item)
         kwargs[str(item)] = not kwargs[str(item)]
 
     def is_model_selection(item):
