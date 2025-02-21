@@ -31,7 +31,7 @@ Install PortAudio library (required by `sounddevice`) and xclip library (require
 sudo apt-get install portaudio19-dev xclip
 ```
 
-See additional requirements for the [icon tray](#system-tray-icon-experimental) and [keyboard](#virtual-keyboard-experimental) options. The python dependencies should be dealt with automatically:
+See additional requirements for the [icon tray](#system-tray-icon-experimental-) and [keyboard](#virtual-keyboard-experimental) options. The python dependencies should be dealt with automatically:
 
 ```bash
 pip install scribe-cli[all]
