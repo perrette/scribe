@@ -31,6 +31,8 @@ Install PortAudio library (required by `sounddevice`) and xclip library (require
 sudo apt-get install portaudio19-dev xclip
 ```
 
+(`portaudio19-dev` becomes `portaudio ` with homebrew)
+
 See additional requirements for the [icon tray](#system-tray-icon-experimental-) and [keyboard](#virtual-keyboard-experimental) options. The python dependencies should be dealt with automatically:
 
 ```bash
@@ -62,6 +64,7 @@ pip install openai-whisper   # FAILS IN PYTHON 3.13 on Ubuntu
 # PortAUDIO (sounddevice)
 pip install sounddevice # automatically installed as required dependency
 sudo apt-get install portaudio19-dev
+# MAC OS: brew install portaudio
 
 # clipboard
 pip install pyperclip  # automatically installed as required dependency
@@ -71,7 +74,6 @@ sudo apt-get install xclip
 pip install pynput
 
 # app mode
-# Uncommand the line below for Ubuntu !
 sudo apt install libcairo-dev libgirepository1.0-dev gir1.2-appindicator3-0.1  # Ubuntu ONLY (not needed on MacOS)
 pip install PyGObject # Ubuntu ONLY (not needed on MacOS)
 pip install pystray
