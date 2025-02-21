@@ -137,6 +137,8 @@ sudo apt install libcairo-dev libgirepository1.0-dev gir1.2-appindicator3-0.1
 pip install PyGObject
 ```
 
+<img src=https://github.com/user-attachments/assets/4c97f4b1-1a65-4d49-9f5a-a9f4287cfa5a width=300px>
+
 ## Start as an application in GNOME
 
 If you run Ubuntu (or else?) with GNOME, the script `scribe-install [...]` will create a `scribe.desktop` file and place it under `$HOME/.local/share/applications`
