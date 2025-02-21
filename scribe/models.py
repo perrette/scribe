@@ -16,6 +16,9 @@ HOME = os.environ.get('HOME', os.path.expanduser('~'))
 XDG_CACHE_HOME = os.environ.get('XDG_CACHE_HOME', os.path.join(HOME, '.cache'))
 VOSK_MODELS_FOLDER = os.path.join(XDG_CACHE_HOME, "vosk")
 
+class SilenceDetected(Exception):
+    pass
+
 class StopRecording(Exception):
     pass
 
@@ -51,7 +54,29 @@ class AbstractTranscriber:
         return self.timeout is not None and time.time() - self.start_time > self.timeout
 
     def transcribe_realtime_audio(self, audio_bytes=b""):
-        self.audio_buffer += audio_bytes
+
+        # Vérifier si le segment est un silence
+        if is_silent(audio_bytes, self.silence_thresh):
+            self.silence_buffer += audio_bytes
+            silence_duration = time.time() - self.last_sound_time
+            self.waiting = self.silence_duration is not None and silence_duration >= self.silence_duration
+
+            if self.waiting and len(self.audio_buffer) > 0:
+                if self.restart_after_silence:
+                    raise SilenceDetected("Silence detected: {:.2f} seconds".format(silence_duration))
+                else:
+                    raise StopRecording("Silence detected: {:.2f} seconds".format(silence_duration))
+
+        else:
+            self.last_sound_time = time.time()
+            self.waiting = False
+            silence_buffer_data = np.frombuffer(self.silence_buffer, dtype=np.int16)
+            # add 0.5 seconds worth of silent data back to the audio buffer
+            half_a_second = 0.5
+            length_of_half_a_second = int(half_a_second * self.samplerate)
+            self.audio_buffer += silence_buffer_data[-length_of_half_a_second:].tobytes() + audio_bytes
+            self.silence_buffer = b''
+
         return {"partial": f"{len(self.audio_buffer)} bytes received (duration: {self.get_elapsed()} seconds)"}
 
     def transcribe_audio(self, audio_data):
@@ -60,6 +85,7 @@ class AbstractTranscriber:
     def reset(self):
         self.audio_buffer = b''
         self.start_time = time.time()
+        self.silence_buffer = b''
 
     def log(self, text):
         if text.startswith("\n"):
@@ -83,7 +109,7 @@ class AbstractTranscriber:
             self.last_sound_time = time.time() - self.silence_duration
         else:
             self.last_sound_time = time.time()
-        previous_waiting = self.waiting
+        # self.silence_buffer = b'' # already reset in self.reset()
 
         try:
 
@@ -94,35 +120,20 @@ class AbstractTranscriber:
                     while not microphone.q.empty():
                         data = microphone.q.get()
 
-                        # Vérifier si le segment est un silence
-                        if is_silent(data, self.silence_thresh):
-                            silence_duration = time.time() - self.last_sound_time
-
-                            previous_waiting = self.waiting
-                            self.waiting = self.silence_duration is not None and silence_duration >= self.silence_duration
-
-                            if self.waiting and len(self.audio_buffer) > 0:
-                                if self.restart_after_silence:
-                                    self.recording = False # for the system tray icon
-                                    result = self.finalize()
-                                    microphone.q.queue.clear()
-                                    self.reset()
-                                    yield result
-                                    self.recording = True # for the system tray icon
-                                else:
-                                    raise StopRecording("Silence detected: {:.2f} seconds".format(silence_duration))
-
-                        else:
-                            self.last_sound_time = time.time()
-                            self.waiting = False
-
-                        # don't accumulate very long silences
-                        if not self.waiting:
+                        # leave it to each transcriber to handle the silence in audio data
+                        try:
                             yield self.transcribe_realtime_audio(data)
 
-                        else:
-                            if not previous_waiting:
-                                self.log("Silence detected...waiting for more audio")
+                        # This exception triggers a pause in recording to allow for a transcription of the audio buffer
+                        except SilenceDetected as e:
+                            self.log(str(e))
+                            self.recording = False # for the system tray icon
+                            result = self.finalize()
+                            microphone.q.queue.clear()
+                            self.reset()
+                            yield result
+                            self.recording = True # for the system tray icon
+                            self.start_time = time.time() # reset the start time to avoid timeout
 
                         if self.is_overtime():
                             raise StopRecording("Overtime: {:.2f} seconds".format(self.get_elapsed()))
@@ -225,7 +236,7 @@ class WhisperTranscriber(AbstractTranscriber):
         if len(self.audio_buffer) == 0:
             return {"text": ""}
         result = self.transcribe_audio(self.audio_buffer)
-        self.audio_buffer = b''
+        self.reset()
         return result
 
 
