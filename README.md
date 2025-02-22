@@ -1,7 +1,7 @@
 [![pypi](https://img.shields.io/pypi/v/scribe-cli)](https://pypi.org/project/scribe-cli)
 ![](https://img.shields.io/python/required-version-toml?tomlFilePath=https%3A%2F%2Fraw.githubusercontent.com%2Fperrette%2Fscribe%2Frefs%2Fheads%2Fmain%2Fpyproject.toml)
 
-# Scribe  <img src="scribe_data/share/icon.png" width=48px>
+# Scribe  <img src="https://github.com/perrette/bard/raw/main/bard_data/share/icon.png" width=48px>
 
 `scribe` is a speech recognition tool that provides real-time transcription using cutting-edge AI models, with the goal of serving as a virtual keyboard on a computer.
 
@@ -161,7 +161,7 @@ sudo HOME=$HOME XDG_RUNTIME_DIR=$XDG_RUNTIME_DIR PYNPUT_BACKEND_KEYBOARD=uinput 
 ```
 You're on the right path :)
 
-## System tray icon (experimental) <img src="scribe_data/share/icon.png" width=48px>
+## System tray icon (experimental) <img src="https://github.com/perrette/bard/raw/main/bard_data/share/icon.png" width=48px>
 
 <img src=https://github.com/user-attachments/assets/4c97f4b1-1a65-4d49-9f5a-a9f4287cfa5a width=300px>
 
