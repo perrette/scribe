@@ -32,10 +32,13 @@ classifiers = [
 ]
 
 keywords = [
+    "speech-to-text",
     "speech recognition",
     "transcription",
-    "AI",
     "language",
+    "AI",
+    "local",
+    "API",
     "vosk",
     "whisper",
     "openai",
