@@ -413,9 +413,10 @@ def create_app(micro, transcriber, other_transcribers=None, transcriber_options=
     menus.append(Item("Choose Model", pystrayMenu(
         *(Item(f"{name}", callback_set_model, checked=is_checked_model) for name in other_transcribers_dict)))
     )
-    menus.append(Item("Toggle Options", pystrayMenu(
-        *(Item(f"{name}", callback_toggle_option, checked=is_checked_option, visible=is_option_visible) for name in options)))
-    )
+    if options:
+        menus.append(Item("Toggle Options", pystrayMenu(
+            *(Item(f"{name}", callback_toggle_option, checked=is_checked_option, visible=is_option_visible) for name in options)))
+        )
     menus.append(Item('Quit', callback_quit))
 
     # Create a menu
@@ -567,7 +568,7 @@ def main(args=None):
                 *[{**_filter_options(vars(o), exclude=VoskTranscriber._frozen_options), "backend": "vosk", "model": model} for model in o.vosk_models]],
                              clipboard=o.clipboard, output_file=o.output_file,
                              keyboard=o.keyboard, latency=o.latency, ascii=o.ascii,
-                             transcriber_options=["restart_after_silence"], **greetings)
+                             transcriber_options=[], **greetings)
             print("Starting app...")
             app.run()
         else:
