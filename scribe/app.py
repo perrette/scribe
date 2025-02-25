@@ -202,8 +202,8 @@ def get_parser():
 
     group = parser.add_argument_group("whisper options")
     group.add_argument("--duration", default=120, type=float, help="Max duration of the whisper recording (default %(default)s s)")
-    group.add_argument("--silence", default=2, type=float, help="silence duration (default %(default)s s)")
-    group.add_argument("--silence-db", default=-40, type=float, help="silence magnitude in decibel (default %(default)s db)")
+    group.add_argument("--silence", default=120, type=float, help="silence duration (default %(default)s s)")
+    group.add_argument("--silence-db", default=-200, type=float, help="silence magnitude in decibel (default %(default)s db)")
     group.add_argument("-a", "--restart-after-silence", action="store_true", help="Restart the recording after a transcription triggered by a silence")
     group.add_argument("--download-folder-whisper", help="Folder to store Whisper models.")
 

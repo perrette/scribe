@@ -99,8 +99,8 @@ You can interrupt the recording via Ctrl + C and start again or change model.
 
 The default (`whisper`) is excellent at transcribing a full-length audio sequences in [many languages](https://github.com/openai/whisper?tab=readme-ov-file#available-models-and-languages). It is really impressive,
 but it cannot do real-time, and depending on the model can have relatively long execution time, especially with the `turbo` model (at least on my laptop with CPU only). The `small` model is also excellent and runs much faster. It is selected as default in `scribe` for that reason.
-With the `whisper` model the registration stops after a 2-second silence is detected. You can also stop the registration manually before the transcription occurs (Ctrl + C or Stop in the `--app` mode).
-By default, the recording will only last 120 seconds. You can fine-tune this behaviour via the `--silence`, `--duration` and `--restart-after-silence` parameters.
+With the `whisper` model (`whisper` and `openaiapi` backends) the registration continues for 2 minutes until you stop the registration manually to trigger the transcription (Stop in the app, Ctrl + C in the terminal).
+These parameters can be changed. There is also the possibility to interrupt after a silence is detected. You would do: `--silence -40 --duration-duration 2` to interrupt the registration when a silence (less than -40 db recorded) lasts for more than 2 seconds. This is experimental, and the default is an exceedingly low silence threshold of -200 db and a silence duration of 120 s to effectively disable that feature and keep full manual control.
 
 The `vosk` backend is much faster and very good at doing real-time transcription for one language, but tended to make more mistakes in my tests and it does not do punctuation.
 It becomes really powerful when used for longer or interactive typing session with the [keyboard](#virtual-keyboard-experimental) option, e.g. to make notes or chat with an AI.
