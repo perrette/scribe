@@ -332,10 +332,10 @@ def create_app(micro, transcriber, other_transcribers=None, transcriber_options=
             # transcriber.log("Still busy recording or transcribing.")
             return callback_stop_recording(icon, item)  # play / stop behavior
 
-        if hasattr(icon, "_recording_thread") and icon._recording_thread.is_alive():
+        if hasattr(icon, "_recording_thread") and icon._recording_thread is not None and icon._recording_thread.is_alive():
             icon._recording_thread.join()
 
-        if hasattr(icon, "_monitoring_thread") and icon._monitoring_thread.is_alive():
+        if hasattr(icon, "_monitoring_thread") and icon._monitoring_thread is not None and icon._monitoring_thread.is_alive():
             icon._monitoring_thread.join()
 
         transcriber.busy = True  # this is a hack to prevent race conditions between the below threads
