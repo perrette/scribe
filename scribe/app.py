@@ -221,7 +221,7 @@ def get_parser():
 
 
 # Commencer l'enregistrement
-def start_recording(micro, transcriber, clipboard=True, keyboard=False, latency=0, ascii=False, output_file=None, callback=None, **greetings):
+def start_recording(micro, transcriber, icon=None, clipboard=True, keyboard=False, latency=0, ascii=False, output_file=None, callback=None, **greetings):
 
     if keyboard:
         from scribe.keyboard import type_text
@@ -234,6 +234,8 @@ def start_recording(micro, transcriber, clipboard=True, keyboard=False, latency=
     fulltext = ""
 
     for result in transcriber.start_recording(micro, **greetings):
+        if icon is not None:
+            icon._recording_started = True
 
         if result.get('text'):
             clear_line()
@@ -290,7 +292,7 @@ def create_app(micro, transcriber, other_transcribers=None, transcriber_options=
                 icon.update_menu()
 
         else:
-            if force or getattr(icon, "_icon_label", None) != None:
+            if force or getattr(icon, "_icon_label", None) is not None:
                 icon.icon = image
                 icon._icon_label = None
                 icon.update_menu()
@@ -298,7 +300,7 @@ def create_app(micro, transcriber, other_transcribers=None, transcriber_options=
     def start_monitoring(icon):
         transcriber = icon._transcriber
         try:
-            while transcriber.busy:
+            while transcriber.busy and getattr(icon, "_recording_started", False):
                 update_icon(icon)
                 time.sleep(0.1)
 
@@ -319,6 +321,10 @@ def create_app(micro, transcriber, other_transcribers=None, transcriber_options=
             icon._recording_thread.join()
         if hasattr(icon, "_monitoring_thread"):
             icon._monitoring_thread.join()
+        # Clean up thread references
+        icon._recording_thread = None
+        icon._monitoring_thread = None
+        icon._recording_started = False
 
     def callback_record(icon, item):
         transcriber = icon._transcriber
@@ -333,7 +339,8 @@ def create_app(micro, transcriber, other_transcribers=None, transcriber_options=
             icon._monitoring_thread.join()
 
         transcriber.busy = True  # this is a hack to prevent race conditions between the below threads
-        icon._recording_thread = threading.Thread(target=start_recording, args=(micro, transcriber), kwargs=kwargs)
+        icon._recording_started = False
+        icon._recording_thread = threading.Thread(target=start_recording, args=(micro, transcriber, icon), kwargs=kwargs)
         icon._recording_thread.start()
         icon._monitoring_thread = threading.Thread(target=start_monitoring, args=(icon,))
         icon._monitoring_thread.start()
@@ -408,8 +415,8 @@ def create_app(micro, transcriber, other_transcribers=None, transcriber_options=
     options = [name for name in kwargs if isinstance(kwargs[name], bool)] + [name for name in transcriber_options if isinstance(getattr(transcriber, name), bool)]
 
     menus = []
-    menus.append(Item(f"Record", callback_record, visible=is_not_recording, default=True))
-    menus.append(Item("Stop", callback_stop_recording, visible=is_recording))
+    menus.append(Item("Record", callback_record, visible=is_not_recording, default=True))
+    menus.append(Item("Stop", callback_stop_recording, visible=is_recording, default=True))
     menus.append(Item("Choose Model", pystrayMenu(
         *(Item(f"{name}", callback_set_model, checked=is_checked_model) for name in other_transcribers_dict)))
     )
