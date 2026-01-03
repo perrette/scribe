@@ -57,6 +57,11 @@
                 from = final.pkgs.python3Packages.evdev;
                 prev = prev.evdev;
               };
+              # srt doesn't declare setuptools as build dependency
+              srt = hacks.nixpkgsPrebuilt {
+                from = final.pkgs.python3Packages.srt;
+                prev = prev.srt;
+              };
             };
         in (pkgs.callPackage pyproject-nix.build.packages {
           inherit python;
@@ -72,7 +77,7 @@
           pkgs = nixpkgs.legacyPackages.${system};
           pythonSet = pythonSets.${system}.overrideScope editableOverlay;
           virtualenv = pythonSet.mkVirtualEnv "scribe-dev-env" {
-            scribe = [ "app" "keyboard" ];
+            scribe = [ "app" "keyboard" "vosk" ];
           };
         in {
           default = pkgs.mkShell {
@@ -91,7 +96,7 @@
 
       packages = forAllSystems (system: {
         default = pythonSets.${system}.mkVirtualEnv "scribe-env" {
-          scribe = [ "app" "keyboard" ];
+          scribe = [ "app" "keyboard" "vosk" ];
         };
       });
     };
