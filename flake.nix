@@ -39,11 +39,26 @@
         let
           pkgs = nixpkgs.legacyPackages.${system};
           python = pkgs.python313;
+          pyprojectOverrides = final: prev:
+            let hacks = final.pkgs.callPackage pyproject-nix.build.hacks { };
+            in {
+              # Use nixpkgs versions to avoid building from source
+              pycairo = hacks.nixpkgsPrebuilt {
+                from = final.pkgs.python3Packages.pycairo;
+                prev = prev.pycairo;
+              };
+              # pygobject in PyPI is pygobject3 in nixpkgs
+              pygobject = hacks.nixpkgsPrebuilt {
+                from = final.pkgs.python3Packages.pygobject3;
+                prev = prev.pygobject;
+              };
+            };
         in (pkgs.callPackage pyproject-nix.build.packages {
           inherit python;
         }).overrideScope (lib.composeManyExtensions [
           pyproject-build-systems.overlays.wheel
           overlay
+          pyprojectOverrides
         ]));
 
     in {
@@ -52,14 +67,40 @@
           pkgs = nixpkgs.legacyPackages.${system};
           pythonSet = pythonSets.${system}.overrideScope editableOverlay;
           virtualenv =
-            pythonSet.mkVirtualEnv "scribe-dev-env" workspace.deps.default;
+            pythonSet.mkVirtualEnv "scribe-dev-env" { scribe = [ "app" ]; };
+          gtkDeps = with pkgs; [
+            gcc
+            pkg-config
+            cairo
+            glib
+            gobject-introspection
+            gtk3
+            gdk-pixbuf
+            pango
+            libayatana-appindicator
+          ];
         in {
           default = pkgs.mkShell {
-            packages = [ virtualenv pkgs.uv ];
+            packages = [ virtualenv pkgs.uv ] ++ gtkDeps;
             env = {
               UV_NO_SYNC = "1";
               UV_PYTHON = pythonSet.python.interpreter;
               UV_PYTHON_DOWNLOADS = "never";
+              GI_TYPELIB_PATH = lib.makeSearchPath "lib/girepository-1.0" [
+                pkgs.gobject-introspection
+                pkgs.gtk3
+                pkgs.gdk-pixbuf
+                pkgs.pango
+                pkgs.libayatana-appindicator
+              ];
+              PKG_CONFIG_PATH =
+                lib.makeSearchPath "lib/pkgconfig" [ pkgs.glib ];
+              XDG_DATA_DIRS = lib.makeSearchPath "share" [
+                pkgs.gtk3
+                pkgs.gdk-pixbuf
+                pkgs.pango
+                pkgs.libayatana-appindicator
+              ];
             };
             shellHook = ''
               unset PYTHONPATH
@@ -69,8 +110,9 @@
         });
 
       packages = forAllSystems (system: {
-        default =
-          pythonSets.${system}.mkVirtualEnv "scribe-env" workspace.deps.default;
+        default = pythonSets.${system}.mkVirtualEnv "scribe-env" {
+          scribe = [ "app" ];
+        };
       });
     };
 }
