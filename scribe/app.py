@@ -317,6 +317,9 @@ def create_app(micro, transcriber, other_transcribers=None, transcriber_options=
         transcriber = icon._transcriber
         # Here we need to stop the recording thread
         transcriber.interrupt = True
+        transcriber.recording = False
+        transcriber.busy = False
+        update_icon(icon)
         if hasattr(icon, "_recording_thread"):
             icon._recording_thread.join()
         if hasattr(icon, "_monitoring_thread"):
