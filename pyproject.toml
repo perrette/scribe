@@ -68,3 +68,10 @@ Homepage = "https://github.com/perrette/scribe"
 [project.scripts]
 scribe = "scribe.app:main"
 scribe-install = "scribe.install_desktop:main"
+
+
+[tool.ruff]
+force-exclude = true
+
+[tool.ruff.format]
+exclude = ["**"]
