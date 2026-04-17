@@ -40,6 +40,7 @@ class AbstractTranscriber:
         self.busy = False
         self.waiting = False
         self.interrupt = False
+        self.cancelled = False
         if logger is None:
             import logging
             logging.basicConfig(level=logging.INFO)
@@ -105,6 +106,7 @@ class AbstractTranscriber:
 
         self.reset()
         self.interrupt = False
+        self.cancelled = False
         self.recording = True
         self.waiting = True
         self.busy = True
@@ -149,8 +151,13 @@ class AbstractTranscriber:
         finally:
             self.waiting = False
             self.recording = False
-            result = self.finalize()
-            microphone.q.queue.clear()
+            if self.cancelled:
+                self.reset()
+                microphone.q.queue.clear()
+                result = {"text": ""}
+            else:
+                result = self.finalize()
+                microphone.q.queue.clear()
             self.busy = False
             yield result
 

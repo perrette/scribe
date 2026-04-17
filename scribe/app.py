@@ -320,6 +320,11 @@ def create_app(micro, transcriber, other_transcribers=None, transcriber_options=
         if hasattr(icon, "_monitoring_thread"):
             icon._monitoring_thread.join()
 
+    def callback_cancel_recording(icon, item):
+        transcriber = icon._transcriber
+        transcriber.cancelled = True
+        callback_stop_recording(icon, item)
+
     def callback_record(icon, item):
         transcriber = icon._transcriber
         if transcriber.busy:
@@ -410,6 +415,7 @@ def create_app(micro, transcriber, other_transcribers=None, transcriber_options=
     menus = []
     menus.append(Item(f"Record", callback_record, visible=is_not_recording, default=True))
     menus.append(Item("Stop", callback_stop_recording, visible=is_recording))
+    menus.append(Item("Cancel", callback_cancel_recording, visible=is_recording))
     menus.append(Item("Choose Model", pystrayMenu(
         *(Item(f"{name}", callback_set_model, checked=is_checked_model) for name in other_transcribers_dict)))
     )
