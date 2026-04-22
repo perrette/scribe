@@ -2,11 +2,18 @@ from pathlib import Path
 import tomllib
 import re
 import time
+import os
+import signal
 import argparse
 from typing import Iterable
 from scribe.audio import Microphone
 from scribe.util import print_partial, clear_line, prompt_choices, ansi_link, colored
 from scribe.models import VoskTranscriber, WhisperTranscriber, OpenaiAPITranscriber
+
+
+def _pidfile_path():
+    runtime_dir = os.environ.get("XDG_RUNTIME_DIR") or "/tmp"
+    return os.path.join(runtime_dir, "scribe.pid")
 
 with open(Path(__file__).parent / "models.toml", "rb") as f:
     language_config_default = tomllib.load(f)
@@ -194,6 +201,8 @@ def get_parser():
     group.add_argument("-c", "--clipboard", dest="clipboard", action="store_true")
     # group.add_argument("--no-clipboard", dest="clipboard", action="store_false", help=argparse.SUPPRESS)
     group.add_argument("-k", "--keyboard", action="store_true")
+    group.add_argument("-p", "--auto-paste", action="store_true",
+                       help="After transcription, synthesize Ctrl+V (Cmd+V on macOS) to paste into the focused app. Requires --clipboard. Ignored if --keyboard is set.")
     group.add_argument("-o", "--output-file")
 
     group = parser.add_argument_group("keyboard options")
@@ -221,7 +230,7 @@ def get_parser():
 
 
 # Commencer l'enregistrement
-def start_recording(micro, transcriber, clipboard=True, keyboard=False, latency=0, ascii=False, output_file=None, callback=None, **greetings):
+def start_recording(micro, transcriber, clipboard=True, keyboard=False, auto_paste=False, latency=0, ascii=False, output_file=None, callback=None, **greetings):
 
     if keyboard:
         from scribe.keyboard import type_text
@@ -251,6 +260,14 @@ def start_recording(micro, transcriber, clipboard=True, keyboard=False, latency=
 
         else:
             print_partial(result.get('partial', ''))
+
+    if auto_paste and clipboard and not keyboard and fulltext.strip():
+        import sys
+        from pynput.keyboard import Controller, Key
+        time.sleep(0.1)  # let clipboard settle (xclip/wl-copy are async)
+        kb = Controller()
+        modifier = Key.cmd if sys.platform == "darwin" else Key.ctrl
+        kb.press(modifier); kb.press('v'); kb.release('v'); kb.release(modifier)
 
     if callback:
         callback()
@@ -309,12 +326,24 @@ def create_app(micro, transcriber, other_transcribers=None, transcriber_options=
         icon.visible = False
         ## Here we need to stop the recording thread
         callback_stop_recording(icon, item)
+        _join_recording_threads(icon)
+        _remove_pidfile()
         icon.stop()
+
+    def _remove_pidfile():
+        try:
+            os.unlink(_pidfile_path())
+        except FileNotFoundError:
+            pass
 
     def callback_stop_recording(icon, item):
         transcriber = icon._transcriber
-        # Here we need to stop the recording thread
+        # Signal the recording thread to stop. Do NOT join here: that would block
+        # the GTK main loop, preventing the monitoring thread's icon updates from
+        # being rendered until transcription completes.
         transcriber.interrupt = True
+
+    def _join_recording_threads(icon):
         if hasattr(icon, "_recording_thread"):
             icon._recording_thread.join()
         if hasattr(icon, "_monitoring_thread"):
@@ -354,6 +383,7 @@ def create_app(micro, transcriber, other_transcribers=None, transcriber_options=
             transcriber.log(f"Already using model {str(item)}")
             return
         callback_stop_recording(icon, item)
+        _join_recording_threads(icon)
         model_name = str(item)
         meta = other_transcribers_dict[model_name]
         icon._transcriber = transcriber = get_transcriber(**meta)
@@ -365,6 +395,7 @@ def create_app(micro, transcriber, other_transcribers=None, transcriber_options=
 
     def callback_toggle_option(icon, item):
         callback_stop_recording(icon, item)
+        _join_recording_threads(icon)
         if str(item) in transcriber_options:
             # toggle the option on the current transcriber
             if str(item) in icon._transcriber._frozen_options or type(getattr(icon._transcriber, str(item), None)) is not bool:
@@ -434,6 +465,16 @@ def create_app(micro, transcriber, other_transcribers=None, transcriber_options=
     icon._transcriber = transcriber
     del transcriber
 
+    pid_path = _pidfile_path()
+    with open(pid_path, "w") as f:
+        f.write(str(os.getpid()))
+    os.chmod(pid_path, 0o600)
+
+    if hasattr(signal, "SIGUSR1"):
+        signal.signal(signal.SIGUSR1, lambda *_: callback_record(icon, None))
+    if hasattr(signal, "SIGUSR2"):
+        signal.signal(signal.SIGUSR2, lambda *_: icon._transcriber.busy and callback_cancel_recording(icon, None))
+
     return icon
 
 def _filter_options(d: dict, exclude: Iterable) -> dict:
@@ -455,7 +496,7 @@ def main(args=None):
         if transcriber is None:
             transcriber = get_transcriber(**vars(o))
         print(f"Model [{colored(transcriber.model_name, 'light_blue', attrs=['bold'])}] from [{colored(transcriber.backend, 'light_blue', attrs=['bold'])}] selected.")
-        show_output = ["clipboard", "keyboard", "output_file"]
+        show_output = ["clipboard", "keyboard", "auto_paste", "output_file"]
         show_options = ["ascii", "restart_after_silence"]
         activated_output = [colored(option if type(getattr(o, option)) is bool else f'{option}={getattr(o, option)}', 'light_blue') for option in show_output if getattr(o, option)]
         activated_options = [colored(option if type(getattr(o, option)) is bool else f'{option}={getattr(o, option)}', 'light_blue') for option in show_options if getattr(o, option)]
@@ -573,7 +614,7 @@ def main(args=None):
                 *[{**vars(o), "backend": "whisper", "model": model} for model in o.whisper_models],
                 *[{**_filter_options(vars(o), exclude=VoskTranscriber._frozen_options), "backend": "vosk", "model": model} for model in o.vosk_models]],
                              clipboard=o.clipboard, output_file=o.output_file,
-                             keyboard=o.keyboard, latency=o.latency, ascii=o.ascii,
+                             keyboard=o.keyboard, auto_paste=o.auto_paste, latency=o.latency, ascii=o.ascii,
                              transcriber_options=[], **greetings)
             print("Starting app...")
             app.run()
@@ -582,7 +623,7 @@ def main(args=None):
                 start_message = "Listening... Press Ctrl+C to stop.",
             )
             start_recording(micro, transcriber, clipboard=o.clipboard, output_file=o.output_file,
-                            keyboard=o.keyboard, latency=o.latency, ascii=o.ascii, **greetings)
+                            keyboard=o.keyboard, auto_paste=o.auto_paste, latency=o.latency, ascii=o.ascii, **greetings)
 
         # if we arrived so far, that means we pressed Ctrl + C anyway, and need Enter to move on.
         # So we leave the wider range of options to change the model.
