@@ -3,7 +3,7 @@ requires = ["setuptools>=61.0", "setuptools_scm[toml]>=6.2", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "scribe-cli"
+name = "scribe"
 dynamic = ["version"]
 description = "scribe is a local speech recognition tool that provides real-time transcription using vosk and whisper AI, with the goal of serving as a virtual keyboard on a computer"
 authors = [
@@ -53,6 +53,12 @@ vosk = ["vosk"]
 app = ["pystray", "PyGObject"]
 openai = ["openai", "soundfile"]
 all = ["pynput", "openai-whisper", "openai", "soundfile", "vosk", "pystray"]
+
+[tool.uv]
+dev-dependencies = []
+
+[tool.uv.extra-build-dependencies]
+pycairo = ["mesonpy"]
 
 
 [tool.setuptools]
