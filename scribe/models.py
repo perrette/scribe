@@ -158,8 +158,10 @@ class AbstractTranscriber:
             else:
                 result = self.finalize()
                 microphone.q.queue.clear()
-            self.busy = False
+            # Yield before clearing busy so the consumer can finish writing to
+            # clipboard / keyboard / file while the icon still shows "busy".
             yield result
+            self.busy = False
 
         self.log(stop_message)
 
