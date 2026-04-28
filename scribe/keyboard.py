@@ -33,14 +33,18 @@ def paste_text():
         keyboard.release(Key.ctrl)
 
 def safe_type_text(text):
-    """I got key errors with the uinput mode, so I'm using unidecode to convert
-    the text to ASCII before typing it."""
+    """Some characters cannot be synthesized by the active pynput backend
+    (uinput raises KeyError; xorg raises Controller.InvalidKeyException for
+    non-Latin scripts like CJK). Fall back to unidecode, then to skipping."""
     try:
         keyboard.type(text)
-    except KeyError:
+    except (KeyError, Controller.InvalidKeyException):
         asciitext = unidecode.unidecode(text)
-        logging.warning(f"Key error with {text} -> convert to {asciitext}")
-        keyboard.type(asciitext)
+        logging.warning(f"Cannot type {text!r} -> convert to {asciitext!r}")
+        try:
+            keyboard.type(asciitext)
+        except (KeyError, Controller.InvalidKeyException):
+            logging.warning(f"Skipping untypable text {text!r}")
 
 def type_text(text, interval=0, paste=False, ascii=False):
     # Simulate typing a string
