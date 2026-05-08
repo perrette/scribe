@@ -367,7 +367,16 @@ def create_app(micro, transcriber, other_transcribers=None, transcriber_options=
             icon._monitoring_thread.join()
 
         transcriber.busy = True  # this is a hack to prevent race conditions between the below threads
-        icon._recording_thread = threading.Thread(target=start_recording, args=(micro, transcriber), kwargs=kwargs)
+        def _safe_start_recording():
+            try:
+                start_recording(micro, transcriber, **kwargs)
+            except Exception as exc:
+                transcriber.log(f"Recording thread error: {exc!r}")
+            finally:
+                # Ensure the icon never gets stuck if an unhandled error escaped.
+                transcriber.recording = False
+                transcriber.busy = False
+        icon._recording_thread = threading.Thread(target=_safe_start_recording)
         icon._recording_thread.start()
         icon._monitoring_thread = threading.Thread(target=start_monitoring, args=(icon,))
         icon._monitoring_thread.start()

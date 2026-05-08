@@ -86,6 +86,9 @@ class AbstractTranscriber:
     def transcribe_audio(self, audio_data):
         raise NotImplementedError()
 
+    def finalize(self):
+        raise NotImplementedError()
+
     def reset(self):
         self.audio_buffer = b''
         self.start_time = time.time()
@@ -133,7 +136,11 @@ class AbstractTranscriber:
                         except SilenceDetected as e:
                             self.log(str(e))
                             self.recording = False # for the system tray icon
-                            result = self.finalize()
+                            try:
+                                result = self.finalize()
+                            except Exception as exc:
+                                self.log(f"Transcription error: {exc!r}")
+                                result = {"text": ""}
                             microphone.q.queue.clear()
                             self.reset()
                             yield result
@@ -156,7 +163,12 @@ class AbstractTranscriber:
                 microphone.q.queue.clear()
                 result = {"text": ""}
             else:
-                result = self.finalize()
+                try:
+                    result = self.finalize()
+                except Exception as exc:
+                    self.log(f"Transcription error: {exc!r}")
+                    result = {"text": ""}
+                    self.reset()
                 microphone.q.queue.clear()
             # Yield before clearing busy so the consumer can finish writing to
             # clipboard / keyboard / file while the icon still shows "busy".
