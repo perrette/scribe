@@ -8,7 +8,8 @@ import argparse
 from typing import Iterable
 from scribe.audio import Microphone
 from scribe.util import print_partial, clear_line, prompt_choices, ansi_link, colored
-from scribe.models import VoskTranscriber, WhisperTranscriber, OpenaiAPITranscriber
+from scribe.backends import BACKENDS, available_backends, probe_backend, get_transcriber as _build_transcriber
+from scribe.backends.vosk import VoskTranscriber
 from scribe.session import RecordingSession
 
 
@@ -33,7 +34,6 @@ def get_default_backend():
         except ImportError:
             raise ImportError("Please install either vosk or whisper to use this script.")
 
-BACKENDS = ["whisper", "vosk", "openaiapi"]
 UNAVAILABLE_BACKENDS = []
 
 
@@ -70,14 +70,66 @@ whisperapi_models = ["whisper-1"]
 vosk_models = [language_config["vosk"][lang]["model"] for lang in language_config["vosk"]]
 
 
+def _prompt_model_for_backend(backend, language, prompt):
+    if backend == "vosk":
+        available_languages = list(language_config[backend])
+        if language:
+            if language not in available_languages:
+                print(f"Language '{language}' is not pre-defined (yet) for backend '{backend}'.")
+                print(f"Yet it may actually exist.")
+                print(f"Please choose the model explictly from {ansi_link('https://alphacephei.com/vosk/models')}.")
+                print(f"Or pick one of the pre-defined languages: ", " ".join(available_languages))
+                exit(1)
+            choices = [language_config[backend][language]["model"]]
+            default_model = choices[0]
+        else:
+            available_models = [language_config[backend][lang]["model"] for lang in available_languages]
+            choices = list(zip(available_models, available_languages)) + [f" * [Any model from {ansi_link('https://alphacephei.com/vosk/models')}]"]
+            default_model = choices[0]
+        if prompt:
+            print(f"For information about vosk models see: {ansi_link('https://alphacephei.com/vosk/models')}")
+            return prompt_choices(choices, default=default_model, label="model")
+        return default_model[0] if isinstance(default_model, tuple) else default_model
+
+    if backend == "whisper":
+        default_model = "small"
+        if prompt:
+            print(f"See {ansi_link('https://github.com/openai/whisper?tab=readme-ov-file#available-models-and-languages')} for available models.")
+            model = prompt_choices(whisper_models, default=default_model, label="model",
+                                    hidden_models=whisper_english_models)
+        else:
+            model = default_model
+        return pick_specialist_model(model, language, backend)
+
+    if backend == "openaiapi":
+        return "whisper-1"
+
+    raise ValueError(f"Unknown backend: {backend}")
+
+
+def _build_backend_kwargs(backend, model, language, samplerate, duration, silence, silence_db,
+                          restart_after_silence, api_key, download_folder_vosk, download_folder_whisper):
+    if backend == "vosk":
+        return dict(model_name=model, language=language, samplerate=samplerate,
+                    timeout=None, silence_duration=None,
+                    model_kwargs={"download_root": download_folder_vosk})
+    if backend == "whisper":
+        return dict(model_name=model, language=language, samplerate=samplerate,
+                    timeout=duration, silence_duration=silence, silence_thresh=silence_db,
+                    restart_after_silence=restart_after_silence,
+                    model_kwargs={"download_root": download_folder_whisper})
+    if backend == "openaiapi":
+        return dict(model_name=model, samplerate=samplerate,
+                    timeout=duration, silence_duration=silence, silence_thresh=silence_db,
+                    restart_after_silence=restart_after_silence, api_key=api_key)
+    raise ValueError(f"Unknown backend: {backend}")
+
+
 def get_transcriber(model=None, backend=None, dummy=False, prompt=True, language=None,
                     samplerate=None, duration=None, silence=None, silence_db=None, restart_after_silence=None,
-                    api_key=None,
-                    download_folder_vosk=None, download_folder_whisper=None, **kwargs):
-
+                    api_key=None, download_folder_vosk=None, download_folder_whisper=None, **kwargs):
     if dummy:
         return DummyTranscriber("whisper", "dummy")
-
     if model and not backend:
         if model.startswith("vosk-"):
             backend = "vosk"
@@ -85,101 +137,29 @@ def get_transcriber(model=None, backend=None, dummy=False, prompt=True, language
             backend = "whisper"
         elif model in whisperapi_models:
             backend = "openaiapi"
-
-    if backend:
-        backend = backend
-
-    elif not prompt:
-        backend = BACKENDS[0]
-
-    else:
-        backend = prompt_choices(BACKENDS, backend, "backend", UNAVAILABLE_BACKENDS)
-
+    if not backend:
+        backends_list = list(BACKENDS)
+        backend = backends_list[0] if not prompt else prompt_choices(backends_list, None, "backend", UNAVAILABLE_BACKENDS)
     print(f"Selected backend: {backend}")
-
     if model:
         model = pick_specialist_model(model, language, backend)
-
     else:
-
-        if backend == "vosk":
-            available_languages = list(language_config[backend])
-            if language:
-                if language not in available_languages:
-                    print(f"Language '{language}' is not pre-defined (yet) for backend '{backend}'.")
-                    print(f"Yet it may actually exist.")
-                    print(f"Please choose the model explictly from {ansi_link('https://alphacephei.com/vosk/models')}.")
-                    print(f"Or pick one of the pre-defined languages: ", " ".join(available_languages))
-                    exit(1)
-                choices = [language_config[backend][language]["model"]]
-                default_model = choices[0] # this is a string
-
-            else:
-                available_models = [language_config[backend][lang]["model"] for lang in available_languages]
-                choices = list(zip(available_models, available_languages)) + [f" * [Any model from {ansi_link('https://alphacephei.com/vosk/models')}]"]
-                default_model = choices[0]  # this is a tuple !!
-
-            if prompt:
-                print(f"For information about vosk models see: {ansi_link('https://alphacephei.com/vosk/models')}")
-                model = prompt_choices(choices, default=default_model, label="model")  # this always returns a string
-            else:
-                model = default_model[0] if isinstance(default_model, tuple) else default_model  # tuple -> string
-
-        elif backend == "whisper":
-            default_model = "small"
-            if prompt:
-                # print("Some models have a specialized English version (.en) which will be selected as default is `-l en` was requested, but can also be requested explicitly below (option not listed). See [documentation](https://github.com/openai/whisper?tab=readme-ov-file#available-models-and-languages).")
-                print(f"See {ansi_link('https://github.com/openai/whisper?tab=readme-ov-file#available-models-and-languages')} for available models.")
-                model = prompt_choices(whisper_models, default=default_model, label="model",
-                                        hidden_models=whisper_english_models)
-            else:
-                model = default_model
-
-            model = pick_specialist_model(model, language, backend)
-
-        elif backend == "openaiapi":
-            model = model or "whisper-1"
-
-        else:
-            raise ValueError(f"Unknown backend: {backend}")
-
-
+        model = _prompt_model_for_backend(backend, language, prompt)
     print(f"Selected model: {model}")
-
-    if backend == "vosk":
-        try:
-            transcriber = VoskTranscriber(model_name=model,
-                                        language=language,
-                                        samplerate=samplerate,
-                                        timeout=None, # vosk keeps going (no timeout)
-                                        silence_duration=None, # vosk handles silences internally
-                                        model_kwargs={"download_root": download_folder_vosk})
-        except Exception as error:
-            print(error)
-            print(f"Failed to (down)load model {model}.")
-            exit(1)
-
-    elif backend == "whisper":
-        transcriber = WhisperTranscriber(model_name=model, language=language, samplerate=samplerate,
-                                         timeout=duration, silence_duration=silence, silence_thresh=silence_db,
-                                         restart_after_silence=restart_after_silence,
-                                         model_kwargs={"download_root": download_folder_whisper})
-
-    elif backend == "openaiapi":
-        transcriber = OpenaiAPITranscriber(model_name=model, samplerate=samplerate,
-                                         timeout=duration, silence_duration=silence, silence_thresh=silence_db,
-                                         restart_after_silence=restart_after_silence, api_key=api_key)
-
-
-    else:
-        raise ValueError(f"Unknown backend: {backend}")
-
-    return transcriber
+    backend_kwargs = _build_backend_kwargs(backend, model, language, samplerate, duration, silence,
+                                          silence_db, restart_after_silence, api_key,
+                                          download_folder_vosk, download_folder_whisper)
+    try:
+        return _build_transcriber(backend, **backend_kwargs)
+    except Exception as error:
+        print(error)
+        print(f"Failed to (down)load model {model}.")
+        exit(1)
 
 def get_parser():
 
     parser = argparse.ArgumentParser()
-    parser.add_argument("--backend", choices=BACKENDS,
+    parser.add_argument("--backend", choices=list(BACKENDS),
                         help="Choose the backend to use for speech recognition (will be prompted otherwise).")
 
     parser.add_argument("--model",
