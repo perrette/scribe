@@ -170,16 +170,22 @@ def get_parser():
 
     parser.add_argument("--dummy", action="store_true", help=argparse.SUPPRESS)
 
-    parser.add_argument("--no-prompt", action="store_false", dest="prompt", help="Disable prompts for backend and model selection and jump to recording")
-    parser.add_argument("--app", action="store_true", help="Start in app mode (relies on pystray)")
+    parser.add_argument("--frontend", choices=["tray", "terminal"], default="tray",
+                        help="Which frontend to launch. Default: tray (system tray icon). "
+                        "Use 'terminal' for the interactive TUI / one-shot recording mode.")
+    parser.add_argument("--no-prompt", action="store_false", dest="prompt",
+                        help="In terminal mode, skip the interactive menu and jump straight to recording.")
 
     parser.add_argument("--samplerate", default=16000, type=int, help=argparse.SUPPRESS)
-    parser.add_argument("--microphone-device", help="The device index of the microphone to use.", type=int)
+    parser.add_argument("--input-device", dest="input_device", type=int,
+                        help="The device index of the microphone to use.")
 
     group = parser.add_argument_group("transcription output")
     group.add_argument("-c", "--clipboard", dest="clipboard", action="store_true")
-    # group.add_argument("--no-clipboard", dest="clipboard", action="store_false", help=argparse.SUPPRESS)
-    group.add_argument("-k", "--keyboard", action="store_true")
+    group.add_argument("-k", "--keyboard", dest="keyboard", action="store_true", default=None,
+                       help="Type the transcription via virtual keyboard (default: on in tray mode, off in terminal mode).")
+    group.add_argument("--no-keyboard", dest="keyboard", action="store_false",
+                       help="Disable keyboard typing (useful in tray mode where it is on by default).")
     group.add_argument("-p", "--auto-paste", action="store_true",
                        help="After transcription, synthesize Ctrl+V (Cmd+V on macOS) to paste into the focused app. Requires --clipboard. Ignored if --keyboard is set.")
     group.add_argument("-o", "--output-file")
@@ -474,8 +480,8 @@ def _print_main_status(state, o):
         print(f"Output: {' | '.join(activated_output)}")
     else:
         print(colored("No output selected -> terminal only", "light_red"))
-    if o.app:
-        print(colored("App mode enabled", "light_green"))
+    if o.frontend == "tray":
+        print(colored("App mode (tray) enabled", "light_green"))
     if activated_options:
         print(f"Options: {' | '.join(activated_options)}")
 
@@ -497,8 +503,8 @@ def _build_main_menu(state, o):
         o.keyboard = not o.keyboard
         return True
 
-    def cb_toggle_app(app, item):
-        o.app = not o.app
+    def cb_toggle_frontend(app, item):
+        o.frontend = "terminal" if o.frontend == "tray" else "tray"
         return True
 
     def cb_toggle_auto_restart(app, item):
@@ -565,7 +571,7 @@ def _build_main_menu(state, o):
         Item("e", cb_change_model, help="change model"),
         Item("c", cb_toggle_clipboard, help="toggle clipboard", checked=lambda item: o.clipboard),
         Item("k", cb_toggle_keyboard, help="toggle keyboard", checked=lambda item: o.keyboard),
-        Item("x", cb_toggle_app, help="toggle app mode", checked=lambda item: o.app),
+        Item("x", cb_toggle_frontend, help="toggle tray app mode", checked=lambda item: o.frontend == "tray"),
         Item("a", cb_toggle_auto_restart, help="auto-restart after silence",
              checked=lambda item: bool(getattr(state.transcriber, "restart_after_silence", False)),
              visible=is_whisper),
@@ -588,26 +594,35 @@ def main(args=None):
 
     parser = get_parser()
     o = parser.parse_args(args)
-    micro = Microphone(samplerate=o.samplerate, device=o.microphone_device)
+
+    if o.keyboard is None:
+        o.keyboard = (o.frontend == "tray")
+
+    micro = Microphone(samplerate=o.samplerate, device=o.input_device)
 
     state = SimpleNamespace(transcriber=None, session=None, is_running=True)
 
     while True:
         if state.transcriber is None:
-            state.transcriber = get_transcriber(**vars(o))
+            # In tray mode the icon menu is the interactive surface, so suppress
+            # backend/model prompts and let get_transcriber pick sensible defaults.
+            transcriber_kwargs = vars(o).copy()
+            if o.frontend == "tray":
+                transcriber_kwargs["prompt"] = False
+            state.transcriber = get_transcriber(**transcriber_kwargs)
             state.session = None
         if state.session is None and not isinstance(state.transcriber, DummyTranscriber):
             state.session = RecordingSession(backend=state.transcriber)
 
         _print_main_status(state, o)
 
-        if o.prompt:
+        if o.frontend == "terminal" and o.prompt:
             _build_main_menu(state, o)(state, None)
             if state.transcriber is None:
                 continue
 
-        if o.app:
-            greetings = dict(start_message="Listening... Use the try icon menu to stop.")
+        if o.frontend == "tray":
+            greetings = dict(start_message="Listening... Use the tray icon menu to stop.")
             app = create_app(micro, state.transcriber, other_transcribers=[
                 {**vars(o), "backend": "openaiapi", "model": "whisper-1"},
                 *[{**vars(o), "backend": "whisper", "model": model} for model in o.whisper_models],
@@ -617,6 +632,7 @@ def main(args=None):
                 transcriber_options=[], **greetings)
             print("Starting app...")
             app.run()
+            return
         else:
             greetings = dict(start_message="Listening... Press Ctrl+C to stop.")
             start_recording(micro, state.session if state.session is not None else state.transcriber,
