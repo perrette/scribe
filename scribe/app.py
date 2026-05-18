@@ -11,6 +11,7 @@ from scribe.util import print_partial, clear_line, prompt_choices, ansi_link, co
 from scribe.backends import BACKENDS, available_backends, probe_backend, get_transcriber as _build_transcriber
 from scribe.backends.vosk import VoskTranscriber
 from scribe.session import RecordingSession
+from desktop_ai_core.frontends.tray import MultiStateTrayIcon
 
 
 def _pidfile_path():
@@ -298,35 +299,11 @@ def create_app(micro, transcriber, other_transcribers=None, transcriber_options=
         # Overlay the writing image on top of the base image
         image_recording = Image.alpha_composite(image_recording.convert("RGBA"), image_writing.convert("RGBA"))
 
-    def update_icon(icon, force=False):
-        session = icon._session
-        if session.recording:
-            if force or getattr(icon, "_icon_label", None) != "recording":
-                icon.icon = image_recording
-                icon._icon_label = "recording"
-                icon.update_menu()
-
-        elif session.busy:
-            if force or getattr(icon, "_icon_label", None) != "busy":
-                icon.icon = image_writing
-                icon._icon_label = "busy"
-                icon.update_menu()
-
-        else:
-            if force or getattr(icon, "_icon_label", None) != None:
-                icon.icon = image
-                icon._icon_label = None
-                icon.update_menu()
-
-    def start_monitoring(icon):
-        session = icon._session
-        try:
-            while session.busy:
-                update_icon(icon)
-                time.sleep(0.1)
-
-        finally:
-            update_icon(icon)
+    state_images = {
+        None: image,
+        "recording": image_recording,
+        "busy": image_writing,
+    }
 
     def callback_quit(icon, item):
         icon.visible = False
@@ -382,7 +359,10 @@ def create_app(micro, transcriber, other_transcribers=None, transcriber_options=
                 session.busy = False
         icon._recording_thread = threading.Thread(target=_safe_start_recording)
         icon._recording_thread.start()
-        icon._monitoring_thread = threading.Thread(target=start_monitoring, args=(icon,))
+        icon._monitoring_thread = threading.Thread(
+            target=icon._state_machine.start_monitoring,
+            args=(lambda: icon._session.busy,),
+        )
         icon._monitoring_thread.start()
 
     if other_transcribers:
@@ -480,6 +460,16 @@ def create_app(micro, transcriber, other_transcribers=None, transcriber_options=
     icon._session = session
     del transcriber
     del session
+
+    def _get_icon_state():
+        s = icon._session
+        if s.recording:
+            return "recording"
+        if s.busy:
+            return "busy"
+        return None
+
+    icon._state_machine = MultiStateTrayIcon(icon, state_images, _get_icon_state)
 
     pid_path = _pidfile_path()
     with open(pid_path, "w") as f:
