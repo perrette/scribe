@@ -62,7 +62,7 @@ class DummyTranscriber:
 
 whisper_models = ["small", "medium", "large", "large-v3", "large-v3-turbo"]
 whisper_english_models = ["tiny.en", "base.en", "small.en", "medium.en"]
-whisperapi_models = ["whisper-1"]
+whisperapi_models = ["gpt-4o-mini-transcribe", "whisper-1"]
 vosk_models = [language_config["vosk"][lang]["model"] for lang in language_config["vosk"]]
 
 
@@ -98,7 +98,7 @@ def _prompt_model_for_backend(backend, language, prompt):
         return pick_specialist_model(model, language, backend)
 
     if backend == "openaiapi":
-        return "whisper-1"
+        return "gpt-4o-mini-transcribe"
 
     raise ValueError(f"Unknown backend: {backend}")
 

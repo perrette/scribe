@@ -9,9 +9,9 @@ from scribe.models import AbstractTranscriber
 class OpenaiAPITranscriber(WhisperTranscriber):
     name = "openaiapi"
     backend = "openaiapi"
-    default_model: str | None = "whisper-1"
+    default_model: str | None = "gpt-4o-mini-transcribe"
 
-    def __init__(self, model_name="whisper-1", language=None, model_kwargs={}, model=None, api_key=None, **kwargs):
+    def __init__(self, model_name="gpt-4o-mini-transcribe", language=None, model_kwargs={}, model=None, api_key=None, **kwargs):
         if model is None:
             import openai
             model = openai.OpenAI(
