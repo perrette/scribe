@@ -12,6 +12,7 @@ from scribe.backends.vosk import VoskTranscriber
 from scribe.session import RecordingSession
 from desktop_ai_core.frontends.tray import MultiStateTrayIcon, write_pidfile, remove_pidfile, register_signal_toggle
 from desktop_ai_core.frontends.dialog import show_error_dialog
+from desktop_ai_core.frontends.terminal import Menu, Item, SetValueItem
 
 with open(Path(__file__).parent / "models.toml", "rb") as f:
     language_config_default = tomllib.load(f)
@@ -461,158 +462,167 @@ def create_app(micro, transcriber, other_transcribers=None, transcriber_options=
 def _filter_options(d: dict, exclude: Iterable) -> dict:
     return {k: v for k, v in d.items() if k not in exclude}
 
+
+def _print_main_status(state, o):
+    t = state.transcriber
+    print(f"Model [{colored(t.model_name, 'light_blue', attrs=['bold'])}] from [{colored(t.backend, 'light_blue', attrs=['bold'])}] selected.")
+    show_output = ["clipboard", "keyboard", "auto_paste", "output_file"]
+    show_options = ["ascii", "restart_after_silence"]
+    activated_output = [colored(opt if type(getattr(o, opt)) is bool else f'{opt}={getattr(o, opt)}', 'light_blue') for opt in show_output if getattr(o, opt)]
+    activated_options = [colored(opt if type(getattr(o, opt)) is bool else f'{opt}={getattr(o, opt)}', 'light_blue') for opt in show_options if getattr(o, opt)]
+    if activated_output:
+        print(f"Output: {' | '.join(activated_output)}")
+    else:
+        print(colored("No output selected -> terminal only", "light_red"))
+    if o.app:
+        print(colored("App mode enabled", "light_green"))
+    if activated_options:
+        print(f"Options: {' | '.join(activated_options)}")
+
+
+def _build_main_menu(state, o):
+    def cb_change_model(app, item):
+        state.transcriber = None
+        o.model = None
+        o.dummy = False
+        o.backend = None
+        o.language = None
+        return False
+
+    def cb_toggle_clipboard(app, item):
+        o.clipboard = not o.clipboard
+        return True
+
+    def cb_toggle_keyboard(app, item):
+        o.keyboard = not o.keyboard
+        return True
+
+    def cb_toggle_app(app, item):
+        o.app = not o.app
+        return True
+
+    def cb_toggle_auto_restart(app, item):
+        new = not state.transcriber.restart_after_silence
+        state.transcriber.restart_after_silence = new
+        o.restart_after_silence = new
+        return True
+
+    def cb_quit(app, item):
+        exit(0)
+
+    def cb_record(app, item):
+        return False
+
+    def _coerce_float(s, label):
+        try:
+            return float(s)
+        except (TypeError, ValueError):
+            print(f"Invalid {label}. Must be a float.")
+            return None
+
+    def cb_set_duration(app, item):
+        val = _coerce_float(item.value(item), "duration")
+        if val is not None:
+            o.duration = state.transcriber.timeout = val
+        return True
+
+    def cb_set_silence(app, item):
+        val = _coerce_float(item.value(item), "duration")
+        if val is not None:
+            o.silence = state.transcriber.silence_duration = val
+        return True
+
+    def cb_set_silence_db(app, item):
+        val = _coerce_float(item.value(item), "threshold")
+        if val is not None:
+            o.silence_db = state.transcriber.silence_thresh = val
+        return True
+
+    def cb_set_output_file(app, item):
+        ans = item.value(item)
+        if not ans:
+            o.output_file = None
+            return True
+        invalid_regex = re.compile(r'[^A-Za-z0-9_\-\\\/\.]')
+        if not invalid_regex.search(ans):
+            o.output_file = ans
+        else:
+            print(f"Invalid characters: {' '.join(map(repr, invalid_regex.findall(ans)))}")
+            print(f"Invalid file name: {repr(ans)}")
+        return True
+
+    def cb_set_latency(app, item):
+        val = _coerce_float(item.value(item), "latency")
+        if val is not None:
+            o.latency = val
+        return True
+
+    is_whisper = lambda item: state.transcriber is not None and state.transcriber.backend == "whisper"
+    has_keyboard = lambda item: bool(o.keyboard)
+
+    return Menu([
+        Item("", cb_record, help="[Enter] start recording"),
+        Item("e", cb_change_model, help="change model"),
+        Item("c", cb_toggle_clipboard, help="toggle clipboard", checked=lambda item: o.clipboard),
+        Item("k", cb_toggle_keyboard, help="toggle keyboard", checked=lambda item: o.keyboard),
+        Item("x", cb_toggle_app, help="toggle app mode", checked=lambda item: o.app),
+        Item("a", cb_toggle_auto_restart, help="auto-restart after silence",
+             checked=lambda item: bool(getattr(state.transcriber, "restart_after_silence", False)),
+             visible=is_whisper),
+        SetValueItem("t", cb_set_duration, value=lambda item: state.transcriber.timeout,
+                     type=float, help="duration (s)", visible=is_whisper),
+        SetValueItem("b", cb_set_silence, value=lambda item: state.transcriber.silence_duration,
+                     type=float, help="silence break (s)", visible=is_whisper),
+        SetValueItem("db", cb_set_silence_db, value=lambda item: state.transcriber.silence_thresh,
+                     type=float, help="silence threshold (db)", visible=is_whisper),
+        SetValueItem("f", cb_set_output_file, value=lambda item: o.output_file or "",
+                     type=str, help="output file"),
+        SetValueItem("latency", cb_set_latency, value=lambda item: o.latency,
+                     type=float, help="keyboard latency (s)", visible=has_keyboard),
+        Item("q", cb_quit, help="quit"),
+    ])
+
+
 def main(args=None):
+    from types import SimpleNamespace
 
     parser = get_parser()
     o = parser.parse_args(args)
-
-
-    # Set up the microphone for recording
     micro = Microphone(samplerate=o.samplerate, device=o.microphone_device)
 
-    transcriber = None
-    session = None
-    details = False
+    state = SimpleNamespace(transcriber=None, session=None, is_running=True)
 
     while True:
-        if transcriber is None:
-            transcriber = get_transcriber(**vars(o))
-            session = None
-        if session is None and not isinstance(transcriber, DummyTranscriber):
-            session = RecordingSession(backend=transcriber)
-        print(f"Model [{colored(transcriber.model_name, 'light_blue', attrs=['bold'])}] from [{colored(transcriber.backend, 'light_blue', attrs=['bold'])}] selected.")
-        show_output = ["clipboard", "keyboard", "auto_paste", "output_file"]
-        show_options = ["ascii", "restart_after_silence"]
-        activated_output = [colored(option if type(getattr(o, option)) is bool else f'{option}={getattr(o, option)}', 'light_blue') for option in show_output if getattr(o, option)]
-        activated_options = [colored(option if type(getattr(o, option)) is bool else f'{option}={getattr(o, option)}', 'light_blue') for option in show_options if getattr(o, option)]
-        if activated_output:
-            print(f"Output: {' | '.join(activated_output)}")
-        else:
-            print(colored(f"No output selected -> terminal only", "light_red"))
-        if o.app:
-            print(colored("App mode enabled", "light_green"))
-        if activated_options:
-            print(f"Options: {' | '.join(activated_options)}")
+        if state.transcriber is None:
+            state.transcriber = get_transcriber(**vars(o))
+            state.session = None
+        if state.session is None and not isinstance(state.transcriber, DummyTranscriber):
+            state.session = RecordingSession(backend=state.transcriber)
+
+        _print_main_status(state, o)
+
         if o.prompt:
-            print(f"Choose any of the following actions")
-            print(f"{colored('[e]', 'light_yellow')} change model")
-            print(f"{colored('[f]', 'light_yellow')} output file is {colored(repr(o.output_file), 'light_blue')}")
-            print(f"{colored('[c]', 'light_yellow')} clipboard is {colored(o.clipboard, 'light_blue')} toggle?")
-            print(f"{colored('[k]', 'light_yellow')} keyboard is {colored(o.keyboard, 'light_blue')} toggle?")
-            print(f"{colored('[x]', 'light_yellow')} app is {colored(o.app, 'light_blue')} toggle?")
-            if details:
-                if o.keyboard:
-                    print(f"{colored('[latency]', 'light_yellow')} between keystrokes is {colored(o.latency, 'light_blue')} s")
-                if transcriber.backend == "whisper":
-                    print(f"{colored('[t]', 'light_yellow')} change duration (currently {colored(transcriber.timeout, 'light_blue')} s)")
-                    print(f"{colored('[b]', 'light_yellow')} change silence (currently {colored(transcriber.silence_duration, 'light_blue')} s)")
-                    print(f"{colored('[db]', 'light_yellow')} change backround noise (currently {colored(transcriber.silence_thresh, 'light_blue')} db)")
-                    print(f"{colored('[a]', 'light_yellow')} auto-restart after silence is {colored(transcriber.restart_after_silence, 'light_blue')} toggle?")
-                exclude_flags = ["keyboard", "clipboard", "app", "prompt", "restart_after_silence"]
-                display_flags = [a.dest for a in parser._actions if a.help != argparse.SUPPRESS]
-                for key, value in vars(o).items():
-                    if key not in display_flags or key in exclude_flags or not isinstance(value, bool):
-                        continue
-                    print(f"{colored(f'[{key}]', 'light_yellow')} is {colored(value, 'light_blue')} toggle?")
-                print(f"{colored('[-]', 'light_yellow')} hide options")
-            else:
-                print(f"{colored('[-]', 'light_yellow')} show more options")
-            print(f"{colored('[q]', 'light_yellow')} quit")
-            print(colored(f"Press [Enter] to start recording.", attrs=["bold"]))
-
-            key = input()
-            if key == "q":
-                exit(0)
-            if len(key) > 0 and key.strip() in ["", ".", "-", "+", 'o', '\x1b[A', '\x1b[B', '\x1b[C', '\x1b[D']:  # arrow keys
-                details = not details
-                continue
-            if key == "e":
-                transcriber = None
-                o.model = None
-                o.dummy = False
-                o.backend = None
-                o.language = None
-                continue
-            if key == "k":
-                o.keyboard = not o.keyboard
-                continue
-            if key == "c":
-                o.clipboard = not o.clipboard
-                continue
-            if key == "x":
-                o.app = not o.app
-                continue
-            if key == "a":
-                o.restart_after_silence = transcriber.restart_after_silence = not transcriber.restart_after_silence
-                continue
-            if key == "t":
-                ans = input(f"Enter new duration in seconds (current: {transcriber.timeout}): ")
-                try:
-                    o.duration = transcriber.timeout = float(ans)
-                except:
-                    print("Invalid duration. Must be a float.")
-                continue
-            if key == "latency":
-                ans = input(f"Enter new keyboard latency in seconds (current: {o.latency}): ")
-                try:
-                    o.latency = float(ans)
-                except:
-                    print("Invalid latency. Must be a float.")
-                continue
-            if key == "b":
-                ans = input(f"Enter new silence break duration in seconds (current: {transcriber.silence_duration}): ")
-                try:
-                    o.silence = transcriber.silence_duration = float(ans)
-                except:
-                    print("Invalid duration. Must be a float.")
-                continue
-            if key == "db":
-                ans = input(f"Enter new background noise threshold to detect silence (current: {transcriber.silence_thresh}): ")
-                try:
-                    o.silence_db = transcriber.silence_thresh = float(ans)
-                except:
-                    print("Invalid duration. Must be a float.")
-                continue
-            if key == "f":
-                ans = input(f"Enter output file (current: {o.output_file}): ")
-                invalid_regex = re.compile(r'[^A-Za-z0-9_\-\\\/\.]')
-                if not invalid_regex.search(ans):
-                    o.output_file = ans
-                else:
-                    print(f"Invalid characters: {' '.join(map(repr, invalid_regex.findall(ans)))}")
-                    print(f"Invalid file name: {repr(ans)}")
-                continue
-            if key:
-                if hasattr(o, key) and isinstance(getattr(o, key), bool):
-                    setattr(o, key, not getattr(o, key))
-                    print(f"Toggle {key} to [{getattr(o, key)}].")
-                print(f"Invalid choice: {repr(key)}")
+            _build_main_menu(state, o)(state, None)
+            if state.transcriber is None:
                 continue
 
         if o.app:
-            greetings = dict(
-                start_message = "Listening... Use the try icon menu to stop.",
-            )
-
-            app = create_app(micro, transcriber, other_transcribers=[
+            greetings = dict(start_message="Listening... Use the try icon menu to stop.")
+            app = create_app(micro, state.transcriber, other_transcribers=[
                 {**vars(o), "backend": "openaiapi", "model": "whisper-1"},
                 *[{**vars(o), "backend": "whisper", "model": model} for model in o.whisper_models],
                 *[{**_filter_options(vars(o), exclude=VoskTranscriber._frozen_options), "backend": "vosk", "model": model} for model in o.vosk_models]],
-                             clipboard=o.clipboard, output_file=o.output_file,
-                             keyboard=o.keyboard, auto_paste=o.auto_paste, latency=o.latency, ascii=o.ascii,
-                             transcriber_options=[], **greetings)
+                clipboard=o.clipboard, output_file=o.output_file,
+                keyboard=o.keyboard, auto_paste=o.auto_paste, latency=o.latency, ascii=o.ascii,
+                transcriber_options=[], **greetings)
             print("Starting app...")
             app.run()
         else:
-            greetings = dict(
-                start_message = "Listening... Press Ctrl+C to stop.",
-            )
-            start_recording(micro, session if session is not None else transcriber,
+            greetings = dict(start_message="Listening... Press Ctrl+C to stop.")
+            start_recording(micro, state.session if state.session is not None else state.transcriber,
                             clipboard=o.clipboard, output_file=o.output_file,
                             keyboard=o.keyboard, auto_paste=o.auto_paste, latency=o.latency, ascii=o.ascii, **greetings)
 
-        # if we arrived so far, that means we pressed Ctrl + C anyway, and need Enter to move on.
-        # So we leave the wider range of options to change the model.
         o.prompt = True
         o.backend = None
         o.model = None
