@@ -20,15 +20,16 @@ language_config = language_config_default.copy()
 
 
 def get_default_backend():
-    try:
-        import vosk
-        return "vosk"
-    except ImportError:
-        try:
-            import whisper
-            return "whisper"
-        except ImportError:
-            raise ImportError("Please install either vosk or whisper to use this script.")
+    for name in ("groq", "openaiapi", "whisper", "vosk"):
+        ok, _ = probe_backend(name)
+        if ok:
+            return name
+    raise RuntimeError(
+        "No STT backend available. "
+        "Set GROQ_API_KEY for Groq, OPENAI_API_KEY for OpenAI, "
+        "or install faster-whisper (pip install faster-whisper) "
+        "or vosk (pip install vosk)."
+    )
 
 UNAVAILABLE_BACKENDS = []
 
@@ -337,14 +338,24 @@ def create_app(micro, transcriber, other_transcribers=None, transcriber_options=
     else:
         other_transcribers_dict = {}
 
+    def _model_display_label(name):
+        meta = other_transcribers_dict[name]
+        if meta.get("backend") == "vosk":
+            return f"{name} — Local (live partials)"
+        return name
+
+    model_labels = {name: _model_display_label(name) for name in other_transcribers_dict}
+    label_to_model = {v: k for k, v in model_labels.items()}
+
     def callback_set_model(icon, item):
         transcriber = icon._transcriber
-        if transcriber.model_name == str(item):
-            icon._session.log(f"Already using model {str(item)}")
+        raw_name = label_to_model.get(str(item), str(item))
+        if transcriber.model_name == raw_name:
+            icon._session.log(f"Already using model {raw_name}")
             return
         callback_stop_recording(icon, item)
         _join_recording_threads(icon)
-        model_name = str(item)
+        model_name = raw_name
         meta = other_transcribers_dict[model_name]
         icon._transcriber = transcriber = get_transcriber(**meta)
         icon._session = RecordingSession(backend=transcriber, error_callback=show_error_dialog)
@@ -385,7 +396,7 @@ def create_app(micro, transcriber, other_transcribers=None, transcriber_options=
         return not is_recording(item) and not is_model_selection(item)
 
     def is_checked_model(item):
-        return icon._transcriber.model_name == str(item)
+        return icon._transcriber.model_name == label_to_model.get(str(item), str(item))
 
     def is_checked_option(item):
         if not is_option_visible(item):
@@ -409,7 +420,7 @@ def create_app(micro, transcriber, other_transcribers=None, transcriber_options=
     menus.append(Item("Stop", callback_stop_recording, visible=is_recording))
     menus.append(Item("Cancel", callback_cancel_recording, visible=is_recording))
     menus.append(Item("Choose Model", pystrayMenu(
-        *(Item(f"{name}", callback_set_model, checked=is_checked_model) for name in other_transcribers_dict)))
+        *(Item(model_labels[name], callback_set_model, checked=is_checked_model) for name in other_transcribers_dict)))
     )
     if options:
         menus.append(Item("Toggle Options", pystrayMenu(
