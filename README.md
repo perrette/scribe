@@ -12,9 +12,6 @@ It features local, downloadable models with the `vosk` and `whisper` backends, a
 The package is initially developped for python 3.12 with Ubuntu 24.04 with Gnome + Wayland, but it should work on other platforms as well (feedback welcome).
 Basically check the pages of the dependencies for more info (i.e. pynput for the keyboard, pystray for the app).
 
-- python 3.13:
-    - at the time of writing, `openai-whisper` does not install.
-
 - Ubuntu:
     - see caveats in the use of the keyboard under Wayland [keyboard section](#use-the-keyboard-with-wayland).
 - MacOS:
@@ -49,9 +46,7 @@ cd scribe
 pip install -e .[all]
 ```
 
-You can leave the optional dependencies (leave out `[all]`) but must install at least one of `vosk` or `openai-whisper` or `openai` packages (see Usage below).
-
-At the time of writing `openai-whisper` does not install on `python 3.13`. You can install the packages manually and skip that package. This makes the `whisper` API unavailable.
+You can leave the optional dependencies (leave out `[all]`) but must install at least one of `vosk` or `faster-whisper` or `openai` packages (see Usage below).
 
 ### Manual selection of the dependencies
 
@@ -59,7 +54,7 @@ At the time of writing `openai-whisper` does not install on `python 3.13`. You c
 # language models (at least one must be installed !)
 pip install vosk
 pip install openai soundfile  # openaiapi
-pip install openai-whisper   # FAILS IN PYTHON 3.13 on Ubuntu
+pip install faster-whisper
 
 # PortAUDIO (sounddevice)
 pip install sounddevice # automatically installed as required dependency

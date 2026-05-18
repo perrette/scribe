@@ -60,7 +60,7 @@ class DummyTranscriber:
     def __getattr__(self, item):
         return None
 
-whisper_models = ["tiny", "base", "small", "medium", "large", "turbo"]
+whisper_models = ["small", "medium", "large", "large-v3", "large-v3-turbo"]
 whisper_english_models = ["tiny.en", "base.en", "small.en", "medium.en"]
 whisperapi_models = ["whisper-1"]
 vosk_models = [language_config["vosk"][lang]["model"] for lang in language_config["vosk"]]
@@ -88,7 +88,7 @@ def _prompt_model_for_backend(backend, language, prompt):
         return default_model[0] if isinstance(default_model, tuple) else default_model
 
     if backend == "whisper":
-        default_model = "small"
+        default_model = "large-v3-turbo"
         if prompt:
             print(f"See {ansi_link('https://github.com/openai/whisper?tab=readme-ov-file#available-models-and-languages')} for available models.")
             model = prompt_choices(whisper_models, default=default_model, label="model",
