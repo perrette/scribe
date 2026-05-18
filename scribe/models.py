@@ -2,7 +2,9 @@ import os
 import json
 import time
 from collections import deque
+from pathlib import Path
 import numpy as np
+from desktop_ai_core.providers import STTBackend
 from scribe.util import download_model
 from scribe.audio import calculate_decibels
 
@@ -22,7 +24,9 @@ class SilenceDetected(Exception):
 class StopRecording(Exception):
     pass
 
-class AbstractTranscriber:
+class AbstractTranscriber(STTBackend):
+    name: str = ""
+    default_model: str | None = None
     backend = None
     _frozen_options = frozenset()
     def __init__(self, model, model_name=None, language=None, samplerate=16000, timeout=None, model_kwargs={},
@@ -91,6 +95,19 @@ class AbstractTranscriber:
     def finalize(self):
         raise NotImplementedError()
 
+    def transcribe(self, audio_path) -> str:
+        """Implement the shared `STTBackend.transcribe(audio_path)` contract by
+        loading the WAV at `audio_path` and delegating to `transcribe_audio`.
+        Scribe itself drives transcription through `transcribe_realtime_audio`
+        / `finalize`; this is the path bard-style consumers go through.
+        """
+        import soundfile as sf
+        audio_data, _ = sf.read(str(Path(audio_path)), dtype="int16")
+        result = self.transcribe_audio(audio_data.tobytes())
+        if isinstance(result, dict):
+            return result.get("text", "") or ""
+        return str(result)
+
 
 def get_vosk_model(model, download_root=None, url=None):
     """Load the Vosk recognizer"""
@@ -114,7 +131,9 @@ def get_vosk_recognizer(model, samplerate=16000):
 
 
 class VoskTranscriber(AbstractTranscriber):
+    name = "vosk"
     backend = "vosk"
+    default_model: str | None = None
     _frozen_options = frozenset(["restart_after_silence", "silence_duration", "silence_thresh"])
 
     def __init__(self, model_name, model=None, model_kwargs={}, **kwargs):
@@ -156,7 +175,9 @@ class VoskTranscriber(AbstractTranscriber):
 
 
 class WhisperTranscriber(AbstractTranscriber):
+    name = "whisper"
     backend = "whisper"
+    default_model: str | None = "small"
 
     def __init__(self, model_name, language=None, model=None, model_kwargs={}, **kwargs):
         import whisper
@@ -203,7 +224,9 @@ def _format_openai_error(exc):
 
 
 class OpenaiAPITranscriber(WhisperTranscriber):
+    name = "openaiapi"
     backend = "openaiapi"
+    default_model: str | None = "whisper-1"
 
     def __init__(self, model_name="whisper-1", language=None, model_kwargs={}, model=None, api_key=None, **kwargs):
         if model is None:
