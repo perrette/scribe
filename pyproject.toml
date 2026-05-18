@@ -20,7 +20,7 @@ dependencies = [
     "pyperclip",
     "unidecode",
     "termcolor",
-    "desktop-ai-core @ git+https://github.com/perrette/desktop-ai-core.git@673d5febb47039827aca0423c3e8ef0b97ec7f25",
+    "desktop-ai-core @ git+https://github.com/perrette/desktop-ai-core.git@8ac21dd2848e1cabe240fb3d7f23fd2ba57fcfdf",
 ]
 
 classifiers = [

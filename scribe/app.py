@@ -2,7 +2,6 @@ from pathlib import Path
 import tomllib
 import re
 import time
-import os
 import signal
 import argparse
 from typing import Iterable
@@ -11,12 +10,7 @@ from scribe.util import print_partial, clear_line, prompt_choices, ansi_link, co
 from scribe.backends import BACKENDS, available_backends, probe_backend, get_transcriber as _build_transcriber
 from scribe.backends.vosk import VoskTranscriber
 from scribe.session import RecordingSession
-from desktop_ai_core.frontends.tray import MultiStateTrayIcon
-
-
-def _pidfile_path():
-    runtime_dir = os.environ.get("XDG_RUNTIME_DIR") or "/tmp"
-    return os.path.join(runtime_dir, "scribe.pid")
+from desktop_ai_core.frontends.tray import MultiStateTrayIcon, write_pidfile, remove_pidfile, register_signal_toggle
 
 with open(Path(__file__).parent / "models.toml", "rb") as f:
     language_config_default = tomllib.load(f)
@@ -310,14 +304,8 @@ def create_app(micro, transcriber, other_transcribers=None, transcriber_options=
         ## Here we need to stop the recording thread
         callback_stop_recording(icon, item)
         _join_recording_threads(icon)
-        _remove_pidfile()
+        remove_pidfile("scribe")
         icon.stop()
-
-    def _remove_pidfile():
-        try:
-            os.unlink(_pidfile_path())
-        except FileNotFoundError:
-            pass
 
     def callback_stop_recording(icon, item):
         # Signal the recording thread to stop. Do NOT join here: that would block
@@ -471,15 +459,12 @@ def create_app(micro, transcriber, other_transcribers=None, transcriber_options=
 
     icon._state_machine = MultiStateTrayIcon(icon, state_images, _get_icon_state)
 
-    pid_path = _pidfile_path()
-    with open(pid_path, "w") as f:
-        f.write(str(os.getpid()))
-    os.chmod(pid_path, 0o600)
+    write_pidfile("scribe")
 
     if hasattr(signal, "SIGUSR1"):
-        signal.signal(signal.SIGUSR1, lambda *_: callback_record(icon, None))
+        register_signal_toggle(signal.SIGUSR1, lambda: callback_record(icon, None))
     if hasattr(signal, "SIGUSR2"):
-        signal.signal(signal.SIGUSR2, lambda *_: icon._session.busy and callback_cancel_recording(icon, None))
+        register_signal_toggle(signal.SIGUSR2, lambda: icon._session.busy and callback_cancel_recording(icon, None))
 
     return icon
 
