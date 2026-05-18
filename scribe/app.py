@@ -11,6 +11,7 @@ from scribe.backends import BACKENDS, available_backends, probe_backend, get_tra
 from scribe.backends.vosk import VoskTranscriber
 from scribe.session import RecordingSession
 from desktop_ai_core.frontends.tray import MultiStateTrayIcon, write_pidfile, remove_pidfile, register_signal_toggle
+from desktop_ai_core.frontends.dialog import show_error_dialog
 
 with open(Path(__file__).parent / "models.toml", "rb") as f:
     language_config_default = tomllib.load(f)
@@ -248,28 +249,6 @@ def start_recording(micro, session, clipboard=True, keyboard=False, auto_paste=F
     if callback:
         callback()
 
-
-def show_error_dialog(title, message):
-    """Pop a modal error dialog. Safe to call from any thread.
-
-    A fresh Tk root is created inside a daemon thread on each call so it never
-    contends with the pystray/GTK main loop that runs in app mode.
-    """
-    import threading
-
-    def _run():
-        try:
-            import tkinter as tk
-            from tkinter import messagebox
-            root = tk.Tk()
-            root.withdraw()
-            root.attributes("-topmost", True)
-            messagebox.showerror(title, message)
-            root.destroy()
-        except Exception as exc:
-            print(f"[error dialog failed: {exc!r}] {title}: {message}")
-
-    threading.Thread(target=_run, daemon=True).start()
 
 
 def create_app(micro, transcriber, other_transcribers=None, transcriber_options=[], **kwargs):
