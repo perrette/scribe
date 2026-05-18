@@ -1,33 +1,9 @@
 import os
 import numpy as np
 
+from desktop_ai_core.providers.errors import format_openai_error
 from scribe.backends.whisper import WhisperTranscriber
 from scribe.models import AbstractTranscriber
-
-
-def _format_openai_error(exc):
-    """Turn an openai exception into a (title, message) tuple suited for a user dialog."""
-    import openai
-    body = getattr(exc, "body", None) or {}
-    err = body.get("error") if isinstance(body, dict) else None
-    code = (err or {}).get("code") if isinstance(err, dict) else None
-    api_message = (err or {}).get("message") if isinstance(err, dict) else None
-    detail = api_message or str(exc) or exc.__class__.__name__
-
-    if isinstance(exc, openai.AuthenticationError):
-        return "OpenAI authentication failed", f"Check your API key.\n\n{detail}"
-    if isinstance(exc, openai.PermissionDeniedError):
-        return "OpenAI permission denied", detail
-    if isinstance(exc, openai.RateLimitError):
-        if code == "insufficient_quota" or "quota" in detail.lower() or "credit" in detail.lower():
-            return ("OpenAI credits exhausted",
-                    f"Your OpenAI account is out of credits or has hit its quota.\n\n{detail}")
-        return "OpenAI rate limit", detail
-    if isinstance(exc, openai.APIConnectionError):
-        return "OpenAI connection error", f"Could not reach the OpenAI API.\n\n{detail}"
-    if isinstance(exc, openai.BadRequestError):
-        return "OpenAI bad request", detail
-    return f"OpenAI error ({exc.__class__.__name__})", detail
 
 
 class OpenaiAPITranscriber(WhisperTranscriber):
@@ -62,7 +38,7 @@ class OpenaiAPITranscriber(WhisperTranscriber):
                 file=buffer,
             )
         except openai.OpenAIError as e:
-            title, message = _format_openai_error(e)
+            title, message = format_openai_error(e)
             self.notify_error(title, message)
             return {"text": ""}
         return {"text": transcription.text}
