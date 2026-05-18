@@ -41,12 +41,23 @@ class AbstractTranscriber:
         self.waiting = False
         self.interrupt = False
         self.cancelled = False
+        # Optional callable(title: str, message: str) used to surface errors to the
+        # user (e.g. a tkinter dialog in app mode). When unset, errors are only logged.
+        self.error_callback = None
         if logger is None:
             import logging
             logging.basicConfig(level=logging.INFO)
             logger = logging.getLogger("scribe")
         self.logger = logger
         self.reset()
+
+    def notify_error(self, title, message):
+        self.log(f"{title}: {message}")
+        if self.error_callback is not None:
+            try:
+                self.error_callback(title, message)
+            except Exception as exc:
+                self.log(f"error_callback failed: {exc!r}")
 
     def get_elapsed(self):
         return time.time() - self.start_time
@@ -139,7 +150,7 @@ class AbstractTranscriber:
                             try:
                                 result = self.finalize()
                             except Exception as exc:
-                                self.log(f"Transcription error: {exc!r}")
+                                self.notify_error("Transcription error", repr(exc))
                                 result = {"text": ""}
                             microphone.q.queue.clear()
                             self.reset()
@@ -166,7 +177,7 @@ class AbstractTranscriber:
                 try:
                     result = self.finalize()
                 except Exception as exc:
-                    self.log(f"Transcription error: {exc!r}")
+                    self.notify_error("Transcription error", repr(exc))
                     result = {"text": ""}
                     self.reset()
                 microphone.q.queue.clear()
@@ -264,6 +275,31 @@ class WhisperTranscriber(AbstractTranscriber):
         return result
 
 
+def _format_openai_error(exc):
+    """Turn an openai exception into a (title, message) tuple suited for a user dialog."""
+    import openai
+    body = getattr(exc, "body", None) or {}
+    err = body.get("error") if isinstance(body, dict) else None
+    code = (err or {}).get("code") if isinstance(err, dict) else None
+    api_message = (err or {}).get("message") if isinstance(err, dict) else None
+    detail = api_message or str(exc) or exc.__class__.__name__
+
+    if isinstance(exc, openai.AuthenticationError):
+        return "OpenAI authentication failed", f"Check your API key.\n\n{detail}"
+    if isinstance(exc, openai.PermissionDeniedError):
+        return "OpenAI permission denied", detail
+    if isinstance(exc, openai.RateLimitError):
+        if code == "insufficient_quota" or "quota" in detail.lower() or "credit" in detail.lower():
+            return ("OpenAI credits exhausted",
+                    f"Your OpenAI account is out of credits or has hit its quota.\n\n{detail}")
+        return "OpenAI rate limit", detail
+    if isinstance(exc, openai.APIConnectionError):
+        return "OpenAI connection error", f"Could not reach the OpenAI API.\n\n{detail}"
+    if isinstance(exc, openai.BadRequestError):
+        return "OpenAI bad request", detail
+    return f"OpenAI error ({exc.__class__.__name__})", detail
+
+
 class OpenaiAPITranscriber(WhisperTranscriber):
     backend = "openaiapi"
 
@@ -293,7 +329,8 @@ class OpenaiAPITranscriber(WhisperTranscriber):
                 model=self.model_name,
                 file=buffer,
             )
-        except openai.BadRequestError as e:
-            self.log(f"Error: {e}")
+        except openai.OpenAIError as e:
+            title, message = _format_openai_error(e)
+            self.notify_error(title, message)
             return {"text": ""}
         return {"text": transcription.text}

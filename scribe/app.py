@@ -273,6 +273,29 @@ def start_recording(micro, transcriber, clipboard=True, keyboard=False, auto_pas
         callback()
 
 
+def show_error_dialog(title, message):
+    """Pop a modal error dialog. Safe to call from any thread.
+
+    A fresh Tk root is created inside a daemon thread on each call so it never
+    contends with the pystray/GTK main loop that runs in app mode.
+    """
+    import threading
+
+    def _run():
+        try:
+            import tkinter as tk
+            from tkinter import messagebox
+            root = tk.Tk()
+            root.withdraw()
+            root.attributes("-topmost", True)
+            messagebox.showerror(title, message)
+            root.destroy()
+        except Exception as exc:
+            print(f"[error dialog failed: {exc!r}] {title}: {message}")
+
+    threading.Thread(target=_run, daemon=True).start()
+
+
 def create_app(micro, transcriber, other_transcribers=None, transcriber_options=[], **kwargs):
     import pystray
     from pystray import Menu as pystrayMenu, MenuItem as Item
@@ -281,6 +304,8 @@ def create_app(micro, transcriber, other_transcribers=None, transcriber_options=
 
     import scribe_data
     import threading
+
+    transcriber.error_callback = show_error_dialog
 
     # Load an image from a file
     image = Image.open(Path(scribe_data.__file__).parent / "share" / "icon.png")
@@ -371,7 +396,7 @@ def create_app(micro, transcriber, other_transcribers=None, transcriber_options=
             try:
                 start_recording(micro, transcriber, **kwargs)
             except Exception as exc:
-                transcriber.log(f"Recording thread error: {exc!r}")
+                transcriber.notify_error("Recording error", repr(exc))
             finally:
                 # Ensure the icon never gets stuck if an unhandled error escaped.
                 transcriber.recording = False
@@ -396,6 +421,7 @@ def create_app(micro, transcriber, other_transcribers=None, transcriber_options=
         model_name = str(item)
         meta = other_transcribers_dict[model_name]
         icon._transcriber = transcriber = get_transcriber(**meta)
+        transcriber.error_callback = show_error_dialog
         icon.title = f"scribe :: {transcriber.backend} :: {transcriber.model_name}"
         print("Set", transcriber.backend, transcriber.model_name)
         # icon.menu.items[0].__name__ = f"Record [{str(item)}]"
