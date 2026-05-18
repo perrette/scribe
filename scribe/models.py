@@ -26,7 +26,7 @@ class AbstractTranscriber:
     backend = None
     _frozen_options = frozenset()
     def __init__(self, model, model_name=None, language=None, samplerate=16000, timeout=None, model_kwargs={},
-                 silence_thresh=-40, silence_duration=2, restart_after_silence=False, logger=None):
+                 silence_thresh=-40, silence_duration=2, restart_after_silence=False):
         self.model_name = model_name
         self.language = language
         self.model = model
@@ -36,157 +36,60 @@ class AbstractTranscriber:
         self.silence_thresh = silence_thresh
         self.silence_duration = silence_duration
         self.restart_after_silence = restart_after_silence
-        self.recording = False
-        self.busy = False
-        self.waiting = False
-        self.interrupt = False
-        self.cancelled = False
-        # Optional callable(title: str, message: str) used to surface errors to the
-        # user (e.g. a tkinter dialog in app mode). When unset, errors are only logged.
-        self.error_callback = None
-        if logger is None:
-            import logging
-            logging.basicConfig(level=logging.INFO)
-            logger = logging.getLogger("scribe")
-        self.logger = logger
-        self.reset()
+        # Set by RecordingSession.__init__; backend reads/writes session.audio_buffer
+        # etc. inside transcribe_realtime_audio / finalize.
+        self.session = None
 
     def notify_error(self, title, message):
-        self.log(f"{title}: {message}")
-        if self.error_callback is not None:
-            try:
-                self.error_callback(title, message)
-            except Exception as exc:
-                self.log(f"error_callback failed: {exc!r}")
+        if self.session is not None:
+            self.session.notify_error(title, message)
+        else:
+            print(f"[{title}] {message}")
 
-    def get_elapsed(self):
-        return time.time() - self.start_time
-
-    def is_overtime(self):
-        return self.timeout is not None and time.time() - self.start_time > self.timeout
+    def log(self, text):
+        if self.session is not None:
+            self.session.log(text)
+        else:
+            if text.startswith("\n"):
+                print("")
+                text = text[1:]
+            print(f"[{text}]")
 
     def transcribe_realtime_audio(self, audio_bytes=b""):
         """This method is generic and assumes the underlying model does not handle real-time audio.
         The Vosk model handles real-time audio, so this method is overridden in the VoskTranscriber class.
         """
+        session = self.session
 
         # Vérifier si le segment est un silence
         if is_silent(audio_bytes, self.silence_thresh):
-            self.silence_buffer += audio_bytes
-            silence_duration = time.time() - self.last_sound_time
-            self.waiting = self.silence_duration is not None and silence_duration >= self.silence_duration
+            session.silence_buffer += audio_bytes
+            silence_duration = time.time() - session.last_sound_time
+            session.waiting = self.silence_duration is not None and silence_duration >= self.silence_duration
 
-            if self.waiting and len(self.audio_buffer) > 0:
+            if session.waiting and len(session.audio_buffer) > 0:
                 if self.restart_after_silence:
                     raise SilenceDetected("Silence detected: {:.2f} seconds".format(silence_duration))
                 else:
                     raise StopRecording("Silence detected: {:.2f} seconds".format(silence_duration))
 
         else:
-            self.last_sound_time = time.time()
-            self.waiting = False
-            silence_buffer_data = np.frombuffer(self.silence_buffer, dtype=np.int16)
+            session.last_sound_time = time.time()
+            session.waiting = False
+            silence_buffer_data = np.frombuffer(session.silence_buffer, dtype=np.int16)
             # add 0.5 seconds worth of silent data back to the audio buffer
             half_a_second = 0.5
             length_of_half_a_second = int(half_a_second * self.samplerate)
-            self.audio_buffer += silence_buffer_data[-length_of_half_a_second:].tobytes() + audio_bytes
-            self.silence_buffer = b''
+            session.audio_buffer += silence_buffer_data[-length_of_half_a_second:].tobytes() + audio_bytes
+            session.silence_buffer = b''
 
-        return {"partial": f"{len(self.audio_buffer)} bytes received (duration: {self.get_elapsed()} seconds)"}
+        return {"partial": f"{len(session.audio_buffer)} bytes received (duration: {session.get_elapsed()} seconds)"}
 
     def transcribe_audio(self, audio_data):
         raise NotImplementedError()
 
     def finalize(self):
         raise NotImplementedError()
-
-    def reset(self):
-        self.audio_buffer = b''
-        self.start_time = time.time()
-        self.silence_buffer = b''
-
-    def log(self, text):
-        if text.startswith("\n"):
-            print("")
-            text = text[1:]
-        if self.logger:
-            self.logger.info(text)
-        else:
-            print(f"[{text}]")
-
-    def start_recording(self, microphone,
-                        start_message="Recording... Press Ctrl+C to stop.",
-                        stop_message="Exit."):
-
-        self.reset()
-        self.interrupt = False
-        self.cancelled = False
-        self.recording = True
-        self.waiting = True
-        self.busy = True
-        if self.silence_duration is not None:
-            self.last_sound_time = time.time() - self.silence_duration
-        else:
-            self.last_sound_time = time.time()
-        # self.silence_buffer = b'' # already reset in self.reset()
-
-        try:
-
-            with microphone.open_stream():
-                self.log(start_message)
-
-                while not self.interrupt:
-                    while not microphone.q.empty():
-                        data = microphone.q.get()
-
-                        # leave it to each transcriber to handle the silence in audio data
-                        try:
-                            yield self.transcribe_realtime_audio(data)
-
-                        # This exception triggers a pause in recording to allow for a transcription of the audio buffer
-                        except SilenceDetected as e:
-                            self.log(str(e))
-                            self.recording = False # for the system tray icon
-                            try:
-                                result = self.finalize()
-                            except Exception as exc:
-                                self.notify_error("Transcription error", repr(exc))
-                                result = {"text": ""}
-                            microphone.q.queue.clear()
-                            self.reset()
-                            yield result
-                            self.recording = True # for the system tray icon
-                            self.start_time = time.time() # reset the start time to avoid timeout
-
-                        if self.is_overtime():
-                            raise StopRecording("Overtime: {:.2f} seconds".format(self.get_elapsed()))
-
-                    time.sleep(0.1) # avoid overheating
-
-        except (KeyboardInterrupt, StopRecording):
-            pass
-
-        finally:
-            self.waiting = False
-            self.recording = False
-            if self.cancelled:
-                self.reset()
-                microphone.q.queue.clear()
-                result = {"text": ""}
-            else:
-                try:
-                    result = self.finalize()
-                except Exception as exc:
-                    self.notify_error("Transcription error", repr(exc))
-                    result = {"text": ""}
-                    self.reset()
-                microphone.q.queue.clear()
-            # Yield before clearing busy so the consumer can finish writing to
-            # clipboard / keyboard / file while the icon still shows "busy".
-            yield result
-            self.busy = False
-
-        self.log(stop_message)
 
 
 def get_vosk_model(model, download_root=None, url=None):
@@ -222,7 +125,7 @@ class VoskTranscriber(AbstractTranscriber):
         self.recognizer = get_vosk_recognizer(model, self.samplerate)
 
     def transcribe_realtime_audio(self, audio_bytes=b""):
-        self.audio_buffer += audio_bytes
+        self.session.audio_buffer += audio_bytes
         final = self.recognizer.AcceptWaveform(audio_bytes)
         if final:
             result = self.recognizer.Result()
@@ -248,8 +151,7 @@ class VoskTranscriber(AbstractTranscriber):
     def finalize(self):
         return self.transcribe_audio(b"")
 
-    def reset(self):
-        super().reset()
+    def reset_model(self):
         self.recognizer = get_vosk_recognizer(self.model, self.samplerate)
 
 
@@ -268,10 +170,10 @@ class WhisperTranscriber(AbstractTranscriber):
         return self.model.transcribe(audio_array, fp16=False, language=self.language)
 
     def finalize(self):
-        if len(self.audio_buffer) == 0:
+        if len(self.session.audio_buffer) == 0:
             return {"text": ""}
-        result = self.transcribe_audio(self.audio_buffer)
-        self.reset()
+        result = self.transcribe_audio(self.session.audio_buffer)
+        self.session.reset()
         return result
 
 

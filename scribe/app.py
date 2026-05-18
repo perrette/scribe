@@ -9,6 +9,7 @@ from typing import Iterable
 from scribe.audio import Microphone
 from scribe.util import print_partial, clear_line, prompt_choices, ansi_link, colored
 from scribe.models import VoskTranscriber, WhisperTranscriber, OpenaiAPITranscriber
+from scribe.session import RecordingSession
 
 
 def _pidfile_path():
@@ -230,19 +231,19 @@ def get_parser():
 
 
 # Commencer l'enregistrement
-def start_recording(micro, transcriber, clipboard=True, keyboard=False, auto_paste=False, latency=0, ascii=False, output_file=None, callback=None, **greetings):
+def start_recording(micro, session, clipboard=True, keyboard=False, auto_paste=False, latency=0, ascii=False, output_file=None, callback=None, **greetings):
 
     if keyboard:
         from scribe.keyboard import type_text
-        transcriber.log("Change focus to target app during transcription.")
+        session.log("Change focus to target app during transcription.")
 
     if clipboard:
         import pyperclip
-        transcriber.log("The full transcription will be copied to clipboard as it becomes available.")
+        session.log("The full transcription will be copied to clipboard as it becomes available.")
 
     fulltext = ""
 
-    for result in transcriber.start_recording(micro, **greetings):
+    for result in session.start_recording(micro, **greetings):
 
         if result.get('text'):
             clear_line()
@@ -305,7 +306,7 @@ def create_app(micro, transcriber, other_transcribers=None, transcriber_options=
     import scribe_data
     import threading
 
-    transcriber.error_callback = show_error_dialog
+    session = RecordingSession(backend=transcriber, error_callback=show_error_dialog)
 
     # Load an image from a file
     image = Image.open(Path(scribe_data.__file__).parent / "share" / "icon.png")
@@ -318,14 +319,14 @@ def create_app(micro, transcriber, other_transcribers=None, transcriber_options=
         image_recording = Image.alpha_composite(image_recording.convert("RGBA"), image_writing.convert("RGBA"))
 
     def update_icon(icon, force=False):
-        transcriber = icon._transcriber
-        if transcriber.recording:
+        session = icon._session
+        if session.recording:
             if force or getattr(icon, "_icon_label", None) != "recording":
                 icon.icon = image_recording
                 icon._icon_label = "recording"
                 icon.update_menu()
 
-        elif transcriber.busy:
+        elif session.busy:
             if force or getattr(icon, "_icon_label", None) != "busy":
                 icon.icon = image_writing
                 icon._icon_label = "busy"
@@ -338,9 +339,9 @@ def create_app(micro, transcriber, other_transcribers=None, transcriber_options=
                 icon.update_menu()
 
     def start_monitoring(icon):
-        transcriber = icon._transcriber
+        session = icon._session
         try:
-            while transcriber.busy:
+            while session.busy:
                 update_icon(icon)
                 time.sleep(0.1)
 
@@ -362,11 +363,10 @@ def create_app(micro, transcriber, other_transcribers=None, transcriber_options=
             pass
 
     def callback_stop_recording(icon, item):
-        transcriber = icon._transcriber
         # Signal the recording thread to stop. Do NOT join here: that would block
         # the GTK main loop, preventing the monitoring thread's icon updates from
         # being rendered until transcription completes.
-        transcriber.interrupt = True
+        icon._session.interrupt = True
 
     def _join_recording_threads(icon):
         if hasattr(icon, "_recording_thread"):
@@ -375,14 +375,13 @@ def create_app(micro, transcriber, other_transcribers=None, transcriber_options=
             icon._monitoring_thread.join()
 
     def callback_cancel_recording(icon, item):
-        transcriber = icon._transcriber
-        transcriber.cancelled = True
+        icon._session.cancelled = True
         callback_stop_recording(icon, item)
 
     def callback_record(icon, item):
-        transcriber = icon._transcriber
-        if transcriber.busy:
-            # transcriber.log("Still busy recording or transcribing.")
+        session = icon._session
+        if session.busy:
+            # session.log("Still busy recording or transcribing.")
             return callback_stop_recording(icon, item)  # play / stop behavior
 
         if hasattr(icon, "_recording_thread") and icon._recording_thread.is_alive():
@@ -391,16 +390,16 @@ def create_app(micro, transcriber, other_transcribers=None, transcriber_options=
         if hasattr(icon, "_monitoring_thread") and icon._monitoring_thread.is_alive():
             icon._monitoring_thread.join()
 
-        transcriber.busy = True  # this is a hack to prevent race conditions between the below threads
+        session.busy = True  # this is a hack to prevent race conditions between the below threads
         def _safe_start_recording():
             try:
-                start_recording(micro, transcriber, **kwargs)
+                start_recording(micro, session, **kwargs)
             except Exception as exc:
-                transcriber.notify_error("Recording error", repr(exc))
+                session.notify_error("Recording error", repr(exc))
             finally:
                 # Ensure the icon never gets stuck if an unhandled error escaped.
-                transcriber.recording = False
-                transcriber.busy = False
+                session.recording = False
+                session.busy = False
         icon._recording_thread = threading.Thread(target=_safe_start_recording)
         icon._recording_thread.start()
         icon._monitoring_thread = threading.Thread(target=start_monitoring, args=(icon,))
@@ -414,14 +413,14 @@ def create_app(micro, transcriber, other_transcribers=None, transcriber_options=
     def callback_set_model(icon, item):
         transcriber = icon._transcriber
         if transcriber.model_name == str(item):
-            transcriber.log(f"Already using model {str(item)}")
+            icon._session.log(f"Already using model {str(item)}")
             return
         callback_stop_recording(icon, item)
         _join_recording_threads(icon)
         model_name = str(item)
         meta = other_transcribers_dict[model_name]
         icon._transcriber = transcriber = get_transcriber(**meta)
-        transcriber.error_callback = show_error_dialog
+        icon._session = RecordingSession(backend=transcriber, error_callback=show_error_dialog)
         icon.title = f"scribe :: {transcriber.backend} :: {transcriber.model_name}"
         print("Set", transcriber.backend, transcriber.model_name)
         # icon.menu.items[0].__name__ = f"Record [{str(item)}]"
@@ -453,7 +452,7 @@ def create_app(micro, transcriber, other_transcribers=None, transcriber_options=
         return icon._model_selection
 
     def is_recording(item):
-        return icon._transcriber.busy
+        return icon._session.busy
 
     def is_not_recording(item):
         return not is_recording(item) and not is_model_selection(item)
@@ -498,7 +497,9 @@ def create_app(micro, transcriber, other_transcribers=None, transcriber_options=
     icon = pystray.Icon('scribe', image, title, menu)
     icon._model_selection = False
     icon._transcriber = transcriber
+    icon._session = session
     del transcriber
+    del session
 
     pid_path = _pidfile_path()
     with open(pid_path, "w") as f:
@@ -508,7 +509,7 @@ def create_app(micro, transcriber, other_transcribers=None, transcriber_options=
     if hasattr(signal, "SIGUSR1"):
         signal.signal(signal.SIGUSR1, lambda *_: callback_record(icon, None))
     if hasattr(signal, "SIGUSR2"):
-        signal.signal(signal.SIGUSR2, lambda *_: icon._transcriber.busy and callback_cancel_recording(icon, None))
+        signal.signal(signal.SIGUSR2, lambda *_: icon._session.busy and callback_cancel_recording(icon, None))
 
     return icon
 
@@ -525,11 +526,15 @@ def main(args=None):
     micro = Microphone(samplerate=o.samplerate, device=o.microphone_device)
 
     transcriber = None
+    session = None
     details = False
 
     while True:
         if transcriber is None:
             transcriber = get_transcriber(**vars(o))
+            session = None
+        if session is None and not isinstance(transcriber, DummyTranscriber):
+            session = RecordingSession(backend=transcriber)
         print(f"Model [{colored(transcriber.model_name, 'light_blue', attrs=['bold'])}] from [{colored(transcriber.backend, 'light_blue', attrs=['bold'])}] selected.")
         show_output = ["clipboard", "keyboard", "auto_paste", "output_file"]
         show_options = ["ascii", "restart_after_silence"]
@@ -657,7 +662,8 @@ def main(args=None):
             greetings = dict(
                 start_message = "Listening... Press Ctrl+C to stop.",
             )
-            start_recording(micro, transcriber, clipboard=o.clipboard, output_file=o.output_file,
+            start_recording(micro, session if session is not None else transcriber,
+                            clipboard=o.clipboard, output_file=o.output_file,
                             keyboard=o.keyboard, auto_paste=o.auto_paste, latency=o.latency, ascii=o.ascii, **greetings)
 
         # if we arrived so far, that means we pressed Ctrl + C anyway, and need Enter to move on.
