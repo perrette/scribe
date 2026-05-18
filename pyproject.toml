@@ -53,6 +53,7 @@ whisper = ["faster-whisper"]
 vosk = ["vosk"]
 app = ["pystray", "PyGObject"]
 openai = ["openai", "soundfile"]
+groq = ["openai", "soundfile"]
 all = ["pynput", "faster-whisper", "openai", "soundfile", "vosk", "pystray"]
 
 

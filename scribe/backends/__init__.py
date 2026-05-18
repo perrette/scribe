@@ -13,10 +13,12 @@ from desktop_ai_core.providers.registry import _STT_REGISTRY
 from scribe.backends.vosk import VoskTranscriber, _probe_vosk
 from scribe.backends.whisper import WhisperTranscriber, _probe_whisper
 from scribe.backends.openai_api import OpenaiAPITranscriber, _probe_openai
+from scribe.backends.groq import GroqTranscriber, _probe_groq
 
 register_stt("vosk", VoskTranscriber, probe=_probe_vosk)
 register_stt("whisper", WhisperTranscriber, probe=_probe_whisper)
 register_stt("openaiapi", OpenaiAPITranscriber, probe=_probe_openai)
+register_stt("groq", GroqTranscriber, probe=_probe_groq)
 
 BACKENDS = _STT_REGISTRY
 
@@ -42,4 +44,5 @@ __all__ = [
     "VoskTranscriber",
     "WhisperTranscriber",
     "OpenaiAPITranscriber",
+    "GroqTranscriber",
 ]
