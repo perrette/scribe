@@ -2,7 +2,7 @@ import os
 import time
 from pathlib import Path
 import numpy as np
-from desktop_ai_core.providers import STTBackend
+from desktop_ai_core.providers import STTBackend, StreamingSTTBackend
 from scribe.util import download_model
 from scribe.audio import calculate_decibels
 
@@ -105,6 +105,22 @@ class AbstractTranscriber(STTBackend):
         if isinstance(result, dict):
             return result.get("text", "") or ""
         return str(result)
+
+
+class AbstractStreamingTranscriber(AbstractTranscriber, StreamingSTTBackend):
+    """Shared base for streaming transcribers in scribe.
+
+    Inherits scribe's session/notify_error/log plumbing from
+    `AbstractTranscriber` and the streaming protocol (`feed_audio`,
+    `open_session`, `close_session`) from `StreamingSTTBackend`. The
+    backward-compat `transcribe_realtime_audio` adapter is taken from
+    `StreamingSTTBackend` (drains `feed_audio` and returns the last
+    event), overriding `AbstractTranscriber`'s buffering version which
+    only makes sense for batch backends.
+    """
+
+    def transcribe_realtime_audio(self, chunk=b""):
+        return StreamingSTTBackend.transcribe_realtime_audio(self, chunk)
 
 
 def get_vosk_model(model, download_root=None, url=None):
