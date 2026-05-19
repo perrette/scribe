@@ -47,9 +47,14 @@ class YdotoolTyper:
             raise RuntimeError(f"ydotool failed: {e.stderr.decode(errors='replace')}") from e
 
     def paste(self) -> None:
+        # ydotool's `key` command takes named modifiers separated by '+',
+        # NOT the keycode:state decimal syntax (29:1 47:1 47:0 29:0) — that
+        # form gets parsed as invalid key tokens, and ydotool falls back to
+        # typing fragments of those strings as literal text (the "prints
+        # numbers" bug). The correct invocation is `ydotool key ctrl+v`.
         try:
             subprocess.run(
-                ["ydotool", "key", "29:1", "47:1", "47:0", "29:0"],
+                ["ydotool", "key", "ctrl+v"],
                 check=True,
                 capture_output=True,
             )
