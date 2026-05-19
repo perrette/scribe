@@ -196,7 +196,11 @@ def get_parser():
     group.add_argument("-o", "--output-file")
 
     group = parser.add_argument_group("keyboard options")
-    group.add_argument("--latency", default=0.01, type=float, help="keyboard latency (default %(default)s s)")
+    group.add_argument("--latency", default=0, type=float,
+                       help="Per-character delay (s) when typing via --keyboard. "
+                            "Default 0 (type each utterance in one call). Only set this "
+                            "if you see character-order glitches with the pynput uinput "
+                            "backend — other backends handle their own timing.")
     group.add_argument("--ascii", action="store_true", help="Use unidecode for keyboard typing in ascii")
 
     group = parser.add_argument_group("whisper options")
