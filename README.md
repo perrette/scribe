@@ -184,15 +184,17 @@ else first.
 > just remember Shift for terminal targets, nothing for GUI apps where
 > plain `Ctrl+V` already works (including VS Code's editor pane).
 
-> **Historical note.** Up to mid-2026 these three modes were three
-> independent boolean flags (`--clipboard / --auto-paste / --keyboard`)
-> plus a tuning pair (`--latency / --ascii`) for a per-character typing
-> path that turned out to be structurally limited for non-ASCII text on
-> Wayland-native typer backends. That path was retired in favour of
-> paste-per-chunk; the booleans collapsed into the single `--mode` flag
-> documented here. The legacy per-character typing function is still
-> reachable as `scribe.keyboard.type_text(...)` from the Python API for
-> debugging.
+> **Or: `--type-direct` / Options → Keyboard backend → Type directly.**
+> In keystroke mode this bypasses the clipboard and types the transcription
+> as raw keystrokes — so it lands in any focused input, terminals included,
+> without depending on a paste shortcut. Caveat: keystrokes are synthesised
+> against the **active xkb keyboard layout**, so non-ASCII characters only
+> come through if the current layout actually contains them. A French
+> dictation on a French (or Italian, for shared accents) layout types `é`
+> verbatim; on a US layout the same `é` is silently degraded to `e` via
+> `unidecode` and a warning is logged. Switch your system keyboard layout
+> to one that covers the script you're dictating, or stick to the paste
+> path (plain `Ctrl+V`, or the Shift trick above) for lossless Unicode.
 
 ### Output file
 
