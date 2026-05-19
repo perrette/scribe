@@ -1,41 +1,29 @@
 [![pypi](https://img.shields.io/pypi/v/scribe-cli)](https://pypi.org/project/scribe-cli)
 ![](https://img.shields.io/python/required-version-toml?tomlFilePath=https%3A%2F%2Fraw.githubusercontent.com%2Fperrette%2Fscribe%2Frefs%2Fheads%2Fmain%2Fpyproject.toml)
 
-# Scribe  <img src="https://github.com/perrette/bard/raw/main/bard_data/share/icon.png" width=48px>
+# Scribe  <img src="https://github.com/perrette/scribe/raw/main/scribe_data/share/icon.png" width=48px>
 
-`scribe` is a speech recognition tool that provides real-time transcription using cutting-edge AI models, with the goal of serving as a virtual keyboard on a computer.
+`scribe` is a speech to text (STT) tool that can be used as a virtual keyboard on a computer. It provides local or cloud-based, batch or real-time transcription using cutting-edge AI models.
 
 ## Backends
 
-It supports four backends; Groq is the default cloud backend when `GROQ_API_KEY` is set:
+It currently supports four backends; Groq is the default cloud backend when `GROQ_API_KEY` is set:
 
-| Backend | Display label | `--backend` | Type | Default model | Requires |
-|---------|--------------|-------------|------|---------------|---------|
-| Groq | `Groq` | `groq` | cloud | `whisper-large-v3-turbo` | `GROQ_API_KEY` |
-| OpenAI | `OpenAI` | `openai` | cloud | `gpt-4o-mini-transcribe` | `OPENAI_API_KEY` |
-| Whisper | `Whisper (local)` | `whisper` | local | `large-v3-turbo` | `pip install scribe-cli[whisper]` |
-| Vosk | `Vosk (local, streaming)` | `vosk` | local | language model | `pip install scribe-cli[vosk]` |
-
-The OpenAI submenu also exposes `gpt-realtime-whisper` — a streaming model that sends live partial transcriptions as you speak. It uses the same `OPENAI_API_KEY` and requires the `[openai]` extra (`openai>=2.37.0`); no additional dependencies are needed (the SDK handles the WebSocket transport). Select it from the tray/terminal menu under **Model → OpenAI → gpt-realtime-whisper (streaming)**. It is not part of the auto-pick chain — the auto-pick order stays `groq → openai → whisper → vosk` and will never silently select `openai-realtime`; it is always an explicit opt-in via the Model menu.
+| Backend | `--backend` | Streaming ? | Default model | Requires |
+|---------|-------------|-------------|---------------|---------|
+| Groq (cloud) | `groq` | no | `whisper-large-v3-turbo` | `GROQ_API_KEY` |
+| OpenAI (cloud) | `openai` | yes (`gpt-realtime-whisper`) | `gpt-4o-mini-transcribe` | `OPENAI_API_KEY` |
+| Whisper (local) | `whisper` | no | `small` | `pip install scribe-cli[whisper]` |
+| Vosk (local) | `vosk` | yes | language model | `pip install scribe-cli[vosk]` |
 
 When started without `--backend`, scribe picks the first available backend in order: `groq` → `openai` → `whisper` → `vosk`.
 
-> **Naming note.** `openai` is the cloud OpenAI backend (batch REST, model: `gpt-4o-mini-transcribe`); `openai-realtime` is the streaming sibling (WebSocket, model: `gpt-realtime-whisper`) — both appear in a single **OpenAI** submenu. `whisper` is the *local* [faster-whisper](https://github.com/SYSTRAN/faster-whisper) backend — a different model pipeline from OpenAI's `whisper-1` (deprecated) and Groq's `whisper-large-v3-turbo`. The tray and terminal menus show vendor-prefixed labels (`OpenAI`, `Groq`, `Whisper (local)`, `Vosk (local, streaming)`) to make this unambiguous.
->
-> **Migration note.** The OpenAI cloud backend is now selected with `--backend openai`. The `whisper-1` model is still selectable via `Choose Model → OpenAI` but is deprecated in favour of `gpt-4o-mini-transcribe`. The `gpt-realtime-whisper` model lives in a separate registered backend (`openai-realtime`) but is surfaced in the same **OpenAI** submenu — two registered backends, one vendor submenu.
 
 ## Compatibility
 
-The package is initially developped for python 3.12 with Ubuntu 24.04 with Gnome + Wayland, but it should work on other platforms as well (feedback welcome).
+The package is initially developped for python 3 with Ubuntu 24.04 with Gnome + Wayland, but it should work on other platforms as well. Tested and fully functional on MacOS. Functional in terminal frontend and via user-triggered pasting on Android Termux. On Ubuntu Wayland the keyboard input is convoluted but [works](#keyboard-backend-typer).
 Basically check the pages of the dependencies for more info (i.e. pynput for the keyboard, pystray for the app).
 
-- Ubuntu:
-    - see caveats in the use of the keyboard under Wayland [keyboard section](#use-the-keyboard-with-wayland).
-- MacOS:
-    - tested on a Macbook Air M1 8Gb RAM, with python 3.12. It runs, but poorly, presumably because of the low memory: prefer a cloud backend (`groq` or `openai`) for such machines
-    - I expect better memory specs will have the local models run fine
-- Windows:
-    - not tested yet
 
 ## Installation
 
@@ -126,7 +114,7 @@ You can interrupt the recording via Ctrl + C and start again or change model.
 
 ### `whisper` (local)
 
-The `whisper` backend runs locally via [`faster-whisper`](https://github.com/SYSTRAN/faster-whisper) and defaults to the `large-v3-turbo` model. It is excellent at transcribing full-length audio sequences in [many languages](https://github.com/openai/whisper?tab=readme-ov-file#available-models-and-languages), but it cannot do real-time and the execution time depends on the model and hardware. Smaller models (`small`, `medium`) trade accuracy for speed.
+The `whisper` backend runs locally via [`faster-whisper`](https://github.com/SYSTRAN/faster-whisper) and defaults to the `small` model. It is excellent at transcribing full-length audio sequences in [many languages](https://github.com/openai/whisper?tab=readme-ov-file#available-models-and-languages), but it cannot do real-time and the execution time depends on the model and hardware. Larger models (`medium`, `large-v3-turbo`) trade speed for accuracy.
 
 With the `whisper`, `openai`, and `groq` backends the recording continues for 2 minutes until you stop it manually to trigger the transcription (Stop in the app, Ctrl + C in the terminal).
 These parameters can be changed. There is also the possibility to interrupt after a silence is detected. For example `--silence-db -40 --silence 2` interrupts recording when a silence (less than -40 dB recorded) lasts more than 2 seconds. The default `--silence-db -200` / `--silence 120` effectively disables this feature and keeps full manual control.
@@ -304,9 +292,9 @@ Roadmap for native libei integration (eventual Python bindings,
 expanded compositor support) is tracked in
 [docs/roadmap-libei.md](docs/roadmap-libei.md).
 
-## System tray icon (experimental) <img src="https://github.com/perrette/bard/raw/main/bard_data/share/icon.png" width=48px>
+## System tray icon <img src="https://github.com/perrette/scribe/raw/main/scribe_data/share/icon.png" width=48px>
 
-<img src=https://github.com/user-attachments/assets/4c97f4b1-1a65-4d49-9f5a-a9f4287cfa5a width=300px>
+<img src=https://raw.githubusercontent.com/perrette/scribe/main/docs/app-tray-menu.png width=300px>
 
 Tray mode is the default — running `scribe` with no arguments launches the system tray icon. If you'd rather use the interactive terminal menu, pass `--frontend terminal`:
 ```bash
