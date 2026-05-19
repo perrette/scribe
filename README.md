@@ -14,13 +14,15 @@ It supports four backends; Groq is the default cloud backend when `GROQ_API_KEY`
 | Groq | `Groq` | `groq` | cloud | `whisper-large-v3-turbo` | `GROQ_API_KEY` |
 | OpenAI | `OpenAI` | `openai` | cloud | `gpt-4o-mini-transcribe` | `OPENAI_API_KEY` |
 | Whisper | `Whisper (local)` | `whisper` | local | `large-v3-turbo` | `pip install scribe-cli[whisper]` |
-| Vosk | `Vosk (local, live partials)` | `vosk` | local | language model | `pip install scribe-cli[vosk]` |
+| Vosk | `Vosk (local, streaming)` | `vosk` | local | language model | `pip install scribe-cli[vosk]` |
+
+The OpenAI submenu also exposes `gpt-realtime-whisper` — a streaming model that sends live partial transcriptions as you speak. It uses the same `OPENAI_API_KEY` and requires the `[openai]` extra (`openai>=2.37.0`); no additional dependencies are needed (the SDK handles the WebSocket transport). Select it from the tray/terminal menu under **Model → OpenAI → gpt-realtime-whisper (streaming)**. It is not part of the auto-pick chain — the auto-pick order stays `groq → openai → whisper → vosk` and will never silently select `openai-realtime`; it is always an explicit opt-in via the Model menu.
 
 When started without `--backend`, scribe picks the first available backend in order: `groq` → `openai` → `whisper` → `vosk`.
 
-> **Naming note.** `openai` is the cloud OpenAI backend (model: `gpt-4o-mini-transcribe`); `whisper` is the *local* [faster-whisper](https://github.com/SYSTRAN/faster-whisper) backend — a different model pipeline from OpenAI's `whisper-1` (deprecated) and Groq's `whisper-large-v3-turbo`. The tray and terminal menus show vendor-prefixed labels (`OpenAI`, `Groq`, `Whisper (local)`, `Vosk (local, live partials)`) to make this unambiguous.
+> **Naming note.** `openai` is the cloud OpenAI backend (batch REST, model: `gpt-4o-mini-transcribe`); `openai-realtime` is the streaming sibling (WebSocket, model: `gpt-realtime-whisper`) — both appear in a single **OpenAI** submenu. `whisper` is the *local* [faster-whisper](https://github.com/SYSTRAN/faster-whisper) backend — a different model pipeline from OpenAI's `whisper-1` (deprecated) and Groq's `whisper-large-v3-turbo`. The tray and terminal menus show vendor-prefixed labels (`OpenAI`, `Groq`, `Whisper (local)`, `Vosk (local, streaming)`) to make this unambiguous.
 >
-> **Migration note.** The OpenAI cloud backend is now selected with `--backend openai`. The `whisper-1` model is still selectable via `Choose Model → OpenAI` but is deprecated in favour of `gpt-4o-mini-transcribe`.
+> **Migration note.** The OpenAI cloud backend is now selected with `--backend openai`. The `whisper-1` model is still selectable via `Choose Model → OpenAI` but is deprecated in favour of `gpt-4o-mini-transcribe`. The `gpt-realtime-whisper` model lives in a separate registered backend (`openai-realtime`) but is surfaced in the same **OpenAI** submenu — two registered backends, one vendor submenu.
 
 ## Compatibility
 
@@ -144,6 +146,8 @@ scribe --backend openai
 ```
 Lightweight and handy if you have an API key and a low-spec computer (and don't care too much about privacy, obviously).
 
+The OpenAI submenu also includes **`gpt-realtime-whisper`** (select via Model → OpenAI → gpt-realtime-whisper (streaming)). Unlike the batch `openai` backend which transcribes once when you stop recording, `gpt-realtime-whisper` streams partial results live as you speak — identical UX to Vosk but using OpenAI's cloud model. It uses the same `OPENAI_API_KEY` and the `[openai]` extra; no extra dependencies are required. See the model card at https://developers.openai.com/api/docs/models/gpt-realtime-whisper.
+
 ### `groq` (Groq cloud)
 
 The `groq` backend talks to Groq's OpenAI-compatible API and uses `whisper-large-v3-turbo`. It is typically the fastest option for full-utterance transcription:
@@ -162,7 +166,7 @@ are exposed in both places — there is no separate "auto-paste" /
 
 | `--mode` value                | What happens                                                                                                                       |
 |-------------------------------|------------------------------------------------------------------------------------------------------------------------------------|
-| `keystroke` *(default)*       | The transcription lands in the focused window. **Batch backends** (whisper, openai, groq): single Ctrl+V at end of recording. **Streaming backends** (vosk): each chunk is pasted live as it arrives — "appears as you speak". |
+| `keystroke` *(default)*       | The transcription lands in the focused window. **Batch backends** (whisper, openai, groq): single Ctrl+V at end of recording. **Streaming backends** (vosk, openai-realtime): each chunk is pasted live as it arrives — "appears as you speak". |
 | `clipboard`                   | Transcription copied to clipboard; you press Ctrl+V yourself.                                                                      |
 | `terminal`                    | No clipboard, no keystroke — transcription is only printed to the terminal.                                                        |
 
@@ -331,7 +335,7 @@ Both the tray and terminal frontends share the same menu tree:
 Record                          start recording (default tray action)
 Stop / Cancel                   end or discard an in-flight recording
 Model ▶                         per-vendor submenus:
-    OpenAI ▶                      gpt-4o-mini-transcribe, whisper-1 (deprecated)
+    OpenAI ▶                      gpt-4o-mini-transcribe, gpt-realtime-whisper (streaming), whisper-1 (deprecated)
     Groq ▶                        whisper-large-v3-turbo
     Whisper (local) ▶             models via --whisper-models — 'small (recommended)'
     Vosk (local, streaming) ▶     models via --vosk-models
