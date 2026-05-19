@@ -537,9 +537,9 @@ def _output_mode_radio(app_state, key: str, mode: str, label: str) -> Item:
 def _output_mode_submenu(app_state) -> Menu:
     """Mutually-exclusive output modes, grouped as a radio submenu.
 
-    Three modes — the keystroke mechanism (per-char typing vs Ctrl+V at
-    end) is picked automatically for the current backend, so the user
-    sees only 'where does the text go'.
+    Three modes — the underlying mechanism (paste-per-chunk live vs
+    Ctrl+V at end of recording) is picked automatically for the current
+    backend, so the user sees only 'where does the text go'.
     """
     modes = [
         ("c", "clipboard", "Clipboard only (press Ctrl+V yourself)"),
@@ -549,7 +549,7 @@ def _output_mode_submenu(app_state) -> Menu:
     items = []
     for key, mode, label in modes:
         items.append(_output_mode_radio(app_state, key, mode, label))
-    return Menu(items, name="Output mode")
+    return Menu(items, name="Keyboard mode")
 
 
 _TYPER_ORDER = ("eitype", "wtype", "pynput", "ydotool")
@@ -558,20 +558,15 @@ _TYPER_ORDER = ("eitype", "wtype", "pynput", "ydotool")
 def _typer_menu(app_state) -> Menu:
     """Radio submenu listing the available keystroke-injection backends.
 
-    'Auto' (default) defers to the probe chain at call time. Unavailable
-    typers (binary missing, wrong session, etc.) are shown but disabled.
+    The menu shows the concrete backends only — 'Auto' is resolved at
+    startup in scribe.app.main, so by the time the menu renders ``o.typer``
+    is already a concrete name (e.g. 'eitype'). Unavailable typers stay in
+    the list disabled, so the user can see *why* a particular backend
+    wasn't picked.
     """
     from scribe.typers import TYPERS
 
     items = []
-    auto_item = Item(
-        "Auto",
-        app_state.cb_set_typer("auto"),
-        checked=lambda item: getattr(app_state.o, "typer", "auto") == "auto",
-    )
-    auto_item.radio = True
-    items.append(auto_item)
-
     ordered = [n for n in _TYPER_ORDER if n in TYPERS] + \
               [n for n in TYPERS if n not in _TYPER_ORDER]
     for name in ordered:
@@ -582,14 +577,14 @@ def _typer_menu(app_state) -> Menu:
         label = name if available else f"{name} — unavailable"
 
         def _is_current(_item, _n=name):
-            return getattr(app_state.o, "typer", "auto") == _n
+            return getattr(app_state.o, "typer", None) == _n
 
         item = Item(label, app_state.cb_set_typer(name), checked=_is_current)
         item.radio = True
         item.enabled = available
         items.append(item)
 
-    return Menu(items, name="Typer")
+    return Menu(items, name="Keyboard backend")
 
 
 def _advanced_options_menu(app_state) -> Menu:
@@ -623,11 +618,11 @@ def _advanced_options_menu(app_state) -> Menu:
 def _toggle_options_menu(app_state) -> Menu:
     is_terminal = _is_terminal_frontend(app_state)
     items = [
-        Item("output", _output_mode_submenu(app_state), help="Output mode"),
+        Item("mode", _output_mode_submenu(app_state), help="Keyboard mode"),
         Item("x", app_state.cb_toggle_frontend, help="Toggle tray app mode",
              checked=lambda item: getattr(app_state.o, "frontend", None) == "tray",
              visible=is_terminal),
-        Item("typer", _typer_menu(app_state), help="Typer backend"),
+        Item("backend", _typer_menu(app_state), help="Keyboard backend"),
         Item("advanced", _advanced_options_menu(app_state), help="Advanced"),
     ]
     return Menu(items, name="Options")

@@ -365,15 +365,25 @@ def main(args=None):
     parser = get_parser()
     o = parser.parse_args(args)
 
+    # Resolve "auto" to a concrete typer name at startup so the menu can show
+    # the actually-selected backend (not a meta "Auto" entry) and we don't
+    # re-probe on every recording. If the explicit choice is unavailable
+    # (e.g. eitype was uninstalled since last launch), fall back to auto-probe.
     from scribe.typers import pick_typer as _pick_typer
-    if o.typer != "auto":
-        print(f"Typer: {colored(o.typer, 'light_blue', attrs=['bold'])}")
-    else:
+    try:
+        if o.typer == "auto":
+            o.typer = _pick_typer(None).name
+        else:
+            o.typer = _pick_typer(o.typer).name
+    except (KeyError, RuntimeError):
         try:
-            _selected = _pick_typer(None)
-            print(f"Typer: {colored(_selected.name, 'light_blue', attrs=['bold'])} (auto)")
+            o.typer = _pick_typer(None).name
         except RuntimeError:
-            print(colored("Typer: none available", "light_red"))
+            o.typer = "auto"  # leave for type_text/paste_via_clipboard to surface
+    if o.typer == "auto":
+        print(colored("Typer: none available", "light_red"))
+    else:
+        print(f"Typer: {colored(o.typer, 'light_blue', attrs=['bold'])}")
 
     micro = Microphone(samplerate=o.samplerate, device=o.input_device)
 
