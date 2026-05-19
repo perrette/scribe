@@ -3,7 +3,7 @@ from __future__ import annotations
 from scribe.typers.base import Typer
 
 TYPERS: dict[str, type[Typer]] = {}
-_PROBE_ORDER: list[str] = ["eitype", "wtype", "pynput"]
+_PROBE_ORDER: list[str] = ["eitype", "wtype", "pynput", "ydotool"]
 
 
 def pick_typer(name: str | None = None) -> Typer:
@@ -41,3 +41,4 @@ def pick_typer(name: str | None = None) -> Typer:
 import scribe.typers.pynput as _pynput_mod  # noqa: E402, F401  registers PynputTyper
 import scribe.typers.eitype as _eitype_mod  # noqa: E402, F401  registers EitypeTyper
 import scribe.typers.wtype as _wtype_mod  # noqa: E402, F401  registers WtypeTyper
+import scribe.typers.ydotool as _ydotool_mod  # noqa: E402, F401  registers YdotoolTyper
