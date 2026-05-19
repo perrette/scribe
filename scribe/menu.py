@@ -327,6 +327,12 @@ class AppState(AbstractFrontendApp):
         self._refresh_tray_menu()
         return True
 
+    def cb_toggle_auto_paste(self, view, item):
+        self.o.auto_paste = not bool(getattr(self.o, "auto_paste", False))
+        self.params["auto_paste"] = self.o.auto_paste
+        self._refresh_tray_menu()
+        return True
+
     def cb_toggle_frontend(self, view, item):
         self.o.frontend = "terminal" if self.o.frontend == "tray" else "tray"
         self.params["frontend"] = self.o.frontend
@@ -562,6 +568,8 @@ def _toggle_options_menu(app_state) -> Menu:
     items = [
         Item("c", app_state.cb_toggle_clipboard, help="Copy to clipboard",
              checked=lambda item: bool(getattr(app_state.o, "clipboard", False))),
+        Item("p", app_state.cb_toggle_auto_paste, help="Auto-paste (Ctrl+V after recording)",
+             checked=lambda item: bool(getattr(app_state.o, "auto_paste", False))),
         Item("k", app_state.cb_toggle_keyboard, help="Auto-type via keyboard",
              checked=lambda item: bool(getattr(app_state.o, "keyboard", False))),
         Item("x", app_state.cb_toggle_frontend, help="Toggle tray app mode",
