@@ -45,7 +45,7 @@ sudo apt-get install portaudio19-dev xclip
 
 (`portaudio19-dev` becomes `portaudio ` with homebrew)
 
-See additional requirements for the [icon tray](#system-tray-icon-experimental-) and [keyboard](#virtual-keyboard-experimental) options. The python dependencies should be dealt with automatically:
+See additional requirements for the [icon tray](#system-tray-icon-experimental-) and [keyboard backends](#keyboard-backend-typer). The python dependencies should be dealt with automatically:
 
 ```bash
 pip install scribe-cli[all]
@@ -62,6 +62,14 @@ pip install -e .[all]
 ```
 
 You can leave the optional dependencies (leave out `[all]`) but must install at least one of `vosk` or `faster-whisper` or `openai` packages (see Usage below). The `groq` backend reuses the `openai` client, so installing the `openai` extra is enough for both `openai` and `groq`.
+
+`[all]` pulls in `pynput` automatically, which covers the pynput
+typer backend (XTest on Linux X11, Quartz on macOS, WinAPI on Windows).
+The other typer backends (`eitype`, `wtype`, `ydotool`) are OS-level
+binaries, *not* Python packages — install them via your distro
+package manager or `cargo` (see the [Keyboard backend](#keyboard-backend-typer)
+section). They are optional; scribe falls back to whichever one is
+available.
 
 ### Manual selection of the dependencies
 
@@ -80,8 +88,15 @@ sudo apt-get install portaudio19-dev
 pip install pyperclip  # automatically installed as required dependency
 sudo apt-get install xclip
 
-# keyboard
-pip install pynput
+# keyboard backends
+pip install pynput    # Python lib used by the pynput typer
+# Optional OS-level binaries for the other typer backends:
+#   eitype  — Linux Wayland (GNOME/KDE/Hyprland). Install via:
+#             cargo install --git https://github.com/Adam-D-Lewis/eitype
+#   wtype   — Linux Wayland on wlroots (Sway etc.). Install via:
+#             sudo apt install wtype
+#   ydotool — Linux any session. Install via:
+#             sudo apt install ydotool   (needs daemon + input group)
 
 # app mode
 sudo apt install libcairo-dev libgirepository1.0-dev gir1.2-appindicator3-0.1  # Ubuntu ONLY (not needed on MacOS)
