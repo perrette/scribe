@@ -1,6 +1,8 @@
-import os, sys, platform, shutil, sysconfig
+import os, sys, platform, shutil, subprocess, sysconfig
 import argparse
 import scribe_data
+
+EITYPE_REPO = "https://github.com/Adam-D-Lewis/eitype"
 
 def main():
 
@@ -50,10 +52,11 @@ def main():
 
 
 def _post_install_typer_hint():
-    """On Linux Wayland sessions without ``eitype`` installed, print
-    instructions for getting native-Wayland-compatible keyboard injection.
-    pynput's XTest backend (the only fallback) only reaches apps running
-    under XWayland — native Wayland clients silently drop the events.
+    """On Linux Wayland sessions without ``eitype`` installed, recommend it
+    and offer to run ``cargo install`` if cargo is already present. We
+    deliberately do NOT auto-install the Rust toolchain itself (that would
+    mean piping a third-party shell script unattended) — if cargo is
+    missing, fall back to printing the manual recipe.
     """
     if platform.system() != "Linux":
         return
@@ -66,6 +69,8 @@ def _post_install_typer_hint():
     if shutil.which("eitype") is not None:
         return
 
+    cargo = shutil.which("cargo")
+
     print()
     print("─── Recommended: install eitype for native-Wayland keyboard input ───")
     print()
@@ -75,14 +80,52 @@ def _post_install_typer_hint():
     print("apps, GNOME Console, …) won't receive scribe's keystrokes.")
     print()
     print("For full coverage, install eitype (libei via XDG RemoteDesktop")
-    print("portal — works on GNOME 45+, KDE Plasma 6.1+, Hyprland):")
+    print("portal — works on GNOME 45+, KDE Plasma 6.1+, Hyprland).")
     print()
-    print("  # 1. Install rustup if you don't have it:")
+
+    if cargo is not None:
+        try:
+            ans = input(
+                "cargo is already installed — install eitype now? "
+                "(~1-2 min, no sudo, writes to ~/.cargo/bin) [y/N] "
+            ).strip().lower()
+        except (EOFError, KeyboardInterrupt):
+            print()
+            ans = ""
+        if ans in ("y", "yes"):
+            print()
+            print(f"Running: {cargo} install --git {EITYPE_REPO}")
+            print()
+            try:
+                rc = subprocess.run(
+                    [cargo, "install", "--git", EITYPE_REPO],
+                    check=False,
+                ).returncode
+            except Exception as exc:
+                print(f"cargo install failed to launch: {exc}")
+                rc = 1
+            if rc == 0:
+                where = shutil.which("eitype") or os.path.expanduser("~/.cargo/bin/eitype")
+                print(f"\nInstalled eitype at {where}.")
+                print("Scribe will auto-detect it on next launch.")
+            else:
+                print(f"\ncargo install exited with code {rc}.")
+                print("Re-run manually later:")
+                print(f"  cargo install --git {EITYPE_REPO}")
+        else:
+            print()
+            print("Skipped. To install later:")
+            print(f"  cargo install --git {EITYPE_REPO}")
+        print()
+        return
+
+    # No cargo on PATH — print the full rustup + cargo install recipe.
+    print("  # 1. Install rustup (one-line installer from https://rustup.rs):")
     print("  curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh")
     print("  source \"$HOME/.cargo/env\"")
     print()
     print("  # 2. Install eitype:")
-    print("  cargo install --git https://github.com/Adam-D-Lewis/eitype")
+    print(f"  cargo install --git {EITYPE_REPO}")
     print()
     print("Scribe will auto-detect it on next launch.")
     print()
