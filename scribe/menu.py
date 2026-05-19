@@ -54,7 +54,7 @@ def format_model_label(backend_name: str, model_id: str) -> str:
 
 
 _DEFAULT_MODELS: dict[str, list[str]] = {
-    "openai": ["gpt-4o-mini-transcribe", "whisper-1"],
+    "openai": ["gpt-4o-transcribe", "gpt-4o-mini-transcribe", "whisper-1"],
     "groq": ["whisper-large-v3-turbo"],
     "whisper": ["small", "medium", "large", "large-v3", "large-v3-turbo"],
     "vosk": [],
