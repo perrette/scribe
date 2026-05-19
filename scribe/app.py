@@ -154,64 +154,54 @@ def get_transcriber(model=None, backend=None, dummy=False, prompt=True, language
 def get_parser():
 
     parser = argparse.ArgumentParser()
-    parser.add_argument("--backend", choices=list(BACKENDS),
-                        help="Choose the backend to use for speech recognition (will be prompted otherwise).")
 
-    parser.add_argument("--model",
-                        help="""For vosk, any model from https://alphacephei.com/vosk/models,
-                        e.g. 'vosk-model-small-en-us-0.15'.
-                        For whisper, see https://github.com/openai/whisper?tab=readme-ov-file#available-models-and-languages""")
+    group = parser.add_argument_group("Backend")
+    group.add_argument("--backend", choices=list(BACKENDS),
+                       help="Speech-recognition backend (prompted if omitted).")
+    group.add_argument("--model",
+                       help="Model name for the chosen backend (see README).")
+    group.add_argument("-l", "--language", choices=list(language_config["vosk"]),
+                       help="Language alias selecting a preset vosk model, or 'en' for English-only whisper models.")
+    group.add_argument("--api-key",
+                       help="API key for cloud backends (openai, groq); falls back to OPENAI_API_KEY / GROQ_API_KEY.")
+    group.add_argument("--download-folder-whisper", help="Folder to store Whisper models.")
+    group.add_argument("--download-folder-vosk", help="Folder to store Vosk models.")
 
-    parser.add_argument("-l", "--language", choices=list(language_config["vosk"]),
-                        help="An alias for preselected models when using the vosk backend, or 'en' for the English version of whisper models.")
+    group = parser.add_argument_group("Audio")
+    group.add_argument("--input-device", dest="input_device", type=int,
+                       help="Microphone device index (see `python -m sounddevice`).")
+    group.add_argument("--samplerate", default=16000, type=int, help=argparse.SUPPRESS)
+    group.add_argument("--dummy", action="store_true", help=argparse.SUPPRESS)
 
-    parser.add_argument("--dummy", action="store_true", help=argparse.SUPPRESS)
-
-    parser.add_argument("--frontend", choices=["tray", "terminal"], default="tray",
-                        help="Which frontend to launch. Default: tray (system tray icon). "
-                        "Use 'terminal' for the interactive TUI / one-shot recording mode.")
-    parser.add_argument("--no-prompt", action="store_false", dest="prompt",
-                        help="In terminal mode, skip the interactive menu and jump straight to recording.")
-
-    parser.add_argument("--samplerate", default=16000, type=int, help=argparse.SUPPRESS)
-    parser.add_argument("--input-device", dest="input_device", type=int,
-                        help="The device index of the microphone to use.")
-
-    group = parser.add_argument_group("transcription output")
+    group = parser.add_argument_group("Output")
     group.add_argument("-m", "--mode",
                        choices=("keystroke", "clipboard", "terminal"),
                        default="keystroke",
-                       help="Where the transcription goes — mirrors the tray menu's "
-                            "Keyboard mode radio. 'keystroke' (default): land in the "
-                            "focused window — paste-per-chunk for streaming backends "
-                            "(vosk), single Ctrl+V at end for batch backends "
-                            "(whisper, openai, groq). 'clipboard': copy to clipboard; "
-                            "you press Ctrl+V yourself. 'terminal': print to terminal only.")
+                       help="Where transcribed text goes: keystroke (focused window), clipboard, or terminal (default: %(default)s).")
     group.add_argument("--typer", default="auto", type=str,
-                       help="Keystroke-injection backend. 'auto' (default) probes the "
-                            "available backends. Explicit values: eitype, pynput, wtype, "
-                            "ydotool — choose from those listed under Options → Keyboard "
-                            "backend in the tray menu.")
+                       help="Keystroke-injection backend: auto, eitype, pynput, wtype, ydotool (default: %(default)s).")
     group.add_argument("-o", "--output-file",
-                       help="Append the transcription to this file in addition to the "
-                            "chosen --mode destination.")
+                       help="Also append the transcription to this file.")
 
-    group = parser.add_argument_group("whisper options")
-    group.add_argument("--duration", default=120, type=float, help="Max duration of the whisper recording (default %(default)s s)")
-    group.add_argument("--silence", default=120, type=float, help="silence duration (default %(default)s s)")
-    group.add_argument("--silence-db", default=-200, type=float, help="silence magnitude in decibel (default %(default)s db)")
-    group.add_argument("-a", "--restart-after-silence", action="store_true", help="Restart the recording after a transcription triggered by a silence")
-    group.add_argument("--download-folder-whisper", help="Folder to store Whisper models.")
+    group = parser.add_argument_group("Silence detection (whisper, openai, groq)")
+    group.add_argument("--duration", default=120, type=float,
+                       help="Max recording duration in seconds (default: %(default)s).")
+    group.add_argument("--silence", default=120, type=float,
+                       help="Silence duration in seconds that triggers a cut (default: %(default)s, effectively disabled).")
+    group.add_argument("--silence-db", default=-200, type=float,
+                       help="Silence threshold in dB (default: %(default)s, effectively disabled).")
+    group.add_argument("-a", "--restart-after-silence", action="store_true",
+                       help="Resume recording after a silence-triggered transcription.")
 
-    group = parser.add_argument_group("whisper api")
-    group.add_argument("--api-key",
-                        help="API key for the OpenAI backend (used by --backend openai).")
-
-    group = parser.add_argument_group("App")
-    group.add_argument("--vosk-models", nargs="*", help="vosk models available for the app mode", default=vosk_models)
-    group.add_argument("--whisper-models", nargs="*", help="whisper models available for the app mode", default=whisper_models)
-
-    parser.add_argument("--download-folder-vosk", help="Folder to store Vosk models.")
+    group = parser.add_argument_group("Frontend")
+    group.add_argument("--frontend", choices=["tray", "terminal"], default="tray",
+                       help="UI to launch: tray (system tray icon) or terminal (default: %(default)s).")
+    group.add_argument("--no-prompt", action="store_false", dest="prompt",
+                       help="In terminal mode, skip the interactive menu and record immediately.")
+    group.add_argument("--vosk-models", nargs="*", default=vosk_models,
+                       help="Vosk models offered in the tray menu.")
+    group.add_argument("--whisper-models", nargs="*", default=whisper_models,
+                       help="Whisper models offered in the tray menu.")
 
     return parser
 
