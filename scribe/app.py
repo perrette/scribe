@@ -13,6 +13,7 @@ from scribe.session import RecordingSession
 from desktop_ai_core.frontends.tray import MultiStateTrayIcon, write_pidfile, remove_pidfile, register_signal_toggle
 from desktop_ai_core.frontends.dialog import show_error_dialog
 from desktop_ai_core.frontends.terminal import Menu, Item, SetValueItem
+from scribe.menu import format_model_label
 
 with open(Path(__file__).parent / "models.toml", "rb") as f:
     language_config_default = tomllib.load(f)
@@ -345,13 +346,7 @@ def create_app(micro, transcriber, other_transcribers=None, transcriber_options=
     else:
         other_transcribers_dict = {}
 
-    def _model_display_label(name):
-        meta = other_transcribers_dict[name]
-        if meta.get("backend") == "vosk":
-            return f"{name} — Local (live partials)"
-        return name
-
-    model_labels = {name: _model_display_label(name) for name in other_transcribers_dict}
+    model_labels = {name: format_model_label(other_transcribers_dict[name]["backend"], name) for name in other_transcribers_dict}
     label_to_model = {v: k for k, v in model_labels.items()}
 
     def callback_set_model(icon, item):
