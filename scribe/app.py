@@ -249,12 +249,9 @@ def start_recording(micro, session, clipboard=True, keyboard=False, auto_paste=F
             print_partial(result.get('partial', ''))
 
     if auto_paste and clipboard and not keyboard and fulltext.strip():
-        import sys
-        from pynput.keyboard import Controller, Key
+        from scribe.typers import pick_typer
         time.sleep(0.1)  # let clipboard settle (xclip/wl-copy are async)
-        kb = Controller()
-        modifier = Key.cmd if sys.platform == "darwin" else Key.ctrl
-        kb.press(modifier); kb.press('v'); kb.release('v'); kb.release(modifier)
+        pick_typer().paste()
 
     if callback:
         callback()
