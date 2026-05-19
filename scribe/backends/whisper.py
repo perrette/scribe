@@ -1,3 +1,5 @@
+from typing import ClassVar
+
 import numpy as np
 
 from scribe.models import AbstractTranscriber
@@ -7,6 +9,7 @@ class WhisperTranscriber(AbstractTranscriber):
     name = "whisper"
     backend = "whisper"
     default_model: str | None = "large-v3-turbo"
+    is_local: ClassVar[bool] = True
 
     def __init__(self, model_name, language=None, model=None, model_kwargs={}, **kwargs):
         if model is None:

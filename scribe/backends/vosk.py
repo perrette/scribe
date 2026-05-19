@@ -1,4 +1,6 @@
 import json
+from typing import ClassVar
+
 import numpy as np
 
 from scribe.models import AbstractTranscriber, get_vosk_model, get_vosk_recognizer
@@ -8,6 +10,7 @@ class VoskTranscriber(AbstractTranscriber):
     name = "vosk"
     backend = "vosk"
     default_model: str | None = None
+    is_local: ClassVar[bool] = True
     _frozen_options = frozenset(["restart_after_silence", "silence_duration", "silence_thresh"])
 
     def __init__(self, model_name, model=None, model_kwargs={}, **kwargs):

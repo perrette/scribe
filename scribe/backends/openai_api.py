@@ -1,4 +1,6 @@
 import os
+from typing import ClassVar
+
 import numpy as np
 
 from desktop_ai_core.providers.errors import format_openai_error
@@ -10,6 +12,7 @@ class OpenaiAPITranscriber(WhisperTranscriber):
     name = "openai"
     backend = "openai"
     default_model: str | None = "gpt-4o-mini-transcribe"
+    is_local: ClassVar[bool] = False
 
     def __init__(self, model_name="gpt-4o-mini-transcribe", language=None, model_kwargs={}, model=None, api_key=None, **kwargs):
         if model is None:
