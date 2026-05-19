@@ -1,4 +1,6 @@
 from pathlib import Path
+import os
+import platform
 import re
 import sys
 import tomllib
@@ -527,6 +529,36 @@ def _output_mode_radio(app_state, key: str, mode: str, label: str) -> Item:
     return item
 
 
+def _recommended_output_mode() -> str | None:
+    """OS-specific recommendation for the default output mode.
+
+    macOS: per-character typing via pynput is the native path. Linux and
+    Windows: auto-paste (clipboard + Ctrl+V) is the universal fallback —
+    it works on Wayland through libei/eitype, on X11 through XTest, and
+    handles Unicode losslessly via the clipboard.
+    """
+    if platform.system() == "Darwin":
+        return "keyboard"
+    return "auto_paste"
+
+
+def _output_mode_submenu(app_state) -> Menu:
+    """Mutually-exclusive output modes, grouped as a radio submenu."""
+    recommended = _recommended_output_mode()
+    modes = [
+        ("c", "clipboard",  "Clipboard only (press Ctrl+V yourself)"),
+        ("p", "auto_paste", "Auto-paste (Ctrl+V at end)"),
+        ("k", "keyboard",   "Type each character"),
+        ("t", "terminal",   "Terminal only"),
+    ]
+    items = []
+    for key, mode, label in modes:
+        if mode == recommended:
+            label = f"{label} (recommended)"
+        items.append(_output_mode_radio(app_state, key, mode, label))
+    return Menu(items, name="Output mode")
+
+
 _TYPER_ORDER = ("eitype", "wtype", "pynput", "ydotool")
 
 
@@ -598,10 +630,7 @@ def _advanced_options_menu(app_state) -> Menu:
 def _toggle_options_menu(app_state) -> Menu:
     is_terminal = _is_terminal_frontend(app_state)
     items = [
-        _output_mode_radio(app_state, "p", "auto_paste", "Auto-paste (clipboard + Ctrl+V at end)"),
-        _output_mode_radio(app_state, "k", "keyboard", "Type each character"),
-        _output_mode_radio(app_state, "c", "clipboard", "Clipboard only (press Ctrl+V yourself)"),
-        _output_mode_radio(app_state, "n", "terminal", "Terminal only"),
+        Item("output", _output_mode_submenu(app_state), help="Output mode"),
         Item("x", app_state.cb_toggle_frontend, help="Toggle tray app mode",
              checked=lambda item: getattr(app_state.o, "frontend", None) == "tray",
              visible=is_terminal),
