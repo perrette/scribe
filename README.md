@@ -137,25 +137,50 @@ export GROQ_API_KEY=YOURAPIKEY
 scribe --backend groq
 ```
 
-## Output media
+## Keyboard mode
 
-By default scribe copies the transcription to the system clipboard **and**
-synthesizes a paste keystroke (Ctrl+V, or Cmd+V on macOS) into whatever
-window is focused at the end of the recording. This is the most reliable
-cross-platform way to get text into an app — the actual character insertion
-happens via the app's own paste handler rather than via synthetic keystrokes
-per character, so special characters and keyboard-layout differences are
-not an issue.
+Scribe delivers the transcription to your computer in one of four
+mutually-exclusive modes. The default is "Send to focused window",
+which copies the text to the clipboard and synthesizes Ctrl+V (or
+Cmd+V on macOS) into whatever window is focused. Pasting is more
+reliable than per-character typing because the app's own paste
+handler does the character insertion — Unicode and keyboard-layout
+differences are not an issue.
+
+| Mode                       | CLI flags                                        | What happens                                                              |
+|----------------------------|--------------------------------------------------|---------------------------------------------------------------------------|
+| Send to focused window     | *(default)* — implicit                           | Clipboard + Ctrl+V at end (batch backends) or per chunk (streaming, vosk) |
+| Clipboard only             | `--no-auto-paste` *(or)* `--no-keyboard --clipboard` | Text on clipboard; you press Ctrl+V yourself                              |
+| Terminal only              | `--no-clipboard --no-auto-paste`                 | Text printed to the terminal only                                         |
+| Live (paste-per-chunk)     | `--keyboard`                                     | Each transcribed chunk is pasted as it arrives — "appears as you speak"   |
+
+In **tray/terminal mode** the same choice lives under **Options →
+Keyboard mode** as a four-way radio. Picking "Live (paste-per-chunk)"
+is most useful with the `vosk` backend (true word-level streaming) or
+with whisper + `--restart-after-silence -a` (chunks at silence
+boundaries). With batch backends (`openai`, `groq`, plain `whisper`)
+the chunk *is* the full transcription, so Live mode and the default
+auto-paste-at-end produce the same outcome.
 
 ```bash
-scribe                  # clipboard + auto-paste (default)
-scribe --no-auto-paste  # clipboard only, you press Ctrl+V yourself
-scribe --no-clipboard   # terminal-only output
+scribe                  # Send to focused window (default)
+scribe --no-auto-paste  # Clipboard only — you press Ctrl+V
+scribe --no-clipboard   # Terminal only
+scribe --keyboard       # Live paste-per-chunk
 ```
 
 The clipboard is left holding the transcription after scribe finishes — if
 you want to preserve your previous clipboard contents, save them somewhere
 else first.
+
+> **Historical note.** Earlier versions of `--keyboard` typed each
+> character via a synthesized virtual keyboard rather than pasting
+> per chunk. That path was structurally limited for non-ASCII text
+> on the subprocess typers (eitype / wtype / ydotool) — Unicode
+> codepoints had to be mapped to keycodes through the active xkb
+> layout, which silently truncated or errored on chars outside the
+> layout. The per-character path is still reachable via the Python
+> API (`scribe.keyboard.type_text`) for debugging.
 
 ### Output file
 
@@ -165,51 +190,26 @@ An output file can also be indicated:
 scribe -o transcription.txt
 ```
 
-### Live paste-per-chunk mode (`--keyboard`)
+### Keyboard backend (typer)
 
-With `--keyboard`, scribe routes each transcribed chunk into the focused
-window **as it arrives**, instead of waiting for the recording to end.
-Each chunk is copied to the clipboard and Ctrl+V is synthesized — giving
-the "appears as you speak" UX with streaming backends (vosk) while
-staying Unicode-correct on every typer (the clipboard handles any
-codepoint, Ctrl+V is one keystroke regardless of layout).
+Whichever mode you pick, the Ctrl+V keystroke (or live per-chunk paste)
+goes through a *typer* backend. Scribe probes the available backends at
+startup and picks the first one that works in the current session.
+Backends that are *structurally incompatible* with your OS / session
+are hidden from the menu entirely — the **Keyboard backend** submenu
+only appears when there is a real choice (≥ 2 compatible backends).
 
-```bash
-scribe --keyboard
-```
-
-Best paired with `vosk` (true word-level streaming) or whisper with
-`--restart-after-silence -a` (chunks at silence boundaries). With batch
-backends (`openai`, `groq`, plain `whisper`) the chunk *is* the full
-transcription, so `--keyboard` and the default auto-paste-at-end produce
-the same outcome.
-
-> **Historical note.** Earlier versions of `--keyboard` typed each
-> character via a synthesized virtual keyboard. That path was
-> structurally limited for non-ASCII text on subprocess typers
-> (eitype / wtype / ydotool) — Unicode codepoints had to be mapped to
-> keycodes through the active xkb layout, which silently truncated or
-> errored on chars outside the layout. The per-character path is still
-> reachable via the Python API (`scribe.keyboard.type_text`) for
-> debugging.
-
-#### Typer backends
-
-Both auto-paste and `--keyboard` synthesize keystrokes through a
-pluggable *typer* backend. Scribe probes the available backends at
-startup and picks the first one that works in the current session:
-
-| Backend  | Mechanism                       | Works on                                  |
-|----------|---------------------------------|-------------------------------------------|
-| `eitype` | libei via XDG RemoteDesktop portal | GNOME 45+, KDE Plasma 6.1+, Hyprland — native Wayland |
-| `wtype`  | `zwp_virtual_keyboard_v1`       | wlroots compositors (Sway, Hyprland)      |
-| `pynput` | XTest (X11 protocol)            | X11 sessions; XWayland-using apps on Wayland |
-| `ydotool`| Kernel `/dev/uinput` daemon     | Anywhere, but needs root / `input` group + daemon |
+| Backend  | Mechanism                            | Compatible with                                                       |
+|----------|--------------------------------------|-----------------------------------------------------------------------|
+| `eitype` | libei via XDG RemoteDesktop portal   | Linux Wayland (GNOME 45+, KDE Plasma 6.1+, Hyprland)                  |
+| `pynput` | XTest (X11 protocol) / Quartz / WinAPI | macOS, Windows, Linux X11 / XWayland; partial on Wayland (XWayland apps only) |
+| `ydotool`| Kernel `/dev/uinput` daemon          | Linux (needs `input` group or `ydotoold` daemon)                      |
+| `wtype`  | `zwp_virtual_keyboard_v1`            | wlroots-based Wayland compositors (Sway and friends — not GNOME/KDE)  |
 
 Force a specific backend with `--typer eitype` (etc.), or pick it from
-the tray/terminal menu under **Options → Typer**. The selected backend's
-name is logged at startup so you can tell which path your keystrokes are
-taking.
+the tray / terminal menu under **Options → Keyboard backend**. The
+selected backend's name is logged at startup so you can tell which path
+your keystrokes are taking.
 
 #### Ubuntu / Wayland caveats and recommended fix
 
@@ -292,14 +292,22 @@ scribe --vosk-models vosk-model-fr-0.22 --whisper-models small turbo ...
 Both the tray and terminal frontends share the same menu tree:
 
 ```
-Record                        start recording (default tray action)
-Stop / Cancel                 end or discard an in-flight recording
-Choose Model ▶                per-vendor submenus:
-    OpenAI ▶                    gpt-4o-mini-transcribe, whisper-1 (deprecated)
-    Groq ▶                      whisper-large-v3-turbo
-    Whisper (local) ▶           models via --whisper-models (default: large-v3-turbo)
-    Vosk (local) ▶              models via --vosk-models
-Toggle Options ▶              clipboard, keyboard, auto-paste, latency, …
+Record                          start recording (default tray action)
+Stop / Cancel                   end or discard an in-flight recording
+Model ▶                         per-vendor submenus:
+    OpenAI ▶                      gpt-4o-mini-transcribe, whisper-1 (deprecated)
+    Groq ▶                        whisper-large-v3-turbo
+    Whisper (local) ▶             models via --whisper-models — 'small (recommended)'
+    Vosk (local, streaming) ▶     models via --vosk-models
+Options ▶
+    Keyboard mode ▶               Clipboard only / Send to focused window /
+                                    Type each character / Terminal only
+    Toggle tray app mode          (terminal frontend only)
+    Keyboard backend ▶            eitype / pynput / ydotool / wtype
+                                  (rows incompatible with this OS are hidden;
+                                   submenu hidden entirely when ≤ 1 row left)
+    Advanced ▶                    auto-restart after silence, duration,
+                                    silence threshold, output file, latency
 Quit
 ```
 
