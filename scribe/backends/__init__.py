@@ -14,11 +14,13 @@ from scribe.backends.vosk import VoskTranscriber, _probe_vosk
 from scribe.backends.whisper import WhisperTranscriber, _probe_whisper
 from scribe.backends.openai_api import OpenaiAPITranscriber, _probe_openai
 from scribe.backends.groq import GroqTranscriber, _probe_groq
+from scribe.backends.openai_realtime import OpenaiRealtimeTranscriber, _probe_openai_realtime
 
 register_stt("vosk", VoskTranscriber, probe=_probe_vosk)
 register_stt("whisper", WhisperTranscriber, probe=_probe_whisper)
 register_stt("openai", OpenaiAPITranscriber, probe=_probe_openai)
 register_stt("groq", GroqTranscriber, probe=_probe_groq)
+register_stt("openai-realtime", OpenaiRealtimeTranscriber, probe=_probe_openai_realtime)
 
 BACKENDS = _STT_REGISTRY
 
@@ -45,4 +47,5 @@ __all__ = [
     "WhisperTranscriber",
     "OpenaiAPITranscriber",
     "GroqTranscriber",
+    "OpenaiRealtimeTranscriber",
 ]
