@@ -393,6 +393,15 @@ class AppState(AbstractFrontendApp):
             self.o.latency = val
         return True
 
+    def cb_set_typer(self, typer_name: str) -> Callable:
+        """Factory: return a callback that sets the active typer backend."""
+        def _cb(view, item):
+            self.o.typer = typer_name
+            self.params["typer"] = typer_name
+            self._refresh_tray_menu()
+            return True
+        return _cb
+
     def current_model_label(self) -> str:
         if self.transcriber is None:
             return ""
@@ -471,6 +480,46 @@ def _noop_callback(view, item):
     return None
 
 
+_TYPER_ORDER = ("eitype", "wtype", "pynput", "ydotool")
+
+
+def _typer_menu(app_state) -> Menu:
+    """Radio submenu listing the available keystroke-injection backends.
+
+    'Auto' (default) defers to the probe chain at call time. Unavailable
+    typers (binary missing, wrong session, etc.) are shown but disabled.
+    """
+    from scribe.typers import TYPERS
+
+    items = []
+    auto_item = Item(
+        "Auto",
+        app_state.cb_set_typer("auto"),
+        checked=lambda item: getattr(app_state.o, "typer", "auto") == "auto",
+    )
+    auto_item.radio = True
+    items.append(auto_item)
+
+    ordered = [n for n in _TYPER_ORDER if n in TYPERS] + \
+              [n for n in TYPERS if n not in _TYPER_ORDER]
+    for name in ordered:
+        try:
+            available = TYPERS[name]().available()
+        except Exception:
+            available = False
+        label = name if available else f"{name} — unavailable"
+
+        def _is_current(_item, _n=name):
+            return getattr(app_state.o, "typer", "auto") == _n
+
+        item = Item(label, app_state.cb_set_typer(name), checked=_is_current)
+        item.radio = True
+        item.enabled = available
+        items.append(item)
+
+    return Menu(items, name="Typer")
+
+
 def _toggle_options_menu(app_state) -> Menu:
     is_terminal = _is_terminal_frontend(app_state)
     items = [
@@ -499,6 +548,7 @@ def _toggle_options_menu(app_state) -> Menu:
         SetValueItem("latency", app_state.cb_set_latency,
                      value=lambda item: getattr(app_state.o, "latency", None),
                      type=float, help="Keyboard latency (s)", visible=app_state._has_keyboard),
+        Item("typer", _typer_menu(app_state), help="Typer backend"),
     ]
     return Menu(items, name="Options")
 
