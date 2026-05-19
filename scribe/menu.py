@@ -314,40 +314,31 @@ class AppState(AbstractFrontendApp):
             except Exception:
                 pass
 
-    # ── Option-toggle callbacks ────────────────────────────────────
-    def cb_toggle_clipboard(self, view, item):
-        self.o.clipboard = not self.o.clipboard
-        self.params["clipboard"] = self.o.clipboard
-        self._refresh_tray_menu()
-        return True
-
+    # ── Option callbacks ────────────────────────────────────────────
     def cb_set_output_mode(self, mode: str) -> Callable:
-        """Factory: callback that sets the output keystroke mode.
+        """Factory: callback that sets the single 'output mode' radio.
 
-        mode ∈ {'auto_paste', 'keyboard', 'off'}. The three are mutually
-        exclusive in app.start_recording (keyboard takes precedence over
-        auto_paste), so the menu surfaces them as a radio group.
-        Selecting auto_paste also turns clipboard on, since auto-paste
-        is silently a no-op without it.
+        ``mode`` ∈ {'auto_paste', 'keyboard', 'clipboard', 'terminal'}.
+        Each mode sets the (clipboard, auto_paste, keyboard) triple
+        atomically so the menu surfaces them as one mutually-exclusive
+        choice instead of three independent checkboxes that silently
+        cancel each other out at runtime.
         """
         def _cb(view, item):
             if mode == "auto_paste":
-                self.o.auto_paste = True
-                self.o.keyboard = False
-                self.o.clipboard = True
-                self.params["auto_paste"] = True
-                self.params["keyboard"] = False
-                self.params["clipboard"] = True
+                clipboard, auto_paste, keyboard = True, True, False
             elif mode == "keyboard":
-                self.o.auto_paste = False
-                self.o.keyboard = True
-                self.params["auto_paste"] = False
-                self.params["keyboard"] = True
-            else:  # "off"
-                self.o.auto_paste = False
-                self.o.keyboard = False
-                self.params["auto_paste"] = False
-                self.params["keyboard"] = False
+                clipboard, auto_paste, keyboard = False, False, True
+            elif mode == "clipboard":
+                clipboard, auto_paste, keyboard = True, False, False
+            else:  # "terminal"
+                clipboard, auto_paste, keyboard = False, False, False
+            self.o.clipboard = clipboard
+            self.o.auto_paste = auto_paste
+            self.o.keyboard = keyboard
+            self.params["clipboard"] = clipboard
+            self.params["auto_paste"] = auto_paste
+            self.params["keyboard"] = keyboard
             self._refresh_tray_menu()
             return True
         return _cb
@@ -515,13 +506,17 @@ def _noop_callback(view, item):
 
 
 def _output_mode(o) -> str:
-    """Derive the current output keystroke mode from the (auto_paste, keyboard)
-    flags. ``keyboard`` wins if both are set (matches app.start_recording)."""
+    """Derive the current output mode from the (clipboard, auto_paste,
+    keyboard) triple. ``keyboard`` wins over ``auto_paste`` (matches
+    app.start_recording, which silently drops auto_paste when keyboard
+    is set)."""
     if getattr(o, "keyboard", False):
         return "keyboard"
-    if getattr(o, "auto_paste", False):
+    if getattr(o, "auto_paste", False) and getattr(o, "clipboard", False):
         return "auto_paste"
-    return "off"
+    if getattr(o, "clipboard", False):
+        return "clipboard"
+    return "terminal"
 
 
 def _output_mode_radio(app_state, key: str, mode: str, label: str) -> Item:
@@ -603,11 +598,10 @@ def _advanced_options_menu(app_state) -> Menu:
 def _toggle_options_menu(app_state) -> Menu:
     is_terminal = _is_terminal_frontend(app_state)
     items = [
-        Item("c", app_state.cb_toggle_clipboard, help="Copy to clipboard",
-             checked=lambda item: bool(getattr(app_state.o, "clipboard", False))),
-        _output_mode_radio(app_state, "p", "auto_paste", "Auto-paste (Ctrl+V at end)"),
+        _output_mode_radio(app_state, "p", "auto_paste", "Auto-paste (clipboard + Ctrl+V at end)"),
         _output_mode_radio(app_state, "k", "keyboard", "Type each character"),
-        _output_mode_radio(app_state, "n", "off", "Manual paste (press Ctrl+V yourself)"),
+        _output_mode_radio(app_state, "c", "clipboard", "Clipboard only (press Ctrl+V yourself)"),
+        _output_mode_radio(app_state, "n", "terminal", "Terminal only"),
         Item("x", app_state.cb_toggle_frontend, help="Toggle tray app mode",
              checked=lambda item: getattr(app_state.o, "frontend", None) == "tray",
              visible=is_terminal),
