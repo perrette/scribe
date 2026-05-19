@@ -11,10 +11,21 @@ from scribe.backends import BACKENDS, probe_backend
 
 _VENDOR_PREFIX = {
     "openai": "OpenAI",
+    "openai-realtime": "OpenAI",
     "groq": "Groq",
     "whisper": "Whisper",
     "vosk": "Vosk",
 }
+
+_VENDOR_BACKEND_FAMILIES: dict[str, list[str]] = {
+    "openai": ["openai", "openai-realtime"],
+}
+
+_FAMILY_NON_PRIMARY = {bn for members in _VENDOR_BACKEND_FAMILIES.values() for bn in members[1:]}
+
+
+def _vendor_family(primary: str) -> list[str]:
+    return _VENDOR_BACKEND_FAMILIES.get(primary, [primary])
 
 _vosk_model_to_lang: dict[str, str] | None = None
 
@@ -38,6 +49,7 @@ def format_model_label(backend_name: str, model_id: str, include_vendor: bool = 
     vendor = _VENDOR_PREFIX.get(backend_name, backend_name.capitalize())
     backend_cls = BACKENDS.get(backend_name)
     is_local = backend_cls.is_local if backend_cls is not None else False
+    supports_streaming = bool(getattr(backend_cls, "supports_streaming", False))
 
     if backend_name == "vosk":
         lang = _vosk_language_for_model(model_id)
@@ -46,17 +58,17 @@ def format_model_label(backend_name: str, model_id: str, include_vendor: bool = 
             return f"{vendor} {display} (local, streaming)"
         return display
 
-    qualifier = ""
-    if is_local and include_vendor:
-        qualifier = " (local)"
+    streaming_suffix = " (streaming)" if supports_streaming else ""
+    qualifier = " (local)" if (is_local and include_vendor) else ""
 
     if include_vendor:
-        return f"{vendor} {model_id}{qualifier}"
-    return f"{model_id}{qualifier}"
+        return f"{vendor} {model_id}{qualifier}{streaming_suffix}"
+    return f"{model_id}{qualifier}{streaming_suffix}"
 
 
 _DEFAULT_MODELS: dict[str, list[str]] = {
     "openai": ["gpt-4o-transcribe", "gpt-4o-mini-transcribe"],
+    "openai-realtime": ["gpt-realtime-whisper"],
     "groq": ["whisper-large-v3-turbo"],
     "whisper": ["tiny", "base", "small", "medium", "large-v3", "large-v3-turbo"],
     "vosk": [],
@@ -408,22 +420,32 @@ _RECOMMENDED_MODELS = {
 def _backend_models_menu(app_state, backend_name: str) -> Menu:
     items = []
     recommended = _RECOMMENDED_MODELS.get(backend_name)
-    for model in _models_for_backend(backend_name, app_state):
-        def _is_current(_item, _b=backend_name, _m=model):
-            t = app_state.transcriber
-            return (t is not None
-                    and getattr(t, "backend", None) == _b
-                    and getattr(t, "model_name", None) == _m)
-        label = format_model_label(backend_name, model, include_vendor=False)
-        if model == recommended:
-            label = f"{label} (recommended)"
-        item = Item(
-            label,
-            app_state.cb_set_model(backend_name, model),
-            checked=_is_current,
-        )
-        item.radio = True
-        items.append(item)
+    family = _vendor_family(backend_name)
+    for member in family:
+        if member not in BACKENDS:
+            continue
+        try:
+            ok, _ = probe_backend(member)
+        except Exception:
+            ok = False
+        if not ok:
+            continue
+        for model in _models_for_backend(member, app_state):
+            def _is_current(_item, _b=member, _m=model):
+                t = app_state.transcriber
+                return (t is not None
+                        and getattr(t, "backend", None) == _b
+                        and getattr(t, "model_name", None) == _m)
+            label = format_model_label(member, model, include_vendor=False)
+            if member == backend_name and model == recommended:
+                label = f"{label} (recommended)"
+            item = Item(
+                label,
+                app_state.cb_set_model(member, model),
+                checked=_is_current,
+            )
+            item.radio = True
+            items.append(item)
     vendor = _VENDOR_PREFIX.get(backend_name, backend_name.capitalize())
     return Menu(items, name=vendor)
 
@@ -436,9 +458,10 @@ def _is_terminal_frontend(app_state):
 
 def _vendor_label_fn(app_state, backend_name: str, base_label: str):
     """Return a label callable that prefixes ✓ when this vendor is active."""
+    family = _vendor_family(backend_name)
     def _label():
         t = app_state.transcriber
-        active = t is not None and getattr(t, "backend", None) == backend_name
+        active = t is not None and getattr(t, "backend", None) in family
         return f"✓ {base_label}" if active else f"  {base_label}"
     return _label
 
@@ -450,16 +473,26 @@ def _choose_model_menu(app_state) -> Menu:
     items = []
     unavailable: list[tuple[str, str]] = []
     ordered = [b for b in _MENU_BACKEND_ORDER if b in BACKENDS] + \
-              [b for b in BACKENDS if b not in _MENU_BACKEND_ORDER]
+              [b for b in BACKENDS if b not in _MENU_BACKEND_ORDER and b not in _FAMILY_NON_PRIMARY]
     for backend_name in ordered:
-        try:
-            ok, msg = probe_backend(backend_name)
-        except Exception as exc:
-            ok, msg = False, f"probe raised: {exc}"
+        family = _vendor_family(backend_name)
+        any_ok = False
+        primary_msg = None
+        for member in family:
+            if member not in BACKENDS:
+                continue
+            try:
+                ok, msg = probe_backend(member)
+            except Exception as exc:
+                ok, msg = False, f"probe raised: {exc}"
+            if member == backend_name:
+                primary_msg = msg
+            if ok:
+                any_ok = True
         vendor = _VENDOR_PREFIX.get(backend_name, backend_name.capitalize())
         is_local = bool(getattr(BACKENDS[backend_name], "is_local", False))
-        if not ok:
-            unavailable.append((vendor, msg or "unavailable"))
+        if not any_ok:
+            unavailable.append((vendor, primary_msg or "unavailable"))
             continue
         if backend_name == "vosk":
             base_label = f"{vendor} (local, streaming)"
