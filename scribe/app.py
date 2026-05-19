@@ -1,6 +1,5 @@
 from pathlib import Path
 import tomllib
-import time
 import signal
 import argparse
 from scribe.audio import Microphone
@@ -188,8 +187,11 @@ def get_parser():
                             "Default: on. Requires --clipboard. Ignored if --keyboard is set.")
     group.add_argument("-k", "--keyboard", dest="keyboard",
                        action=argparse.BooleanOptionalAction, default=False,
-                       help="Type the transcription character-by-character via a synthesized virtual keyboard "
-                            "(default: off). Useful with the vosk streaming backend; not recommended on Wayland.")
+                       help="Live paste-per-chunk: as each transcribed chunk arrives, copy it "
+                            "to the clipboard and synthesize Ctrl+V so it appears in the focused "
+                            "window. Useful with streaming backends (vosk) for 'appears as you "
+                            "speak' UX. Off by default (batch backends use the end-of-recording "
+                            "auto-paste instead, which is identical in outcome).")
     group.add_argument("--typer", default="auto", type=str,
                        help="Keystroke-injection backend. auto (default) probes the available backends. "
                             "Explicit values: eitype, pynput, wtype, ydotool.")
@@ -227,8 +229,8 @@ def get_parser():
 def start_recording(micro, session, clipboard=True, keyboard=False, auto_paste=False, latency=0, ascii=False, output_file=None, callback=None, typer="auto", **greetings):
 
     if keyboard:
-        from scribe.keyboard import type_text
-        session.log("Change focus to target app during transcription.")
+        from scribe.keyboard import paste_via_clipboard
+        session.log("Live paste-per-chunk: each transcribed chunk lands in the focused window as it arrives.")
 
     if clipboard:
         import pyperclip
@@ -241,38 +243,35 @@ def start_recording(micro, session, clipboard=True, keyboard=False, auto_paste=F
         if result.get('text'):
             clear_line()
             print(result.get('text'))
-            if keyboard:
-                type_text(result['text'] + " ", interval=latency, ascii=ascii, typer=typer) # Simulate typing
+            chunk_text = result['text'] + " "
+            fulltext += chunk_text
 
             if output_file:
                 with open(output_file, "a") as f:
                     f.write(result['text'] + "\n")
 
-            if clipboard:
-                fulltext += result['text'] + " "
+            if keyboard:
+                # Live paste-per-chunk: copy this chunk to clipboard and fire
+                # Ctrl+V. Universal Unicode support (clipboard handles any
+                # codepoint) and orthogonal to typer choice (Ctrl+V is the
+                # same keystroke regardless of layout). Replaces per-character
+                # typing, which was structurally broken on subprocess typers
+                # for non-ASCII text.
+                paste_via_clipboard(chunk_text, typer=typer,
+                                     verify_iters=2, sleep_s=0.05)
+            elif clipboard:
                 pyperclip.copy(fulltext.strip())
 
         else:
             print_partial(result.get('partial', ''))
 
     if auto_paste and clipboard and not keyboard and fulltext.strip():
-        from scribe.typers import pick_typer
-        final_text = fulltext.strip()
+        from scribe.keyboard import paste_via_clipboard
         # Multi-chunk transcriptions (e.g. local whisper with silence-splitting)
-        # call pyperclip.copy() many times during recording. wl-copy is async on
-        # Wayland — the most recent write may not yet own the clipboard when we
-        # synthesize Ctrl+V, so the paste captures a partial earlier state.
-        # Force a final write, then verify ownership before triggering paste.
-        pyperclip.copy(final_text)
-        for _ in range(5):
-            time.sleep(0.1)
-            try:
-                if pyperclip.paste() == final_text:
-                    break
-            except Exception:
-                pass
-            pyperclip.copy(final_text)
-        pick_typer(typer if typer != "auto" else None).paste()
+        # called pyperclip.copy() many times during recording. wl-copy is async
+        # on Wayland — paste_via_clipboard force-writes the final text and
+        # polls until the clipboard reflects it before triggering Ctrl+V.
+        paste_via_clipboard(fulltext.strip(), typer=typer)
 
     if callback:
         callback()

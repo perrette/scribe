@@ -165,18 +165,33 @@ An output file can also be indicated:
 scribe -o transcription.txt
 ```
 
-### Virtual keyboard (per-character typing, experimental)
+### Live paste-per-chunk mode (`--keyboard`)
 
-The `--keyboard` option types each character into the focused window
-*as it is recognized*, instead of waiting for the recording to end and
-pasting in one shot. It is **off by default** — the clipboard +
-auto-paste flow above is recommended for most users — but is useful with
-the `vosk` backend's real-time streaming, where you want words to appear
-as you speak them.
+With `--keyboard`, scribe routes each transcribed chunk into the focused
+window **as it arrives**, instead of waiting for the recording to end.
+Each chunk is copied to the clipboard and Ctrl+V is synthesized — giving
+the "appears as you speak" UX with streaming backends (vosk) while
+staying Unicode-correct on every typer (the clipboard handles any
+codepoint, Ctrl+V is one keystroke regardless of layout).
 
 ```bash
 scribe --keyboard
 ```
+
+Best paired with `vosk` (true word-level streaming) or whisper with
+`--restart-after-silence -a` (chunks at silence boundaries). With batch
+backends (`openai`, `groq`, plain `whisper`) the chunk *is* the full
+transcription, so `--keyboard` and the default auto-paste-at-end produce
+the same outcome.
+
+> **Historical note.** Earlier versions of `--keyboard` typed each
+> character via a synthesized virtual keyboard. That path was
+> structurally limited for non-ASCII text on subprocess typers
+> (eitype / wtype / ydotool) — Unicode codepoints had to be mapped to
+> keycodes through the active xkb layout, which silently truncated or
+> errored on chars outside the layout. The per-character path is still
+> reachable via the Python API (`scribe.keyboard.type_text`) for
+> debugging.
 
 #### Typer backends
 
