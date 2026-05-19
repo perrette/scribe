@@ -18,7 +18,7 @@ language_config = language_config_default.copy()
 
 
 def get_default_backend():
-    for name in ("groq", "openai", "whisper", "vosk"):
+    for name in ("whisper", "groq", "openai", "vosk"):
         ok, _ = probe_backend(name)
         if ok:
             return name
@@ -87,7 +87,7 @@ def _prompt_model_for_backend(backend, language, prompt):
         return default_model[0] if isinstance(default_model, tuple) else default_model
 
     if backend == "whisper":
-        default_model = "large-v3-turbo"
+        default_model = "small"
         if prompt:
             print(f"See {ansi_link('https://github.com/openai/whisper?tab=readme-ov-file#available-models-and-languages')} for available models.")
             model = prompt_choices(whisper_models, default=default_model, label="model",
@@ -134,7 +134,8 @@ def get_transcriber(model=None, backend=None, dummy=False, prompt=True, language
             backend = "openai"
     if not backend:
         backends_list = list(BACKENDS)
-        backend = backends_list[0] if not prompt else prompt_choices(backends_list, None, "backend", UNAVAILABLE_BACKENDS)
+        preferred = get_default_backend()
+        backend = preferred if not prompt else prompt_choices(backends_list, preferred, "backend", UNAVAILABLE_BACKENDS)
     print(f"Selected backend: {backend}")
     if model:
         model = pick_specialist_model(model, language, backend)
@@ -178,13 +179,17 @@ def get_parser():
                         help="The device index of the microphone to use.")
 
     group = parser.add_argument_group("transcription output")
-    group.add_argument("-c", "--clipboard", dest="clipboard", action="store_true")
-    group.add_argument("-k", "--keyboard", dest="keyboard", action="store_true", default=None,
-                       help="Type the transcription via virtual keyboard (default: on in tray mode, off in terminal mode).")
-    group.add_argument("--no-keyboard", dest="keyboard", action="store_false",
-                       help="Disable keyboard typing (useful in tray mode where it is on by default).")
-    group.add_argument("-p", "--auto-paste", action="store_true",
-                       help="After transcription, synthesize Ctrl+V (Cmd+V on macOS) to paste into the focused app. Requires --clipboard. Ignored if --keyboard is set.")
+    group.add_argument("-c", "--clipboard", dest="clipboard",
+                       action=argparse.BooleanOptionalAction, default=True,
+                       help="Copy the transcription to the system clipboard (default: on). Use --no-clipboard to disable.")
+    group.add_argument("-p", "--auto-paste", dest="auto_paste",
+                       action=argparse.BooleanOptionalAction, default=True,
+                       help="After transcription, synthesize Ctrl+V (Cmd+V on macOS) to paste into the focused app. "
+                            "Default: on. Requires --clipboard. Ignored if --keyboard is set.")
+    group.add_argument("-k", "--keyboard", dest="keyboard",
+                       action=argparse.BooleanOptionalAction, default=False,
+                       help="Type the transcription character-by-character via a synthesized virtual keyboard "
+                            "(default: off). Useful with the vosk streaming backend; not recommended on Wayland.")
     group.add_argument("-o", "--output-file")
 
     group = parser.add_argument_group("keyboard options")
@@ -342,9 +347,6 @@ def _print_main_status(state, o):
 def main(args=None):
     parser = get_parser()
     o = parser.parse_args(args)
-
-    if o.keyboard is None:
-        o.keyboard = (o.frontend == "tray")
 
     micro = Microphone(samplerate=o.samplerate, device=o.input_device)
 

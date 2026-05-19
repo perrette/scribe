@@ -139,62 +139,82 @@ scribe --backend groq
 
 ## Output media
 
-By default the transcription is printed on the terminal, but other output media are supported.
-
-### Clipboard
-
-The most straightforward is the clipboard:
-
-```bash
-scribe --clipboard
-```
-The content of the (full) transcription is then placed on the clipboard, and it is up to the user to paste (e.g. Ctrl + V).
-
-Add `-p` / `--auto-paste` to have scribe synthesize the paste keystroke
-itself once the transcription lands on the clipboard:
+By default scribe copies the transcription to the system clipboard **and**
+synthesizes a paste keystroke (Ctrl+V, or Cmd+V on macOS) into whatever
+window is focused at the end of the recording. This is the most reliable
+cross-platform way to get text into an app — the actual character insertion
+happens via the app's own paste handler rather than via synthetic keystrokes
+per character, so special characters and keyboard-layout differences are
+not an issue.
 
 ```bash
-scribe --clipboard --auto-paste
+scribe                  # clipboard + auto-paste (default)
+scribe --no-auto-paste  # clipboard only, you press Ctrl+V yourself
+scribe --no-clipboard   # terminal-only output
 ```
 
-This is convenient when scribe runs in the background (tray / app mode)
-and you want the transcribed text to land directly in the focused window.
-Ignored if `--keyboard` is also set.
+The clipboard is left holding the transcription after scribe finishes — if
+you want to preserve your previous clipboard contents, save them somewhere
+else first.
 
 ### Output file
 
-Alternatively an output file can be indicated:
+An output file can also be indicated:
 
 ```bash
 scribe -o transcription.txt
 ```
 
-### Virtual keyboard (experimental)
+### Virtual keyboard (per-character typing, experimental)
 
-With the `--keyboard` option `scribe` will attempt to simulate a keyboard and send transcribed characters to the application under focus:
+The `--keyboard` option types each character via a synthesized virtual
+keyboard instead of pasting. It is **off by default** as of mid-2026
+because the underlying `pynput` backend uses XTest, which only reaches
+apps that accept XWayland input. The clipboard + auto-paste flow described
+above is recommended for most users.
 
 ```bash
 scribe --keyboard
 ```
 
-This can be extremely useful with the `vosk` backend and its realtime transcription, or alternatively with the `--restart-after-silence` (`-a`) option with the `whisper` backend.
+This mode is mainly useful with the `vosk` backend's real-time streaming
+transcription, where you want characters to appear as you speak rather
+than in a single paste at the end.
 
-The `--keyboard` option relies on the optional `pynput` dependency (installed together with `scribe` if you used the `[all]` or `[keyboard]` option).
-Depending on your operating system, `pynput` may require additional configuration to work around its [limitations](https://pynput.readthedocs.io/en/latest/limitations.html).
+The `--keyboard` option relies on the optional `pynput` dependency
+(installed together with `scribe` if you used the `[all]` or `[keyboard]`
+option). Depending on your operating system, `pynput` may require
+additional configuration to work around its
+[limitations](https://pynput.readthedocs.io/en/latest/limitations.html).
 
-#### Use the keyboard with Wayland
+#### Caveats on Wayland
 
-In my Ubuntu 24.04 + Wayland system the keyboard simulation works out-of-the-box in chromium based applications (including vscode) but it does not in firefox and sublime text and any of the rest (not even in a terminal !). I am told this is because Chromium runs an X server emulator and so is compatible with the default pynput backend.
+Both the auto-paste keystroke and `--keyboard` per-character typing go
+through `pynput` → XTest. On Wayland this works for apps that accept
+XWayland input (Chromium-based apps including VSCode, most Electron apps,
+many GTK apps) but not for apps running as native Wayland clients (Firefox
+with `MOZ_ENABLE_WAYLAND=1`, some KDE apps, native Wayland terminals).
 
-One workaround is to use the Xorg version of GNOME: in `etc/gdm3/custom.conf` uncomment `# WaylandEnable=false` and restart your computer.
+Two workarounds today, both heavy:
 
-Another workaround while staying with Wayland is to use the low-level `uinput` backend of `pynput`, but that requires that `scribe` is run as root (sudo), and likely other configurations like activating the `uinput` system module (`sudo modprobe uinput` for a one-time test, or adding `uinput` to `/etc/modules-load.d/modules.conf` to make that persistent).
-Moreover, the keyboard must be set with an appropriate layout, for example to have the letter `é` you'd want a French or Italian layout otherwise the English will drop it or replace with something else. Another caveat I encountered is that the special characters (`é`) were inserted at the wrong place. Adding a small delay was enough to fix that with the additional parameter `--latency 0.01` Finally if you run as sudo you may need to reset some environment variable so that the list of audio devices (`XDG_RUNTIME_DIR`) and the download folder remain the same. To sum-up, that gives something like:
-```bash
-sudo modprobe uinput
-sudo HOME=$HOME XDG_RUNTIME_DIR=$XDG_RUNTIME_DIR PYNPUT_BACKEND_KEYBOARD=uinput $(which scribe)  --latency 0.01
-```
-You're on the right path :)
+- **Xorg GNOME session.** In `/etc/gdm3/custom.conf` uncomment
+  `# WaylandEnable=false` and restart. Everything goes back to working.
+- **`pynput` uinput backend with root.** Requires `sudo`, the `uinput`
+  kernel module, and a matching keyboard layout (e.g. French/Italian for
+  `é`). Adding `--latency 0.01` helps with character-order glitches. With
+  sudo you also need to preserve `HOME` and `XDG_RUNTIME_DIR` so the audio
+  device list and model cache still resolve:
+
+  ```bash
+  sudo modprobe uinput
+  sudo HOME=$HOME XDG_RUNTIME_DIR=$XDG_RUNTIME_DIR \
+       PYNPUT_BACKEND_KEYBOARD=uinput $(which scribe) --latency 0.01
+  ```
+
+The proper fix is **libei** (the modern Wayland-native input emulation
+protocol, supported by GNOME 45+, KDE Plasma 6.1+, and Hyprland via the
+XDG RemoteDesktop portal). Adoption is tracked in
+[docs/roadmap-libei.md](docs/roadmap-libei.md).
 
 ## System tray icon (experimental) <img src="https://github.com/perrette/bard/raw/main/bard_data/share/icon.png" width=48px>
 
@@ -268,11 +288,13 @@ to make it available from the quick launch menu. Any option will be passed on to
 
 Consider the following two flavors:
 ```bash
-scribe-install --name "Scribe" --clipboard ...
-scribe-install --name "Scribe Terminal" --frontend terminal --clipboard ...
+scribe-install --name "Scribe"
+scribe-install --name "Scribe Terminal" --frontend terminal
 ```
 The first (default) creates an app named Scribe that runs in tray mode (no terminal window), with the tray icon as the only mode of interaction.
 The second creates an app named Scribe Terminal that opens a terminal window and runs the interactive TUI.
+
+(Clipboard + auto-paste is on by default; pass `--no-auto-paste` or `--no-clipboard` to either invocation if you want the older behavior.)
 
 
 ## Fine tuning
