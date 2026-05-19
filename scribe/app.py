@@ -25,8 +25,8 @@ def get_default_backend():
     raise RuntimeError(
         "No STT backend available. "
         "Set GROQ_API_KEY for Groq, OPENAI_API_KEY for OpenAI, "
-        "or install faster-whisper (pip install faster-whisper) "
-        "or vosk (pip install vosk)."
+        "or install Whisper (local) via `pip install faster-whisper` "
+        "or Vosk (local) via `pip install vosk`."
     )
 
 UNAVAILABLE_BACKENDS = []
@@ -200,7 +200,7 @@ def get_parser():
 
     group = parser.add_argument_group("whisper api")
     group.add_argument("--api-key",
-                        help="API key for the Whisper API backend.")
+                        help="API key for the OpenAI backend (used by --backend openai).")
 
     group = parser.add_argument_group("App")
     group.add_argument("--vosk-models", nargs="*", help="vosk models available for the app mode", default=vosk_models)

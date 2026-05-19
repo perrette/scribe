@@ -10,12 +10,12 @@ It supports four backends:
 | Backend | `--backend` value | Type | Notes |
 |---------|------------------|------|-------|
 | Groq | `groq` | remote | `whisper-large-v3-turbo` via OpenAI-compatible API (requires `GROQ_API_KEY`) |
-| OpenAI | `openaiapi` | remote | defaults to `gpt-4o-mini-transcribe` (requires `OPENAI_API_KEY`) |
+| OpenAI | `openai` | remote | defaults to `gpt-4o-mini-transcribe` (requires `OPENAI_API_KEY`) |
 | Whisper | `whisper` | local | `faster-whisper`, defaults to `large-v3-turbo` |
 | Vosk | `vosk` | local | streaming, real-time, no punctuation |
 
 When started without `--backend`, scribe picks the first one that's
-available, preferring cloud backends (`groq` → `openaiapi` → `whisper` → `vosk`).
+available, preferring cloud backends (`groq` → `openai` → `whisper` → `vosk`).
 
 ## Compatibility
 
@@ -25,7 +25,7 @@ Basically check the pages of the dependencies for more info (i.e. pynput for the
 - Ubuntu:
     - see caveats in the use of the keyboard under Wayland [keyboard section](#use-the-keyboard-with-wayland).
 - MacOS:
-    - tested on a Macbook Air M1 8Gb RAM, with python 3.12. It runs, but poorly, presumably because of the low memory: prefer a remote backend (`groq` or `openaiapi`) for such machines
+    - tested on a Macbook Air M1 8Gb RAM, with python 3.12. It runs, but poorly, presumably because of the low memory: prefer a remote backend (`groq` or `openai`) for such machines
     - I expect better memory specs will have the local models run fine
 - Windows:
     - not tested yet
@@ -56,14 +56,14 @@ cd scribe
 pip install -e .[all]
 ```
 
-You can leave the optional dependencies (leave out `[all]`) but must install at least one of `vosk` or `faster-whisper` or `openai` packages (see Usage below). The `groq` backend reuses the `openai` client, so installing the `openai` extra is enough for both `openaiapi` and `groq`.
+You can leave the optional dependencies (leave out `[all]`) but must install at least one of `vosk` or `faster-whisper` or `openai` packages (see Usage below). The `groq` backend reuses the `openai` client, so installing the `openai` extra is enough for both `openai` and `groq`.
 
 ### Manual selection of the dependencies
 
 ```bash
 # language models (at least one must be installed !)
 pip install vosk
-pip install openai soundfile  # openaiapi and groq
+pip install openai soundfile  # openai and groq
 pip install faster-whisper
 
 # PortAUDIO (sounddevice)
@@ -97,16 +97,16 @@ Just type in the terminal:
 ```bash
 scribe
 ```
-and the script will guide you through the choice of backend (`groq`, `openaiapi`, `whisper` or `vosk`) and the specific language model. The first backend whose dependency or API key is present is selected by default, with a preference for the cloud ones.
+and the script will guide you through the choice of backend (`groq`, `openai`, `whisper` or `vosk`) and the specific language model. The first backend whose dependency or API key is present is selected by default, with a preference for the cloud ones.
 After this, you will be prompted to start recording your microphone and print the transcribed text in real-time (`vosk`)
-or until after recording is complete (`whisper`, `openaiapi`, `groq`).
+or until after recording is complete (`whisper`, `openai`, `groq`).
 You can interrupt the recording via Ctrl + C and start again or change model.
 
 ### `whisper` (local)
 
 The `whisper` backend runs locally via [`faster-whisper`](https://github.com/SYSTRAN/faster-whisper) and defaults to the `large-v3-turbo` model. It is excellent at transcribing full-length audio sequences in [many languages](https://github.com/openai/whisper?tab=readme-ov-file#available-models-and-languages), but it cannot do real-time and the execution time depends on the model and hardware. Smaller models (`small`, `medium`) trade accuracy for speed.
 
-With the `whisper`, `openaiapi`, and `groq` backends the recording continues for 2 minutes until you stop it manually to trigger the transcription (Stop in the app, Ctrl + C in the terminal).
+With the `whisper`, `openai`, and `groq` backends the recording continues for 2 minutes until you stop it manually to trigger the transcription (Stop in the app, Ctrl + C in the terminal).
 These parameters can be changed. There is also the possibility to interrupt after a silence is detected. For example `--silence-db -40 --silence 2` interrupts recording when a silence (less than -40 dB recorded) lasts more than 2 seconds. The default `--silence-db -200` / `--silence 120` effectively disables this feature and keeps full manual control.
 
 ### `vosk` (local, streaming)
@@ -115,12 +115,12 @@ The `vosk` backend is much faster and very good at real-time transcription for o
 It becomes really powerful in longer or interactive typing sessions with the [keyboard](#virtual-keyboard-experimental) option, e.g. to make notes or chat with an AI.
 There are many [vosk models](https://alphacephei.com/vosk/models) available, and a handful are associated to [common languages](scribe/models.toml) `en`, `fr`, `it`, `de` (so far).
 
-### `openaiapi` (OpenAI cloud)
+### `openai` (OpenAI cloud)
 
-The `openaiapi` backend defaults to `gpt-4o-mini-transcribe` (`whisper-1` is also selectable). It requires an API key best passed as an environment variable:
+The `openai` backend defaults to `gpt-4o-mini-transcribe` (`whisper-1` is also selectable but deprecated). It requires an API key best passed as an environment variable:
 ```bash
 export OPENAI_API_KEY=YOURAPIKEY
-scribe --backend openaiapi
+scribe --backend openai
 ```
 Lightweight and handy if you have an API key and a low-spec computer (and don't care too much about privacy, obviously).
 
@@ -202,7 +202,7 @@ scribe --frontend terminal   # interactive TUI
 ```
 From inside the TUI menu you can toggle to tray mode at any time. The scribe icon will show, with Record, Cancel (discards an in-flight recording without transcribing) and other options. The icon changes based on what the app is doing. It is possible to choose from a set
 of predefined models (controlled by `--vosk-models` and `--whisper-models`) and options, or to Quit and choose from the terminal before pressing Enter again.
-For the vosk model, there are only two states : recording + transcribing or Idle. For the whisper / openaiapi / groq backends there are three states visible from the icon: recording/waiting, transcribing and idle.
+For the vosk model, there are only two states : recording + transcribing or Idle. For the whisper / openai / groq backends there are three states visible from the icon: recording/waiting, transcribing and idle.
 
 Transcription and API errors are surfaced as a pop-up dialog instead of just
 crashing the tray.
