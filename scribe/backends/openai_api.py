@@ -7,8 +7,8 @@ from scribe.models import AbstractTranscriber
 
 
 class OpenaiAPITranscriber(WhisperTranscriber):
-    name = "openaiapi"
-    backend = "openaiapi"
+    name = "openai"
+    backend = "openai"
     default_model: str | None = "gpt-4o-mini-transcribe"
 
     def __init__(self, model_name="gpt-4o-mini-transcribe", language=None, model_kwargs={}, model=None, api_key=None, **kwargs):

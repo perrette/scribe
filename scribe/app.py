@@ -21,7 +21,7 @@ language_config = language_config_default.copy()
 
 
 def get_default_backend():
-    for name in ("groq", "openaiapi", "whisper", "vosk"):
+    for name in ("groq", "openai", "whisper", "vosk"):
         ok, _ = probe_backend(name)
         if ok:
             return name
@@ -99,7 +99,7 @@ def _prompt_model_for_backend(backend, language, prompt):
             model = default_model
         return pick_specialist_model(model, language, backend)
 
-    if backend == "openaiapi":
+    if backend == "openai":
         return "gpt-4o-mini-transcribe"
 
     raise ValueError(f"Unknown backend: {backend}")
@@ -116,7 +116,7 @@ def _build_backend_kwargs(backend, model, language, samplerate, duration, silenc
                     timeout=duration, silence_duration=silence, silence_thresh=silence_db,
                     restart_after_silence=restart_after_silence,
                     model_kwargs={"download_root": download_folder_whisper})
-    if backend == "openaiapi":
+    if backend == "openai":
         return dict(model_name=model, samplerate=samplerate,
                     timeout=duration, silence_duration=silence, silence_thresh=silence_db,
                     restart_after_silence=restart_after_silence, api_key=api_key)
@@ -134,7 +134,7 @@ def get_transcriber(model=None, backend=None, dummy=False, prompt=True, language
         elif model in whisper_models + whisper_english_models:
             backend = "whisper"
         elif model in whisperapi_models:
-            backend = "openaiapi"
+            backend = "openai"
     if not backend:
         backends_list = list(BACKENDS)
         backend = backends_list[0] if not prompt else prompt_choices(backends_list, None, "backend", UNAVAILABLE_BACKENDS)
@@ -624,7 +624,7 @@ def main(args=None):
         if o.frontend == "tray":
             greetings = dict(start_message="Listening... Use the tray icon menu to stop.")
             app = create_app(micro, state.transcriber, other_transcribers=[
-                {**vars(o), "backend": "openaiapi", "model": "whisper-1"},
+                {**vars(o), "backend": "openai", "model": "whisper-1"},
                 *[{**vars(o), "backend": "whisper", "model": model} for model in o.whisper_models],
                 *[{**_filter_options(vars(o), exclude=VoskTranscriber._frozen_options), "backend": "vosk", "model": model} for model in o.vosk_models]],
                 clipboard=o.clipboard, output_file=o.output_file,
