@@ -274,7 +274,7 @@ class AppState(AbstractFrontendApp):
 
         icon._transcriber = new_transcriber
         icon._session = RecordingSession(backend=new_transcriber, error_callback=show_error_dialog)
-        icon.title = f"scribe :: {new_transcriber.backend} :: {new_transcriber.model_name}"
+        icon.title = f"scribe — {format_model_label(new_transcriber.backend, new_transcriber.model_name)}"
         icon._model_selection = False
         self.transcriber = new_transcriber
         self.session = icon._session

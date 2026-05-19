@@ -9,7 +9,7 @@ from scribe.backends import BACKENDS, available_backends, probe_backend, get_tra
 from scribe.session import RecordingSession
 from desktop_ai_core.frontends.tray import MultiStateTrayIcon, write_pidfile, register_signal_toggle
 from desktop_ai_core.frontends.dialog import show_error_dialog
-from scribe.menu import build_menu, AppState, _menu_to_pystray
+from scribe.menu import build_menu, AppState, _menu_to_pystray, format_model_label
 
 with open(Path(__file__).parent / "models.toml", "rb") as f:
     language_config_default = tomllib.load(f)
@@ -290,7 +290,7 @@ def create_app(micro, app_state):
     menu_spec = build_menu(app_state)
     pystray_menu = _menu_to_pystray(menu_spec, app_state)
 
-    title = f"scribe :: {transcriber.backend} :: {transcriber.model_name}"
+    title = f"scribe — {format_model_label(transcriber.backend, transcriber.model_name)}"
     icon = pystray.Icon('scribe', image, title, pystray_menu)
     icon._model_selection = False
     icon._transcriber = transcriber
