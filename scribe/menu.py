@@ -1,6 +1,4 @@
 from pathlib import Path
-import os
-import platform
 import re
 import sys
 import tomllib
@@ -320,17 +318,27 @@ class AppState(AbstractFrontendApp):
     def cb_set_output_mode(self, mode: str) -> Callable:
         """Factory: callback that sets the single 'output mode' radio.
 
-        ``mode`` ∈ {'auto_paste', 'keyboard', 'clipboard', 'terminal'}.
-        Each mode sets the (clipboard, auto_paste, keyboard) triple
-        atomically so the menu surfaces them as one mutually-exclusive
-        choice instead of three independent checkboxes that silently
-        cancel each other out at runtime.
+        ``mode`` ∈ {'keystroke', 'clipboard', 'terminal'}:
+
+          - 'keystroke' → text lands in the focused window. Mechanism is
+            picked for the current backend: per-character typing for
+            streaming backends (vosk; later, openai-realtime), single
+            Ctrl+V at end for batch backends. The two mechanisms feel
+            identical for batch backends, so keeping them as separate
+            user choices was noise.
+          - 'clipboard' → text on clipboard, user pastes manually.
+          - 'terminal' → text printed to terminal only.
+
+        Note: if the user picks 'keystroke' and then switches backend
+        via the Model menu, the keyboard / auto_paste flags can go
+        stale until they re-click the radio. Acceptable wart for now;
+        proper fix is to auto-re-derive on backend change.
         """
         def _cb(view, item):
-            if mode == "auto_paste":
-                clipboard, auto_paste, keyboard = True, True, False
-            elif mode == "keyboard":
-                clipboard, auto_paste, keyboard = False, False, True
+            if mode == "keystroke":
+                backend = getattr(self.transcriber, "backend", None) if self.transcriber else None
+                is_streaming = getattr(self.transcriber, "supports_streaming", False) or backend == "vosk"
+                clipboard, auto_paste, keyboard = True, not is_streaming, is_streaming
             elif mode == "clipboard":
                 clipboard, auto_paste, keyboard = True, False, False
             else:  # "terminal"
@@ -509,13 +517,10 @@ def _noop_callback(view, item):
 
 def _output_mode(o) -> str:
     """Derive the current output mode from the (clipboard, auto_paste,
-    keyboard) triple. ``keyboard`` wins over ``auto_paste`` (matches
-    app.start_recording, which silently drops auto_paste when keyboard
-    is set)."""
-    if getattr(o, "keyboard", False):
-        return "keyboard"
-    if getattr(o, "auto_paste", False) and getattr(o, "clipboard", False):
-        return "auto_paste"
+    keyboard) triple. Anything that lands a keystroke in the focused
+    window — per-char typing OR auto-paste — collapses to 'keystroke'."""
+    if getattr(o, "keyboard", False) or getattr(o, "auto_paste", False):
+        return "keystroke"
     if getattr(o, "clipboard", False):
         return "clipboard"
     return "terminal"
@@ -529,32 +534,20 @@ def _output_mode_radio(app_state, key: str, mode: str, label: str) -> Item:
     return item
 
 
-def _recommended_output_mode() -> str | None:
-    """OS-specific recommendation for the default output mode.
-
-    macOS: per-character typing via pynput is the native path. Linux and
-    Windows: auto-paste (clipboard + Ctrl+V) is the universal fallback —
-    it works on Wayland through libei/eitype, on X11 through XTest, and
-    handles Unicode losslessly via the clipboard.
-    """
-    if platform.system() == "Darwin":
-        return "keyboard"
-    return "auto_paste"
-
-
 def _output_mode_submenu(app_state) -> Menu:
-    """Mutually-exclusive output modes, grouped as a radio submenu."""
-    recommended = _recommended_output_mode()
+    """Mutually-exclusive output modes, grouped as a radio submenu.
+
+    Three modes — the keystroke mechanism (per-char typing vs Ctrl+V at
+    end) is picked automatically for the current backend, so the user
+    sees only 'where does the text go'.
+    """
     modes = [
-        ("c", "clipboard",  "Clipboard only (press Ctrl+V yourself)"),
-        ("p", "auto_paste", "Auto-paste (Ctrl+V at end)"),
-        ("k", "keyboard",   "Type each character"),
-        ("t", "terminal",   "Terminal only"),
+        ("c", "clipboard", "Clipboard only (press Ctrl+V yourself)"),
+        ("s", "keystroke", "Send to focused window (recommended)"),
+        ("t", "terminal",  "Terminal only"),
     ]
     items = []
     for key, mode, label in modes:
-        if mode == recommended:
-            label = f"{label} (recommended)"
         items.append(_output_mode_radio(app_state, key, mode, label))
     return Menu(items, name="Output mode")
 
