@@ -14,7 +14,8 @@ class WhisperTranscriber(AbstractTranscriber):
     def __init__(self, model_name, language=None, model=None, model_kwargs={}, **kwargs):
         if model is None:
             from faster_whisper import WhisperModel
-            model = WhisperModel(model_name, **model_kwargs)
+            kw = {"compute_type": "int8", **model_kwargs}
+            model = WhisperModel(model_name, **kw)
         super().__init__(model, model_name, language, model_kwargs=model_kwargs, **kwargs)
 
     def transcribe_audio(self, audio_bytes):
