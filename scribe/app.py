@@ -3,15 +3,13 @@ import tomllib
 import time
 import signal
 import argparse
-from typing import Iterable
 from scribe.audio import Microphone
 from scribe.util import print_partial, clear_line, prompt_choices, ansi_link, colored
 from scribe.backends import BACKENDS, available_backends, probe_backend, get_transcriber as _build_transcriber
-from scribe.backends.vosk import VoskTranscriber
 from scribe.session import RecordingSession
-from desktop_ai_core.frontends.tray import MultiStateTrayIcon, write_pidfile, remove_pidfile, register_signal_toggle
+from desktop_ai_core.frontends.tray import MultiStateTrayIcon, write_pidfile, register_signal_toggle
 from desktop_ai_core.frontends.dialog import show_error_dialog
-from scribe.menu import format_model_label, build_menu, AppState
+from scribe.menu import build_menu, AppState, _menu_to_pystray
 
 with open(Path(__file__).parent / "models.toml", "rb") as f:
     language_config_default = tomllib.load(f)
@@ -258,25 +256,29 @@ def start_recording(micro, session, clipboard=True, keyboard=False, auto_paste=F
 
 
 
-def create_app(micro, transcriber, other_transcribers=None, transcriber_options=[], **kwargs):
+def create_app(micro, app_state):
+    """Construct the system-tray pystray Icon from the unified menu spec.
+
+    The menu tree is produced by ``build_menu(app_state)`` and converted to
+    pystray's MenuItem hierarchy via ``_menu_to_pystray``. All recording and
+    model-switching behavior lives on ``app_state``; ``create_app`` only wires
+    the icon, image state machine, signal handlers, and pidfile.
+    """
     import pystray
-    from pystray import Menu as pystrayMenu, MenuItem as Item
     from PIL import Image
-    import PIL.ImageOps
 
     import scribe_data
-    import threading
 
+    transcriber = app_state.transcriber
     session = RecordingSession(backend=transcriber, error_callback=show_error_dialog)
+    app_state.session = session
 
-    # Load an image from a file
     image = Image.open(Path(scribe_data.__file__).parent / "share" / "icon.png")
     image_recording = Image.open(Path(scribe_data.__file__).parent / "share" / "icon_recording.png")
     image_writing = Image.open(Path(scribe_data.__file__).parent / "share" / "icon_writing.png")
 
     if transcriber.backend == "vosk":
-        # Recording and writing happen at the same time in this backend
-        # Overlay the writing image on top of the base image
+        # Recording and writing happen at the same time in this backend.
         image_recording = Image.alpha_composite(image_recording.convert("RGBA"), image_writing.convert("RGBA"))
 
     state_images = {
@@ -285,159 +287,14 @@ def create_app(micro, transcriber, other_transcribers=None, transcriber_options=
         "busy": image_writing,
     }
 
-    def callback_quit(icon, item):
-        icon.visible = False
-        ## Here we need to stop the recording thread
-        callback_stop_recording(icon, item)
-        _join_recording_threads(icon)
-        remove_pidfile("scribe")
-        icon.stop()
+    menu_spec = build_menu(app_state)
+    pystray_menu = _menu_to_pystray(menu_spec, app_state)
 
-    def callback_stop_recording(icon, item):
-        # Signal the recording thread to stop. Do NOT join here: that would block
-        # the GTK main loop, preventing the monitoring thread's icon updates from
-        # being rendered until transcription completes.
-        icon._session.interrupt = True
-
-    def _join_recording_threads(icon):
-        if hasattr(icon, "_recording_thread"):
-            icon._recording_thread.join()
-        if hasattr(icon, "_monitoring_thread"):
-            icon._monitoring_thread.join()
-
-    def callback_cancel_recording(icon, item):
-        icon._session.cancelled = True
-        callback_stop_recording(icon, item)
-
-    def callback_record(icon, item):
-        session = icon._session
-        if session.busy:
-            # session.log("Still busy recording or transcribing.")
-            return callback_stop_recording(icon, item)  # play / stop behavior
-
-        if hasattr(icon, "_recording_thread") and icon._recording_thread.is_alive():
-            icon._recording_thread.join()
-
-        if hasattr(icon, "_monitoring_thread") and icon._monitoring_thread.is_alive():
-            icon._monitoring_thread.join()
-
-        session.busy = True  # this is a hack to prevent race conditions between the below threads
-        def _safe_start_recording():
-            try:
-                start_recording(micro, session, **kwargs)
-            except Exception as exc:
-                session.notify_error("Recording error", repr(exc))
-            finally:
-                # Ensure the icon never gets stuck if an unhandled error escaped.
-                session.recording = False
-                session.busy = False
-        icon._recording_thread = threading.Thread(target=_safe_start_recording)
-        icon._recording_thread.start()
-        icon._monitoring_thread = threading.Thread(
-            target=icon._state_machine.start_monitoring,
-            args=(lambda: icon._session.busy,),
-        )
-        icon._monitoring_thread.start()
-
-    if other_transcribers:
-        other_transcribers_dict = {meta["model"]: meta for meta in other_transcribers}
-    else:
-        other_transcribers_dict = {}
-
-    model_labels = {name: format_model_label(other_transcribers_dict[name]["backend"], name) for name in other_transcribers_dict}
-    label_to_model = {v: k for k, v in model_labels.items()}
-
-    def callback_set_model(icon, item):
-        transcriber = icon._transcriber
-        raw_name = label_to_model.get(str(item), str(item))
-        if transcriber.model_name == raw_name:
-            icon._session.log(f"Already using model {raw_name}")
-            return
-        callback_stop_recording(icon, item)
-        _join_recording_threads(icon)
-        model_name = raw_name
-        meta = other_transcribers_dict[model_name]
-        icon._transcriber = transcriber = get_transcriber(**meta)
-        icon._session = RecordingSession(backend=transcriber, error_callback=show_error_dialog)
-        icon.title = f"scribe :: {transcriber.backend} :: {transcriber.model_name}"
-        print("Set", transcriber.backend, transcriber.model_name)
-        # icon.menu.items[0].__name__ = f"Record [{str(item)}]"
-        icon._model_selection = False
-        icon.update_menu()
-
-    def callback_toggle_option(icon, item):
-        callback_stop_recording(icon, item)
-        _join_recording_threads(icon)
-        if str(item) in transcriber_options:
-            # toggle the option on the current transcriber
-            if str(item) in icon._transcriber._frozen_options or type(getattr(icon._transcriber, str(item), None)) is not bool:
-                print("Skipped setting option", item)
-                return
-            newvalue = not getattr(icon._transcriber, str(item))
-            setattr(icon._transcriber, str(item), newvalue)
-            # set the option on the other transcribers as well
-            if other_transcribers:
-                for name in other_transcribers_dict:
-                    meta = other_transcribers_dict[name]
-                    if str(item) in meta:
-                        meta[str(item)] = newvalue
-
-        else:
-            kwargs[str(item)] = not kwargs[str(item)]
-            print("Option set [", item, "] to", kwargs[str(item)])
-
-    def is_model_selection(item):
-        return icon._model_selection
-
-    def is_recording(item):
-        return icon._session.busy
-
-    def is_not_recording(item):
-        return not is_recording(item) and not is_model_selection(item)
-
-    def is_checked_model(item):
-        return icon._transcriber.model_name == label_to_model.get(str(item), str(item))
-
-    def is_checked_option(item):
-        if not is_option_visible(item):
-            return False
-        if str(item) in transcriber_options:
-            return getattr(icon._transcriber, str(item))
-        return kwargs[str(item)]
-
-    def is_option_visible(item):
-        if str(item) in transcriber_options:
-            return str(item) not in icon._transcriber._frozen_options
-        return True
-
-    modeltitle = f"{transcriber.backend} :: {transcriber.model_name}"
-    title = f"scribe :: {modeltitle}"
-
-    options = [name for name in kwargs if isinstance(kwargs[name], bool)] + [name for name in transcriber_options if isinstance(getattr(transcriber, name), bool)]
-
-    menus = []
-    menus.append(Item(f"Record", callback_record, visible=is_not_recording, default=True))
-    menus.append(Item("Stop", callback_stop_recording, visible=is_recording))
-    menus.append(Item("Cancel", callback_cancel_recording, visible=is_recording))
-    menus.append(Item("Choose Model", pystrayMenu(
-        *(Item(model_labels[name], callback_set_model, checked=is_checked_model) for name in other_transcribers_dict)))
-    )
-    if options:
-        menus.append(Item("Toggle Options", pystrayMenu(
-            *(Item(f"{name}", callback_toggle_option, checked=is_checked_option, visible=is_option_visible) for name in options)))
-        )
-    menus.append(Item('Quit', callback_quit))
-
-    # Create a menu
-    menu = pystrayMenu(*menus)
-
-    # Create the system tray icon
-    icon = pystray.Icon('scribe', image, title, menu)
+    title = f"scribe :: {transcriber.backend} :: {transcriber.model_name}"
+    icon = pystray.Icon('scribe', image, title, pystray_menu)
     icon._model_selection = False
     icon._transcriber = transcriber
     icon._session = session
-    del transcriber
-    del session
 
     def _get_icon_state():
         s = icon._session
@@ -449,17 +306,17 @@ def create_app(micro, transcriber, other_transcribers=None, transcriber_options=
 
     icon._state_machine = MultiStateTrayIcon(icon, state_images, _get_icon_state)
 
+    app_state.bind_tray(icon, micro)
+
     write_pidfile("scribe")
 
     if hasattr(signal, "SIGUSR1"):
-        register_signal_toggle(signal.SIGUSR1, lambda: callback_record(icon, None))
+        register_signal_toggle(signal.SIGUSR1, lambda: app_state.cb_record(icon, None))
     if hasattr(signal, "SIGUSR2"):
-        register_signal_toggle(signal.SIGUSR2, lambda: icon._session.busy and callback_cancel_recording(icon, None))
+        register_signal_toggle(signal.SIGUSR2,
+                               lambda: icon._session.busy and app_state.cb_cancel(icon, None))
 
     return icon
-
-def _filter_options(d: dict, exclude: Iterable) -> dict:
-    return {k: v for k, v in d.items() if k not in exclude}
 
 
 def _print_main_status(state, o):
@@ -510,14 +367,7 @@ def main(args=None):
                 continue
 
         if o.frontend == "tray":
-            greetings = dict(start_message="Listening... Use the tray icon menu to stop.")
-            app = create_app(micro, state.transcriber, other_transcribers=[
-                {**vars(o), "backend": "openai", "model": "whisper-1"},
-                *[{**vars(o), "backend": "whisper", "model": model} for model in o.whisper_models],
-                *[{**_filter_options(vars(o), exclude=VoskTranscriber._frozen_options), "backend": "vosk", "model": model} for model in o.vosk_models]],
-                clipboard=o.clipboard, output_file=o.output_file,
-                keyboard=o.keyboard, auto_paste=o.auto_paste, latency=o.latency, ascii=o.ascii,
-                transcriber_options=[], **greetings)
+            app = create_app(micro, state)
             print("Starting app...")
             app.run()
             return

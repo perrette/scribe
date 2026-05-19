@@ -89,6 +89,12 @@ class AppState(AbstractFrontendApp):
 
     Inherits params / set_param / get_param / checked / callback_toggle_option /
     notify_error / error_callback / logger from AbstractFrontendApp.
+
+    The same instance backs both the terminal and tray frontends. ``bind_tray``
+    attaches a pystray Icon + Microphone so the tray-mode branches of the
+    callbacks below can drive recording threads directly; without binding, the
+    callbacks behave as the terminal flow (exit the menu loop and let ``main``
+    drive the next iteration).
     """
 
     def __init__(self, transcriber=None, session=None, o=None, view=None, error_callback=None):
@@ -101,6 +107,13 @@ class AppState(AbstractFrontendApp):
         self.session = session
         self.o = o
         self.is_running = True
+        self.icon = None
+        self.micro = None
+
+    def bind_tray(self, icon, micro) -> None:
+        """Attach a pystray Icon + Microphone for tray-mode callbacks."""
+        self.icon = icon
+        self.micro = micro
 
     # ── Predicates ─────────────────────────────────────────────────
     def is_recording(self, item=None) -> bool:
@@ -117,26 +130,42 @@ class AppState(AbstractFrontendApp):
 
     # ── Top-level callbacks ────────────────────────────────────────
     def cb_record(self, view, item):
-        # exit menu loop → main() proceeds to start_recording
+        if self.icon is not None:
+            return self._tray_record()
+        # terminal: exit menu loop → main() proceeds to start_recording
         return False
 
     def cb_stop(self, view, item):
+        if self.icon is not None:
+            if self.icon._session is not None:
+                self.icon._session.interrupt = True
+            return None
         if self.session is not None:
             self.session.interrupt = True
         return True
 
     def cb_cancel(self, view, item):
+        if self.icon is not None:
+            sess = self.icon._session
+            if sess is not None:
+                sess.cancelled = True
+                sess.interrupt = True
+            return None
         if self.session is not None:
             self.session.cancelled = True
             self.session.interrupt = True
         return True
 
     def cb_quit(self, view, item):
+        if self.icon is not None:
+            return self._tray_quit()
         sys.exit(0)
 
     def cb_set_model(self, backend_name: str, model_id: str) -> Callable:
         """Factory: return a callback that switches to (backend, model)."""
         def _cb(view, item):
+            if self.icon is not None:
+                return self._tray_set_model(backend_name, model_id)
             self.transcriber = None
             self.session = None
             self.o.backend = backend_name
@@ -144,20 +173,140 @@ class AppState(AbstractFrontendApp):
             return False
         return _cb
 
+    # ── Tray-mode helpers ──────────────────────────────────────────
+    def _tray_join_recording_threads(self) -> None:
+        icon = self.icon
+        if icon is None:
+            return
+        thread = getattr(icon, "_recording_thread", None)
+        if thread is not None:
+            thread.join()
+        thread = getattr(icon, "_monitoring_thread", None)
+        if thread is not None:
+            thread.join()
+
+    def _tray_record(self):
+        """Start a recording thread on the bound icon (play/stop toggle).
+
+        Preserves the SIGUSR1 toggle semantics from the previous closure
+        implementation: invoking this while a recording is in flight signals
+        the running session to stop instead of starting a fresh one.
+        """
+        import threading
+        from scribe.app import start_recording
+
+        icon = self.icon
+        session = icon._session
+        if session.busy:
+            session.interrupt = True
+            return None
+
+        thread = getattr(icon, "_recording_thread", None)
+        if thread is not None and thread.is_alive():
+            thread.join()
+        thread = getattr(icon, "_monitoring_thread", None)
+        if thread is not None and thread.is_alive():
+            thread.join()
+
+        # Pre-mark busy to avoid a race with the monitoring thread.
+        session.busy = True
+
+        o = self.o
+
+        def _safe_start():
+            try:
+                start_recording(
+                    self.micro, session,
+                    clipboard=getattr(o, "clipboard", False),
+                    keyboard=getattr(o, "keyboard", False),
+                    auto_paste=getattr(o, "auto_paste", False),
+                    latency=getattr(o, "latency", 0),
+                    ascii=getattr(o, "ascii", False),
+                    output_file=getattr(o, "output_file", None),
+                    start_message="Listening... Use the tray icon menu to stop.",
+                )
+            except Exception as exc:
+                session.notify_error("Recording error", repr(exc))
+            finally:
+                session.recording = False
+                session.busy = False
+
+        icon._recording_thread = threading.Thread(target=_safe_start)
+        icon._recording_thread.start()
+        icon._monitoring_thread = threading.Thread(
+            target=icon._state_machine.start_monitoring,
+            args=(lambda: icon._session.busy,),
+        )
+        icon._monitoring_thread.start()
+        return None
+
+    def _tray_quit(self):
+        from desktop_ai_core.frontends.tray import remove_pidfile
+
+        icon = self.icon
+        icon.visible = False
+        if icon._session is not None:
+            icon._session.interrupt = True
+        self._tray_join_recording_threads()
+        remove_pidfile("scribe")
+        icon.stop()
+        return None
+
+    def _tray_set_model(self, backend_name: str, model_id: str):
+        from scribe.app import get_transcriber
+        from scribe.session import RecordingSession
+        from desktop_ai_core.frontends.dialog import show_error_dialog
+
+        icon = self.icon
+        current = icon._transcriber
+        if (current is not None
+                and getattr(current, "backend", None) == backend_name
+                and getattr(current, "model_name", None) == model_id):
+            icon._session.log(f"Already using model {model_id}")
+            return None
+
+        if icon._session is not None and icon._session.busy:
+            icon._session.interrupt = True
+        self._tray_join_recording_threads()
+
+        new_kwargs = {**vars(self.o), "backend": backend_name, "model": model_id, "prompt": False}
+        new_transcriber = get_transcriber(**new_kwargs)
+
+        icon._transcriber = new_transcriber
+        icon._session = RecordingSession(backend=new_transcriber, error_callback=show_error_dialog)
+        icon.title = f"scribe :: {new_transcriber.backend} :: {new_transcriber.model_name}"
+        icon._model_selection = False
+        self.transcriber = new_transcriber
+        self.session = icon._session
+        self.o.backend = backend_name
+        self.o.model = model_id
+        icon.update_menu()
+        return None
+
+    def _refresh_tray_menu(self):
+        if self.icon is not None:
+            try:
+                self.icon.update_menu()
+            except Exception:
+                pass
+
     # ── Option-toggle callbacks ────────────────────────────────────
     def cb_toggle_clipboard(self, view, item):
         self.o.clipboard = not self.o.clipboard
         self.params["clipboard"] = self.o.clipboard
+        self._refresh_tray_menu()
         return True
 
     def cb_toggle_keyboard(self, view, item):
         self.o.keyboard = not bool(self.o.keyboard)
         self.params["keyboard"] = self.o.keyboard
+        self._refresh_tray_menu()
         return True
 
     def cb_toggle_frontend(self, view, item):
         self.o.frontend = "terminal" if self.o.frontend == "tray" else "tray"
         self.params["frontend"] = self.o.frontend
+        self._refresh_tray_menu()
         return True
 
     def cb_toggle_auto_restart(self, view, item):
@@ -166,6 +315,7 @@ class AppState(AbstractFrontendApp):
             self.transcriber.restart_after_silence = new
         self.o.restart_after_silence = new
         self.params["restart_after_silence"] = new
+        self._refresh_tray_menu()
         return True
 
     # ── SetValueItem callbacks ─────────────────────────────────────
@@ -226,11 +376,18 @@ class AppState(AbstractFrontendApp):
 
 
 def _backend_models_menu(app_state, backend_name: str) -> Menu:
-    items = [
-        Item(format_model_label(backend_name, model),
-             app_state.cb_set_model(backend_name, model))
-        for model in _models_for_backend(backend_name, app_state)
-    ]
+    items = []
+    for model in _models_for_backend(backend_name, app_state):
+        def _is_current(_item, _b=backend_name, _m=model):
+            t = app_state.transcriber
+            return (t is not None
+                    and getattr(t, "backend", None) == _b
+                    and getattr(t, "model_name", None) == _m)
+        items.append(Item(
+            format_model_label(backend_name, model),
+            app_state.cb_set_model(backend_name, model),
+            checked=_is_current,
+        ))
     vendor = _VENDOR_PREFIX.get(backend_name, backend_name.capitalize())
     return Menu(items, name=vendor)
 
@@ -297,3 +454,77 @@ def build_menu(app_state) -> Menu:
         Item("Quit", app_state.cb_quit, help="quit scribe"),
     ]
     return Menu(items)
+
+
+# NOTE: pystray menus are static once built — SetValueItem entries cannot be
+# inline-edited from the tray, so they render as disabled "name: value" labels
+# (the user changes them via the terminal frontend or CLI flags).
+def _menu_to_pystray(menu: Menu, app_state):
+    """Walk a desktop_ai_core Menu tree and return a pystray.Menu mirror.
+
+    Submenus map to nested pystray.Menu instances; Item callbacks pass through
+    with (icon, menu_item) → (view, item) shape; the Record item is marked as
+    pystray's default action to preserve double-click behavior.
+    """
+    import pystray
+
+    py_items = [_item_to_pystray(it, app_state) for it in menu.items]
+    return pystray.Menu(*py_items)
+
+
+def _item_to_pystray(item, app_state):
+    import pystray
+
+    visible = _make_visible(item)
+
+    if isinstance(item._callback, Menu):
+        submenu = _menu_to_pystray(item._callback, app_state)
+        return pystray.MenuItem(item.name, submenu, visible=visible)
+
+    if isinstance(item, SetValueItem):
+        return pystray.MenuItem(
+            _make_setvalue_text(item),
+            _noop_action,
+            visible=visible,
+            enabled=False,
+        )
+
+    checked = _make_checked(item) if item.checkable else None
+    return pystray.MenuItem(
+        item.name,
+        _make_action(item),
+        checked=checked,
+        radio=item.checkable,
+        default=(item.name == "Record"),
+        visible=visible,
+    )
+
+
+def _make_visible(item):
+    def _visible(_mi):
+        return bool(item.visible(item))
+    return _visible
+
+
+def _make_checked(item):
+    def _checked(_mi):
+        return bool(item.checked(item))
+    return _checked
+
+
+def _make_action(item):
+    callback = item._callback
+    def _action(icon, _mi):
+        return callback(icon, item)
+    return _action
+
+
+def _make_setvalue_text(item):
+    def _text(_mi):
+        val = item.value(item) if callable(item.value) else item.value
+        return f"{item.name}: {val}"
+    return _text
+
+
+def _noop_action(_icon, _mi):
+    return None
