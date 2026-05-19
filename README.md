@@ -154,48 +154,43 @@ scribe --backend groq
 
 ## Keyboard mode
 
-Scribe delivers the transcription to your computer in one of four
-mutually-exclusive modes. The default is "Send to focused window",
-which copies the text to the clipboard and synthesizes Ctrl+V (or
-Cmd+V on macOS) into whatever window is focused. Pasting is more
-reliable than per-character typing because the app's own paste
-handler does the character insertion — Unicode and keyboard-layout
-differences are not an issue.
+Scribe delivers the transcription to your computer in one of three
+mutually-exclusive modes, selected via the `-m / --mode` CLI flag or
+the tray's **Options → Keyboard mode** radio. The same three modes
+are exposed in both places — there is no separate "auto-paste" /
+"keyboard" / "clipboard" set of toggles.
 
-| Mode                       | CLI flags                                        | What happens                                                              |
-|----------------------------|--------------------------------------------------|---------------------------------------------------------------------------|
-| Send to focused window     | *(default)* — implicit                           | Clipboard + Ctrl+V at end (batch backends) or per chunk (streaming, vosk) |
-| Clipboard only             | `--no-auto-paste` *(or)* `--no-keyboard --clipboard` | Text on clipboard; you press Ctrl+V yourself                              |
-| Terminal only              | `--no-clipboard --no-auto-paste`                 | Text printed to the terminal only                                         |
-| Live (paste-per-chunk)     | `--keyboard`                                     | Each transcribed chunk is pasted as it arrives — "appears as you speak"   |
-
-In **tray/terminal mode** the same choice lives under **Options →
-Keyboard mode** as a four-way radio. Picking "Live (paste-per-chunk)"
-is most useful with the `vosk` backend (true word-level streaming) or
-with whisper + `--restart-after-silence -a` (chunks at silence
-boundaries). With batch backends (`openai`, `groq`, plain `whisper`)
-the chunk *is* the full transcription, so Live mode and the default
-auto-paste-at-end produce the same outcome.
+| `--mode` value                | What happens                                                                                                                       |
+|-------------------------------|------------------------------------------------------------------------------------------------------------------------------------|
+| `keystroke` *(default)*       | The transcription lands in the focused window. **Batch backends** (whisper, openai, groq): single Ctrl+V at end of recording. **Streaming backends** (vosk): each chunk is pasted live as it arrives — "appears as you speak". |
+| `clipboard`                   | Transcription copied to clipboard; you press Ctrl+V yourself.                                                                      |
+| `terminal`                    | No clipboard, no keystroke — transcription is only printed to the terminal.                                                        |
 
 ```bash
-scribe                  # Send to focused window (default)
-scribe --no-auto-paste  # Clipboard only — you press Ctrl+V
-scribe --no-clipboard   # Terminal only
-scribe --keyboard       # Live paste-per-chunk
+scribe                    # keystroke (default)
+scribe --mode clipboard   # clipboard only
+scribe --mode terminal    # terminal only
+scribe -o transcript.txt  # also append to a file (orthogonal to --mode)
 ```
+
+The mechanism inside `keystroke` mode (Ctrl+V at end vs paste-per-chunk)
+is auto-picked from the active backend. Switching backend via the Model
+menu re-evaluates the mechanism on the next recording — no need to
+re-pick the radio.
 
 The clipboard is left holding the transcription after scribe finishes — if
 you want to preserve your previous clipboard contents, save them somewhere
 else first.
 
-> **Historical note.** Earlier versions of `--keyboard` typed each
-> character via a synthesized virtual keyboard rather than pasting
-> per chunk. That path was structurally limited for non-ASCII text
-> on the subprocess typers (eitype / wtype / ydotool) — Unicode
-> codepoints had to be mapped to keycodes through the active xkb
-> layout, which silently truncated or errored on chars outside the
-> layout. The per-character path is still reachable via the Python
-> API (`scribe.keyboard.type_text`) for debugging.
+> **Historical note.** Up to mid-2026 these three modes were three
+> independent boolean flags (`--clipboard / --auto-paste / --keyboard`)
+> plus a tuning pair (`--latency / --ascii`) for a per-character typing
+> path that turned out to be structurally limited for non-ASCII text on
+> Wayland-native typer backends. That path was retired in favour of
+> paste-per-chunk; the booleans collapsed into the single `--mode` flag
+> documented here. The legacy per-character typing function is still
+> reachable as `scribe.keyboard.type_text(...)` from the Python API for
+> debugging.
 
 ### Output file
 
@@ -286,17 +281,20 @@ If `eitype` is unavailable, two older workarounds also work:
   `# WaylandEnable=false` and restart. Everything goes back to working
   via `pynput` → XTest.
 - **`pynput` uinput backend with root.** Requires `sudo`, the `uinput`
-  kernel module, and a matching keyboard layout (e.g. French/Italian for
-  `é`). If you see characters arriving out of order, add
-  `--latency 0.01` to introduce a 10 ms delay between keystrokes. With
-  sudo you also need to preserve `HOME` and `XDG_RUNTIME_DIR` so the
-  audio device list and model cache still resolve:
+  kernel module, and a matching keyboard layout (e.g. French/Italian
+  for `é`). With sudo you also need to preserve `HOME` and
+  `XDG_RUNTIME_DIR` so the audio device list and model cache still
+  resolve:
 
   ```bash
   sudo modprobe uinput
   sudo HOME=$HOME XDG_RUNTIME_DIR=$XDG_RUNTIME_DIR \
-       PYNPUT_BACKEND_KEYBOARD=uinput $(which scribe) --latency 0.01
+       PYNPUT_BACKEND_KEYBOARD=uinput $(which scribe)
   ```
+
+  This path only matters if you want per-character live typing through
+  pynput's uinput backend specifically. The modern way is `eitype`,
+  which doesn't need any of this.
 
 Roadmap for native libei integration (eventual Python bindings,
 expanded compositor support) is tracked in
@@ -339,13 +337,13 @@ Model ▶                         per-vendor submenus:
     Vosk (local, streaming) ▶     models via --vosk-models
 Options ▶
     Keyboard mode ▶               Clipboard only / Send to focused window /
-                                    Type each character / Terminal only
+                                    Terminal only   (mirrors --mode)
     Toggle tray app mode          (terminal frontend only)
     Keyboard backend ▶            eitype / pynput / ydotool / wtype
                                   (rows incompatible with this OS are hidden;
                                    submenu hidden entirely when ≤ 1 row left)
     Advanced ▶                    auto-restart after silence, duration,
-                                    silence threshold, output file, latency
+                                    silence threshold, output file
 Quit
 ```
 
@@ -388,7 +386,7 @@ scribe-install --name "Scribe Terminal" --frontend terminal
 The first (default) creates an app named Scribe that runs in tray mode (no terminal window), with the tray icon as the only mode of interaction.
 The second creates an app named Scribe Terminal that opens a terminal window and runs the interactive TUI.
 
-(Clipboard + auto-paste is on by default; pass `--no-auto-paste` or `--no-clipboard` to either invocation if you want the older behavior.)
+(Keyboard mode defaults to `keystroke` — pass `--mode clipboard` or `--mode terminal` to either invocation if you want a different default for the installed app.)
 
 After writing the desktop file, `scribe-install` checks whether you're
 on a Wayland session without `eitype`. If so:
