@@ -167,43 +167,77 @@ scribe -o transcription.txt
 
 ### Virtual keyboard (per-character typing, experimental)
 
-The `--keyboard` option types each character via a synthesized virtual
-keyboard instead of pasting. It is **off by default** as of mid-2026
-because the underlying `pynput` backend uses XTest, which only reaches
-apps that accept XWayland input. The clipboard + auto-paste flow described
-above is recommended for most users.
+The `--keyboard` option types each character into the focused window
+*as it is recognized*, instead of waiting for the recording to end and
+pasting in one shot. It is **off by default** — the clipboard +
+auto-paste flow above is recommended for most users — but is useful with
+the `vosk` backend's real-time streaming, where you want words to appear
+as you speak them.
 
 ```bash
 scribe --keyboard
 ```
 
-This mode is mainly useful with the `vosk` backend's real-time streaming
-transcription, where you want characters to appear as you speak rather
-than in a single paste at the end.
+#### Typer backends
 
-The `--keyboard` option relies on the optional `pynput` dependency
-(installed together with `scribe` if you used the `[all]` or `[keyboard]`
-option). Depending on your operating system, `pynput` may require
-additional configuration to work around its
-[limitations](https://pynput.readthedocs.io/en/latest/limitations.html).
+Both auto-paste and `--keyboard` synthesize keystrokes through a
+pluggable *typer* backend. Scribe probes the available backends at
+startup and picks the first one that works in the current session:
 
-#### Caveats on Wayland
+| Backend  | Mechanism                       | Works on                                  |
+|----------|---------------------------------|-------------------------------------------|
+| `eitype` | libei via XDG RemoteDesktop portal | GNOME 45+, KDE Plasma 6.1+, Hyprland — native Wayland |
+| `wtype`  | `zwp_virtual_keyboard_v1`       | wlroots compositors (Sway, Hyprland)      |
+| `pynput` | XTest (X11 protocol)            | X11 sessions; XWayland-using apps on Wayland |
+| `ydotool`| Kernel `/dev/uinput` daemon     | Anywhere, but needs root / `input` group + daemon |
 
-Both the auto-paste keystroke and `--keyboard` per-character typing go
-through `pynput` → XTest. On Wayland this works for apps that accept
-XWayland input (Chromium-based apps including VSCode, most Electron apps,
-many GTK apps) but not for apps running as native Wayland clients (Firefox
-with `MOZ_ENABLE_WAYLAND=1`, some KDE apps, native Wayland terminals).
+Force a specific backend with `--typer eitype` (etc.), or pick it from
+the tray/terminal menu under **Options → Typer**. The selected backend's
+name is logged at startup so you can tell which path your keystrokes are
+taking.
 
-Two workarounds today, both heavy:
+#### Ubuntu / Wayland caveats and recommended fix
 
-- **Xorg GNOME session.** In `/etc/gdm3/custom.conf` uncomment
-  `# WaylandEnable=false` and restart. Everything goes back to working.
+Ubuntu 24.04+ defaults to GNOME on Wayland. Without extra setup scribe
+falls back to `pynput` → XTest, which lands keystrokes in
+XWayland-hosted apps (most Chromium-based, including VSCode; Electron;
+many GTK apps) but **not** in native Wayland clients (Firefox with
+`MOZ_ENABLE_WAYLAND=1`, recent KDE apps, GNOME Console, etc.). The
+symptom is "scribe says it typed something but nothing appeared".
+
+The clean fix is to install **`eitype`**, a small CLI that speaks
+[libei](https://gitlab.freedesktop.org/libinput/libei) and reaches every
+modern Wayland app through the XDG RemoteDesktop portal. It is not yet
+packaged by Ubuntu, so you install it from source via the Rust
+toolchain:
+
+```bash
+# 1. Install rustup (one-line installer from https://rustup.rs)
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+# follow the prompts, then either restart your shell or:
+source "$HOME/.cargo/env"
+
+# 2. Install eitype
+cargo install --git https://github.com/Adam-D-Lewis/eitype
+```
+
+After installation `eitype` lives in `~/.cargo/bin/`. Scribe will pick
+it up automatically on the next launch (the auto-detected backend is
+printed at startup). The **first** time scribe types via eitype, GNOME
+will pop up a portal dialog asking for permission to "control input
+devices" — accept once and it will remember for the session.
+
+If `eitype` is unavailable, two older workarounds also work:
+
+- **Xorg session.** In `/etc/gdm3/custom.conf` uncomment
+  `# WaylandEnable=false` and restart. Everything goes back to working
+  via `pynput` → XTest.
 - **`pynput` uinput backend with root.** Requires `sudo`, the `uinput`
   kernel module, and a matching keyboard layout (e.g. French/Italian for
-  `é`). Adding `--latency 0.01` helps with character-order glitches. With
-  sudo you also need to preserve `HOME` and `XDG_RUNTIME_DIR` so the audio
-  device list and model cache still resolve:
+  `é`). If you see characters arriving out of order, add
+  `--latency 0.01` to introduce a 10 ms delay between keystrokes. With
+  sudo you also need to preserve `HOME` and `XDG_RUNTIME_DIR` so the
+  audio device list and model cache still resolve:
 
   ```bash
   sudo modprobe uinput
@@ -211,9 +245,8 @@ Two workarounds today, both heavy:
        PYNPUT_BACKEND_KEYBOARD=uinput $(which scribe) --latency 0.01
   ```
 
-The proper fix is **libei** (the modern Wayland-native input emulation
-protocol, supported by GNOME 45+, KDE Plasma 6.1+, and Hyprland via the
-XDG RemoteDesktop portal). Adoption is tracked in
+Roadmap for native libei integration (eventual Python bindings,
+expanded compositor support) is tracked in
 [docs/roadmap-libei.md](docs/roadmap-libei.md).
 
 ## System tray icon (experimental) <img src="https://github.com/perrette/bard/raw/main/bard_data/share/icon.png" width=48px>
