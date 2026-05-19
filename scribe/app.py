@@ -257,7 +257,21 @@ def start_recording(micro, session, clipboard=True, keyboard=False, auto_paste=F
 
     if auto_paste and clipboard and not keyboard and fulltext.strip():
         from scribe.typers import pick_typer
-        time.sleep(0.1)  # let clipboard settle (xclip/wl-copy are async)
+        final_text = fulltext.strip()
+        # Multi-chunk transcriptions (e.g. local whisper with silence-splitting)
+        # call pyperclip.copy() many times during recording. wl-copy is async on
+        # Wayland — the most recent write may not yet own the clipboard when we
+        # synthesize Ctrl+V, so the paste captures a partial earlier state.
+        # Force a final write, then verify ownership before triggering paste.
+        pyperclip.copy(final_text)
+        for _ in range(5):
+            time.sleep(0.1)
+            try:
+                if pyperclip.paste() == final_text:
+                    break
+            except Exception:
+                pass
+            pyperclip.copy(final_text)
         pick_typer(typer if typer != "auto" else None).paste()
 
     if callback:
