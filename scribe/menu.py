@@ -127,9 +127,6 @@ class AppState(AbstractFrontendApp):
     def _is_whisper(self, item=None) -> bool:
         return self.transcriber is not None and getattr(self.transcriber, "backend", None) == "whisper"
 
-    def _has_keyboard(self, item=None) -> bool:
-        return bool(getattr(self.o, "keyboard", False))
-
     # ── Top-level callbacks ────────────────────────────────────────
     def cb_record(self, view, item):
         if self.icon is not None:
@@ -219,13 +216,9 @@ class AppState(AbstractFrontendApp):
             try:
                 start_recording(
                     self.micro, session,
-                    clipboard=getattr(o, "clipboard", False),
-                    keyboard=getattr(o, "keyboard", False),
-                    auto_paste=getattr(o, "auto_paste", False),
-                    latency=getattr(o, "latency", 0),
-                    ascii=getattr(o, "ascii", False),
-                    output_file=getattr(o, "output_file", None),
+                    mode=getattr(o, "mode", "keystroke"),
                     typer=getattr(o, "typer", "auto"),
+                    output_file=getattr(o, "output_file", None),
                     start_message="Listening... Use the tray icon menu to stop.",
                 )
             except Exception as exc:
@@ -316,39 +309,18 @@ class AppState(AbstractFrontendApp):
 
     # ── Option callbacks ────────────────────────────────────────────
     def cb_set_output_mode(self, mode: str) -> Callable:
-        """Factory: callback that sets the single 'output mode' radio.
+        """Factory: callback that sets the single 'Keyboard mode' radio.
 
-        ``mode`` ∈ {'keystroke', 'clipboard', 'terminal'}:
-
-          - 'keystroke' → text lands in the focused window. Mechanism is
-            picked for the current backend: per-character typing for
-            streaming backends (vosk; later, openai-realtime), single
-            Ctrl+V at end for batch backends. The two mechanisms feel
-            identical for batch backends, so keeping them as separate
-            user choices was noise.
-          - 'clipboard' → text on clipboard, user pastes manually.
-          - 'terminal' → text printed to terminal only.
-
-        Note: if the user picks 'keystroke' and then switches backend
-        via the Model menu, the keyboard / auto_paste flags can go
-        stale until they re-click the radio. Acceptable wart for now;
-        proper fix is to auto-re-derive on backend change.
+        ``mode`` ∈ {'keystroke', 'clipboard', 'terminal'} — mirrors the
+        ``--mode`` CLI flag. ``start_recording`` derives the actual
+        mechanism (paste-per-chunk on streaming backends vs single Ctrl+V
+        on batch backends) from this and the active backend at recording
+        time, so switching backends via the Model menu re-evaluates
+        correctly without us having to refresh stored state.
         """
         def _cb(view, item):
-            if mode == "keystroke":
-                backend = getattr(self.transcriber, "backend", None) if self.transcriber else None
-                is_streaming = getattr(self.transcriber, "supports_streaming", False) or backend == "vosk"
-                clipboard, auto_paste, keyboard = True, not is_streaming, is_streaming
-            elif mode == "clipboard":
-                clipboard, auto_paste, keyboard = True, False, False
-            else:  # "terminal"
-                clipboard, auto_paste, keyboard = False, False, False
-            self.o.clipboard = clipboard
-            self.o.auto_paste = auto_paste
-            self.o.keyboard = keyboard
-            self.params["clipboard"] = clipboard
-            self.params["auto_paste"] = auto_paste
-            self.params["keyboard"] = keyboard
+            self.o.mode = mode
+            self.params["mode"] = mode
             self._refresh_tray_menu()
             return True
         return _cb
@@ -411,12 +383,6 @@ class AppState(AbstractFrontendApp):
         else:
             print(f"Invalid characters: {' '.join(map(repr, invalid_regex.findall(ans)))}")
             print(f"Invalid file name: {repr(ans)}")
-        return True
-
-    def cb_set_latency(self, view, item):
-        val = self._coerce_float(item.value(item), "latency")
-        if val is not None:
-            self.o.latency = val
         return True
 
     def cb_set_typer(self, typer_name: str) -> Callable:
@@ -516,14 +482,8 @@ def _noop_callback(view, item):
 
 
 def _output_mode(o) -> str:
-    """Derive the current output mode from the (clipboard, auto_paste,
-    keyboard) triple. Anything that lands a keystroke in the focused
-    window — per-char typing OR auto-paste — collapses to 'keystroke'."""
-    if getattr(o, "keyboard", False) or getattr(o, "auto_paste", False):
-        return "keystroke"
-    if getattr(o, "clipboard", False):
-        return "clipboard"
-    return "terminal"
+    """Return the active Keyboard-mode radio value, stored as ``o.mode``."""
+    return getattr(o, "mode", "keystroke")
 
 
 def _output_mode_radio(app_state, key: str, mode: str, label: str) -> Item:
@@ -632,9 +592,6 @@ def _advanced_options_menu(app_state) -> Menu:
         SetValueItem("f", app_state.cb_set_output_file,
                      value=lambda item: getattr(app_state.o, "output_file", None) or "",
                      type=str, help="Output file"),
-        SetValueItem("latency", app_state.cb_set_latency,
-                     value=lambda item: getattr(app_state.o, "latency", None),
-                     type=float, help="Keyboard latency (s)", visible=app_state._has_keyboard),
     ]
     return Menu(items, name="Advanced")
 

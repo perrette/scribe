@@ -178,32 +178,23 @@ def get_parser():
                         help="The device index of the microphone to use.")
 
     group = parser.add_argument_group("transcription output")
-    group.add_argument("-c", "--clipboard", dest="clipboard",
-                       action=argparse.BooleanOptionalAction, default=True,
-                       help="Copy the transcription to the system clipboard (default: on). Use --no-clipboard to disable.")
-    group.add_argument("-p", "--auto-paste", dest="auto_paste",
-                       action=argparse.BooleanOptionalAction, default=True,
-                       help="After transcription, synthesize Ctrl+V (Cmd+V on macOS) to paste into the focused app. "
-                            "Default: on. Requires --clipboard. Ignored if --keyboard is set.")
-    group.add_argument("-k", "--keyboard", dest="keyboard",
-                       action=argparse.BooleanOptionalAction, default=False,
-                       help="Live paste-per-chunk: as each transcribed chunk arrives, copy it "
-                            "to the clipboard and synthesize Ctrl+V so it appears in the focused "
-                            "window. Useful with streaming backends (vosk) for 'appears as you "
-                            "speak' UX. Off by default (batch backends use the end-of-recording "
-                            "auto-paste instead, which is identical in outcome).")
+    group.add_argument("-m", "--mode",
+                       choices=("keystroke", "clipboard", "terminal"),
+                       default="keystroke",
+                       help="Where the transcription goes — mirrors the tray menu's "
+                            "Keyboard mode radio. 'keystroke' (default): land in the "
+                            "focused window — paste-per-chunk for streaming backends "
+                            "(vosk), single Ctrl+V at end for batch backends "
+                            "(whisper, openai, groq). 'clipboard': copy to clipboard; "
+                            "you press Ctrl+V yourself. 'terminal': print to terminal only.")
     group.add_argument("--typer", default="auto", type=str,
-                       help="Keystroke-injection backend. auto (default) probes the available backends. "
-                            "Explicit values: eitype, pynput, wtype, ydotool.")
-    group.add_argument("-o", "--output-file")
-
-    group = parser.add_argument_group("keyboard options")
-    group.add_argument("--latency", default=0, type=float,
-                       help="Per-character delay (s) when typing via --keyboard. "
-                            "Default 0 (type each utterance in one call). Only set this "
-                            "if you see character-order glitches with the pynput uinput "
-                            "backend — other backends handle their own timing.")
-    group.add_argument("--ascii", action="store_true", help="Use unidecode for keyboard typing in ascii")
+                       help="Keystroke-injection backend. 'auto' (default) probes the "
+                            "available backends. Explicit values: eitype, pynput, wtype, "
+                            "ydotool — choose from those listed under Options → Keyboard "
+                            "backend in the tray menu.")
+    group.add_argument("-o", "--output-file",
+                       help="Append the transcription to this file in addition to the "
+                            "chosen --mode destination.")
 
     group = parser.add_argument_group("whisper options")
     group.add_argument("--duration", default=120, type=float, help="Max duration of the whisper recording (default %(default)s s)")
@@ -226,15 +217,43 @@ def get_parser():
 
 
 # Commencer l'enregistrement
-def start_recording(micro, session, clipboard=True, keyboard=False, auto_paste=False, latency=0, ascii=False, output_file=None, callback=None, typer="auto", **greetings):
+def _backend_name_of(session):
+    """Robust accessor: works whether ``session`` is a RecordingSession (whose
+    ``.backend`` is a transcriber) or a transcriber directly (whose ``.backend``
+    is already a string name)."""
+    obj = getattr(session, "backend", session)
+    if isinstance(obj, str):
+        return obj
+    return getattr(obj, "backend", None)
 
-    if keyboard:
+
+def start_recording(micro, session, mode="keystroke", typer="auto",
+                    output_file=None, callback=None, **greetings):
+    """Drive a recording, dispatching the transcript to the destination implied
+    by ``mode`` (the same three-way choice the tray exposes as Keyboard mode):
+
+      - 'keystroke': land in the focused window. For streaming backends (vosk)
+        each chunk is pasted live as it arrives; for batch backends the full
+        text is pasted once at end-of-recording.
+      - 'clipboard': copy to clipboard, user pastes manually.
+      - 'terminal':  no clipboard, no keystroke — text only printed.
+    """
+    if mode not in ("keystroke", "clipboard", "terminal"):
+        raise ValueError(f"Unknown mode {mode!r} (expected keystroke|clipboard|terminal)")
+
+    backend_name = _backend_name_of(session)
+    is_streaming = backend_name == "vosk"
+    do_clipboard = mode != "terminal"
+    do_live_paste = (mode == "keystroke") and is_streaming
+    do_paste_at_end = (mode == "keystroke") and not is_streaming
+
+    if do_live_paste:
         from scribe.keyboard import paste_via_clipboard
-        session.log("Live paste-per-chunk: each transcribed chunk lands in the focused window as it arrives.")
+        session.log("Live paste-per-chunk: each chunk lands in the focused window as it arrives.")
 
-    if clipboard:
+    if do_clipboard:
         import pyperclip
-        session.log("The full transcription will be copied to clipboard as it becomes available.")
+        session.log("The transcription will be copied to clipboard as it becomes available.")
 
     fulltext = ""
 
@@ -250,22 +269,20 @@ def start_recording(micro, session, clipboard=True, keyboard=False, auto_paste=F
                 with open(output_file, "a") as f:
                     f.write(result['text'] + "\n")
 
-            if keyboard:
+            if do_live_paste:
                 # Live paste-per-chunk: copy this chunk to clipboard and fire
                 # Ctrl+V. Universal Unicode support (clipboard handles any
                 # codepoint) and orthogonal to typer choice (Ctrl+V is the
-                # same keystroke regardless of layout). Replaces per-character
-                # typing, which was structurally broken on subprocess typers
-                # for non-ASCII text.
+                # same keystroke regardless of layout).
                 paste_via_clipboard(chunk_text, typer=typer,
                                      verify_iters=2, sleep_s=0.05)
-            elif clipboard:
+            elif do_clipboard:
                 pyperclip.copy(fulltext.strip())
 
         else:
             print_partial(result.get('partial', ''))
 
-    if auto_paste and clipboard and not keyboard and fulltext.strip():
+    if do_paste_at_end and fulltext.strip():
         from scribe.keyboard import paste_via_clipboard
         # Multi-chunk transcriptions (e.g. local whisper with silence-splitting)
         # called pyperclip.copy() many times during recording. wl-copy is async
@@ -344,21 +361,27 @@ def create_app(micro, app_state):
     return icon
 
 
+_MODE_DESCRIPTION = {
+    "keystroke": "Send to focused window (clipboard + Ctrl+V or live paste)",
+    "clipboard": "Clipboard only (press Ctrl+V yourself)",
+    "terminal":  "Terminal only",
+}
+
+
 def _print_main_status(state, o):
     t = state.transcriber
-    print(f"Model [{colored(t.model_name, 'light_blue', attrs=['bold'])}] from [{colored(t.backend, 'light_blue', attrs=['bold'])}] selected.")
-    show_output = ["clipboard", "keyboard", "auto_paste", "output_file"]
-    show_options = ["ascii", "restart_after_silence"]
-    activated_output = [colored(opt if type(getattr(o, opt)) is bool else f'{opt}={getattr(o, opt)}', 'light_blue') for opt in show_output if getattr(o, opt)]
-    activated_options = [colored(opt if type(getattr(o, opt)) is bool else f'{opt}={getattr(o, opt)}', 'light_blue') for opt in show_options if getattr(o, opt)]
-    if activated_output:
-        print(f"Output: {' | '.join(activated_output)}")
-    else:
-        print(colored("No output selected -> terminal only", "light_red"))
+    print(f"Model [{colored(t.model_name, 'light_blue', attrs=['bold'])}] "
+          f"from [{colored(t.backend, 'light_blue', attrs=['bold'])}] selected.")
+    mode = getattr(o, "mode", "keystroke")
+    mode_str = colored(mode, "light_blue", attrs=["bold"])
+    print(f"Mode: {mode_str} — {_MODE_DESCRIPTION.get(mode, '?')}")
+    if getattr(o, "output_file", None):
+        print(f"Also writing to file: {colored(o.output_file, 'light_blue')}")
     if o.frontend == "tray":
         print(colored("App mode (tray) enabled", "light_green"))
-    if activated_options:
-        print(f"Options: {' | '.join(activated_options)}")
+    extras = [opt for opt in ("restart_after_silence",) if getattr(o, opt, False)]
+    if extras:
+        print(f"Options: {' | '.join(colored(e, 'light_blue') for e in extras)}")
 
 
 def main(args=None):
@@ -416,9 +439,8 @@ def main(args=None):
         else:
             greetings = dict(start_message="Listening... Press Ctrl+C to stop.")
             start_recording(micro, state.session if state.session is not None else state.transcriber,
-                            clipboard=o.clipboard, output_file=o.output_file,
-                            keyboard=o.keyboard, auto_paste=o.auto_paste, latency=o.latency, ascii=o.ascii,
-                            typer=o.typer, **greetings)
+                            mode=o.mode, typer=o.typer, output_file=o.output_file,
+                            **greetings)
 
         o.prompt = True
         o.backend = None
