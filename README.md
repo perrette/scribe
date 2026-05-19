@@ -174,6 +174,16 @@ The clipboard is left holding the transcription after scribe finishes — if
 you want to preserve your previous clipboard contents, save them somewhere
 else first.
 
+> **Pasting into a terminal.** Terminals (GNOME Terminal, Kitty, Alacritty,
+> VS Code's integrated terminal, …) don't bind plain `Ctrl+V` to paste —
+> they interpret it as the `^V` control character and bind paste to
+> `Ctrl+Shift+V` instead. Scribe always synthesises `Ctrl+V`, so the
+> simplest workaround when you're dictating *into a terminal* is to **hold
+> Shift physically** at the moment scribe fires the paste: the terminal
+> then sees `Ctrl+Shift+V` and pastes normally. No code change needed —
+> just remember Shift for terminal targets, nothing for GUI apps where
+> plain `Ctrl+V` already works (including VS Code's editor pane).
+
 > **Historical note.** Up to mid-2026 these three modes were three
 > independent boolean flags (`--clipboard / --auto-paste / --keyboard`)
 > plus a tuning pair (`--latency / --ascii`) for a per-character typing
