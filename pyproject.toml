@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "scribe-cli"
 dynamic = ["version"]
-description = "scribe is a local speech recognition tool that provides real-time transcription using vosk and whisper AI, with the goal of serving as a virtual keyboard on a computer"
+description = "Speech-to-text CLI and system-tray app for dictating into any focused window. Local (vosk, faster-whisper) or cloud (groq, openai) backends, batch or streaming."
 authors = [
     { name="Mahé Perrette", email="mahe.perrette@gmail.com" }
 ]
@@ -36,13 +36,24 @@ keywords = [
     "speech-to-text",
     "speech recognition",
     "transcription",
+    "dictation",
+    "voice-typing",
+    "voice-to-text",
+    "realtime",
+    "streaming",
     "language",
     "AI",
     "local",
     "API",
+    "cli",
+    "tray",
     "vosk",
     "whisper",
     "openai",
+    "groq",
+    "gpt-4o",
+    "linux",
+    "wayland",
     "keyboard",
     "clipboard",
 ]

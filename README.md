@@ -36,6 +36,14 @@ tray icon. Press Record, speak, press Stop.
 
 See documentation below for setting up keyboard input on Ubuntu Wayland.
 
+### Getting an API key
+
+Groq is a good cloud backend to start with — very fast, quite accurate, and the
+**free tier** is generous enough for everyday dictation. Sign up at
+[console.groq.com](https://console.groq.com/), create an API key
+under **Settings → API Keys**, and export it as `GROQ_API_KEY`.
+
+I personally use [OpenAI](https://openai.com/api/) with `gpt-4o-mini-transcribe` as it is also fast and perhaps more accurate for my accent-tainted English.
 
 ## Backends at a glance
 
