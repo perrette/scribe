@@ -394,18 +394,38 @@ def _backend_models_menu(app_state, backend_name: str) -> Menu:
 
 def _choose_model_menu(app_state) -> Menu:
     items = []
+    unavailable: list[tuple[str, str]] = []
     for backend_name in BACKENDS:
         try:
-            ok, _ = probe_backend(backend_name)
-        except Exception:
-            ok = False
-        if not ok:
-            continue
+            ok, msg = probe_backend(backend_name)
+        except Exception as exc:
+            ok, msg = False, f"probe raised: {exc}"
         vendor = _VENDOR_PREFIX.get(backend_name, backend_name.capitalize())
         is_local = bool(getattr(BACKENDS[backend_name], "is_local", False))
+        if not ok:
+            unavailable.append((vendor, msg or "unavailable"))
+            continue
         label = f"{vendor} (local)" if is_local else vendor
         items.append(Item(label, _backend_models_menu(app_state, backend_name)))
+    if unavailable:
+        items.append(Item(
+            f"Unavailable: {', '.join(v for v, _ in unavailable)}",
+            _unavailable_dialog_callback(unavailable),
+            help=f"Unavailable backends ({len(unavailable)}) — click for install hints",
+        ))
     return Menu(items, name="Choose Model")
+
+
+def _unavailable_dialog_callback(unavailable: list[tuple[str, str]]):
+    def _callback(view, item):
+        try:
+            from desktop_ai_core.frontends.dialog import show_error_dialog
+        except ImportError:
+            return None
+        lines = [f"{vendor}: {msg}" for vendor, msg in unavailable]
+        show_error_dialog("Unavailable backends", "\n".join(lines))
+        return None
+    return _callback
 
 
 def _toggle_options_menu(app_state) -> Menu:
