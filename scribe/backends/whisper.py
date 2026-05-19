@@ -8,7 +8,7 @@ from scribe.models import AbstractTranscriber
 class WhisperTranscriber(AbstractTranscriber):
     name = "whisper"
     backend = "whisper"
-    default_model: str | None = "large-v3-turbo"
+    default_model: str | None = "small"
     is_local: ClassVar[bool] = True
 
     def __init__(self, model_name, language=None, model=None, model_kwargs={}, **kwargs):
@@ -21,7 +21,12 @@ class WhisperTranscriber(AbstractTranscriber):
     def transcribe_audio(self, audio_bytes):
         self.log("\nTranscribing")
         audio_array = np.frombuffer(audio_bytes, dtype=np.int16).flatten().astype(np.float32) / 32768.0
-        segments, _info = self.model.transcribe(audio_array, language=self.language)
+        segments, _info = self.model.transcribe(
+            audio_array,
+            language=self.language,
+            vad_filter=True,
+            beam_size=1,
+        )
         text = "".join(segment.text for segment in segments)
         return {"text": text}
 
@@ -34,8 +39,7 @@ class WhisperTranscriber(AbstractTranscriber):
 
 
 def _probe_whisper() -> tuple[bool, str | None]:
-    try:
-        import faster_whisper  # noqa: F401
-        return True, None
-    except ImportError as exc:
-        return False, f"faster-whisper not installed: {exc}"
+    import importlib.util
+    if importlib.util.find_spec("faster_whisper") is None:
+        return False, "faster-whisper not installed (pip install faster-whisper)"
+    return True, None

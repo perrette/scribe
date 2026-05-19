@@ -51,8 +51,7 @@ class VoskTranscriber(AbstractTranscriber):
 
 
 def _probe_vosk() -> tuple[bool, str | None]:
-    try:
-        import vosk  # noqa: F401
-        return True, None
-    except ImportError as exc:
-        return False, f"vosk not installed: {exc}"
+    import importlib.util
+    if importlib.util.find_spec("vosk") is None:
+        return False, "vosk not installed (pip install vosk)"
+    return True, None

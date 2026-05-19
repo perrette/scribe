@@ -34,7 +34,7 @@ def _vosk_language_for_model(model_id: str) -> str | None:
     return _vosk_model_to_lang.get(model_id)
 
 
-def format_model_label(backend_name: str, model_id: str) -> str:
+def format_model_label(backend_name: str, model_id: str, include_vendor: bool = True) -> str:
     vendor = _VENDOR_PREFIX.get(backend_name, backend_name.capitalize())
     backend_cls = BACKENDS.get(backend_name)
     is_local = backend_cls.is_local if backend_cls is not None else False
@@ -42,21 +42,23 @@ def format_model_label(backend_name: str, model_id: str) -> str:
     if backend_name == "vosk":
         lang = _vosk_language_for_model(model_id)
         display = lang if lang is not None else model_id
-        return f"{vendor} {display} (local, live partials)"
+        if include_vendor:
+            return f"{vendor} {display} (local, streaming)"
+        return display
 
     qualifier = ""
-    if backend_name == "openai" and model_id == "whisper-1":
-        qualifier = " (deprecated)"
-    elif is_local:
+    if is_local and include_vendor:
         qualifier = " (local)"
 
-    return f"{vendor} {model_id}{qualifier}"
+    if include_vendor:
+        return f"{vendor} {model_id}{qualifier}"
+    return f"{model_id}{qualifier}"
 
 
 _DEFAULT_MODELS: dict[str, list[str]] = {
-    "openai": ["gpt-4o-transcribe", "gpt-4o-mini-transcribe", "whisper-1"],
+    "openai": ["gpt-4o-transcribe", "gpt-4o-mini-transcribe"],
     "groq": ["whisper-large-v3-turbo"],
-    "whisper": ["small", "medium", "large", "large-v3", "large-v3-turbo"],
+    "whisper": ["tiny", "base", "small", "medium", "large-v3", "large-v3-turbo"],
     "vosk": [],
 }
 
@@ -404,19 +406,41 @@ def _backend_models_menu(app_state, backend_name: str) -> Menu:
             return (t is not None
                     and getattr(t, "backend", None) == _b
                     and getattr(t, "model_name", None) == _m)
-        items.append(Item(
-            format_model_label(backend_name, model),
+        item = Item(
+            format_model_label(backend_name, model, include_vendor=False),
             app_state.cb_set_model(backend_name, model),
             checked=_is_current,
-        ))
+        )
+        item.radio = True
+        items.append(item)
     vendor = _VENDOR_PREFIX.get(backend_name, backend_name.capitalize())
     return Menu(items, name=vendor)
+
+
+def _is_terminal_frontend(app_state):
+    def _predicate(_item=None):
+        return app_state.icon is None
+    return _predicate
+
+
+def _vendor_label_fn(app_state, backend_name: str, base_label: str):
+    """Return a label callable that prefixes ✓ when this vendor is active."""
+    def _label():
+        t = app_state.transcriber
+        active = t is not None and getattr(t, "backend", None) == backend_name
+        return f"✓ {base_label}" if active else f"  {base_label}"
+    return _label
+
+
+_MENU_BACKEND_ORDER = ("whisper", "vosk", "openai", "groq")
 
 
 def _choose_model_menu(app_state) -> Menu:
     items = []
     unavailable: list[tuple[str, str]] = []
-    for backend_name in BACKENDS:
+    ordered = [b for b in _MENU_BACKEND_ORDER if b in BACKENDS] + \
+              [b for b in BACKENDS if b not in _MENU_BACKEND_ORDER]
+    for backend_name in ordered:
         try:
             ok, msg = probe_backend(backend_name)
         except Exception as exc:
@@ -426,73 +450,77 @@ def _choose_model_menu(app_state) -> Menu:
         if not ok:
             unavailable.append((vendor, msg or "unavailable"))
             continue
-        label = f"{vendor} (local)" if is_local else vendor
-        items.append(Item(label, _backend_models_menu(app_state, backend_name)))
-    if unavailable:
-        items.append(Item(
-            f"Unavailable: {', '.join(v for v, _ in unavailable)}",
-            _unavailable_dialog_callback(unavailable),
-            help=f"Unavailable backends ({len(unavailable)}) — click for install hints",
-        ))
-    return Menu(items, name="Choose Model")
+        if backend_name == "vosk":
+            base_label = f"{vendor} (local, streaming)"
+        elif is_local:
+            base_label = f"{vendor} (local)"
+        else:
+            base_label = vendor
+        sub_item = Item(base_label, _backend_models_menu(app_state, backend_name))
+        sub_item.label_fn = _vendor_label_fn(app_state, backend_name, base_label)
+        items.append(sub_item)
+    for vendor, msg in unavailable:
+        item = Item(f"{vendor} — {msg}", _noop_callback)
+        item.enabled = False
+        items.append(item)
+    return Menu(items, name="Model")
 
 
-def _unavailable_dialog_callback(unavailable: list[tuple[str, str]]):
-    def _callback(view, item):
-        try:
-            from desktop_ai_core.frontends.dialog import show_error_dialog
-        except ImportError:
-            return None
-        lines = [f"{vendor}: {msg}" for vendor, msg in unavailable]
-        show_error_dialog("Unavailable backends", "\n".join(lines))
-        return None
-    return _callback
+def _noop_callback(view, item):
+    return None
 
 
 def _toggle_options_menu(app_state) -> Menu:
+    is_terminal = _is_terminal_frontend(app_state)
     items = [
-        Item("c", app_state.cb_toggle_clipboard, help="toggle clipboard",
+        Item("c", app_state.cb_toggle_clipboard, help="Copy to clipboard",
              checked=lambda item: bool(getattr(app_state.o, "clipboard", False))),
-        Item("k", app_state.cb_toggle_keyboard, help="toggle keyboard",
+        Item("k", app_state.cb_toggle_keyboard, help="Auto-type via keyboard",
              checked=lambda item: bool(getattr(app_state.o, "keyboard", False))),
-        Item("x", app_state.cb_toggle_frontend, help="toggle tray app mode",
-             checked=lambda item: getattr(app_state.o, "frontend", None) == "tray"),
-        Item("a", app_state.cb_toggle_auto_restart, help="auto-restart after silence",
+        Item("x", app_state.cb_toggle_frontend, help="Toggle tray app mode",
+             checked=lambda item: getattr(app_state.o, "frontend", None) == "tray",
+             visible=is_terminal),
+        Item("a", app_state.cb_toggle_auto_restart, help="Auto-restart after silence",
              checked=lambda item: bool(getattr(app_state.transcriber, "restart_after_silence", False)),
              visible=app_state._is_whisper),
         SetValueItem("t", app_state.cb_set_duration,
                      value=lambda item: getattr(app_state.transcriber, "timeout", None),
-                     type=float, help="duration (s)", visible=app_state._is_whisper),
+                     type=float, help="Duration (s)", visible=app_state._is_whisper),
         SetValueItem("b", app_state.cb_set_silence,
                      value=lambda item: getattr(app_state.transcriber, "silence_duration", None),
-                     type=float, help="silence break (s)", visible=app_state._is_whisper),
+                     type=float, help="Silence break (s)", visible=app_state._is_whisper),
         SetValueItem("db", app_state.cb_set_silence_db,
                      value=lambda item: getattr(app_state.transcriber, "silence_thresh", None),
-                     type=float, help="silence threshold (db)", visible=app_state._is_whisper),
+                     type=float, help="Silence threshold (db)", visible=app_state._is_whisper),
         SetValueItem("f", app_state.cb_set_output_file,
                      value=lambda item: getattr(app_state.o, "output_file", None) or "",
-                     type=str, help="output file"),
+                     type=str, help="Output file"),
         SetValueItem("latency", app_state.cb_set_latency,
                      value=lambda item: getattr(app_state.o, "latency", None),
-                     type=float, help="keyboard latency (s)", visible=app_state._has_keyboard),
+                     type=float, help="Keyboard latency (s)", visible=app_state._has_keyboard),
     ]
-    return Menu(items, name="Toggle Options")
+    return Menu(items, name="Options")
 
 
 def build_menu(app_state) -> Menu:
     """Construct the unified scribe menu spec shared between frontends."""
+    model_item = Item("Model", _choose_model_menu(app_state))
+    def _model_label():
+        t = app_state.transcriber
+        if t is None:
+            return "Model"
+        if t.backend == "vosk":
+            return t.model_name
+        vendor = _VENDOR_PREFIX.get(t.backend, t.backend.capitalize())
+        return f"{vendor} {t.model_name}"
+    model_item.label_fn = _model_label
     items = [
-        Item("Record", app_state.cb_record, visible=app_state.is_not_recording,
-             help="[Enter] start recording"),
-        Item("Stop", app_state.cb_stop, visible=app_state.is_recording,
-             help="stop the current recording"),
-        Item("Cancel", app_state.cb_cancel, visible=app_state.is_recording,
-             help="cancel the current recording"),
-        Item("Choose Model", _choose_model_menu(app_state),
-             help="select backend and model"),
-        Item("Toggle Options", _toggle_options_menu(app_state),
-             help="toggle output / recording options"),
-        Item("Quit", app_state.cb_quit, help="quit scribe"),
+        Item("Record", app_state.cb_record, visible=app_state.is_not_recording),
+        Item("Stop", app_state.cb_stop, visible=app_state.is_recording),
+        Item("Cancel", app_state.cb_cancel, visible=app_state.is_recording),
+        model_item,
+        Item("Options", _toggle_options_menu(app_state)),
+        Item("Quit", app_state.cb_quit),
     ]
     return Menu(items)
 
@@ -520,8 +548,14 @@ def _item_to_pystray(item, app_state):
 
     # Tray-friendly label: `item.name` is the terminal keystroke (e.g. "c",
     # "k") while `item.help` is the human-readable description ("toggle
-    # clipboard"). Prefer the latter for pystray rendering.
-    label = item.help or item.name
+    # clipboard"). Prefer the latter for pystray rendering. An optional
+    # `item.label_fn` callable wins over both — used for live labels like
+    # "Model: <current>" that should refresh on update_menu().
+    label_fn = getattr(item, "label_fn", None)
+    if callable(label_fn):
+        label = lambda _mi, _f=label_fn: _f()
+    else:
+        label = item.help or item.name
 
     if isinstance(item._callback, Menu):
         submenu = _menu_to_pystray(item._callback, app_state)
@@ -540,15 +574,22 @@ def _item_to_pystray(item, app_state):
         label,
         _make_action(item),
         checked=checked,
-        radio=item.checkable,
+        radio=getattr(item, "radio", False),
         default=(item.name == "Record"),
         visible=visible,
+        enabled=getattr(item, "enabled", True),
     )
 
 
 def _make_visible(item):
     def _visible(_mi):
-        return bool(item.visible(item))
+        if not bool(item.visible(item)):
+            return False
+        if isinstance(item, SetValueItem):
+            val = item.value(item) if callable(item.value) else item.value
+            if val in (None, ""):
+                return False
+        return True
     return _visible
 
 
@@ -566,9 +607,10 @@ def _make_action(item):
 
 
 def _make_setvalue_text(item):
+    label = item.help or item.name
     def _text(_mi):
         val = item.value(item) if callable(item.value) else item.value
-        return f"{item.name}: {val}"
+        return f"{label}: {val}"
     return _text
 
 

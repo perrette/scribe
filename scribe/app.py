@@ -59,9 +59,9 @@ class DummyTranscriber:
     def __getattr__(self, item):
         return None
 
-whisper_models = ["small", "medium", "large", "large-v3", "large-v3-turbo"]
+whisper_models = ["tiny", "base", "small", "medium", "large-v3", "large-v3-turbo"]
 whisper_english_models = ["tiny.en", "base.en", "small.en", "medium.en"]
-whisperapi_models = ["gpt-4o-mini-transcribe", "whisper-1"]
+whisperapi_models = ["gpt-4o-transcribe", "gpt-4o-mini-transcribe"]
 vosk_models = [language_config["vosk"][lang]["model"] for lang in language_config["vosk"]]
 
 
