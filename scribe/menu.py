@@ -408,16 +408,25 @@ class AppState(AbstractFrontendApp):
         return format_model_label(self.transcriber.backend, self.transcriber.model_name)
 
 
+_RECOMMENDED_MODELS = {
+    "whisper": "small",
+}
+
+
 def _backend_models_menu(app_state, backend_name: str) -> Menu:
     items = []
+    recommended = _RECOMMENDED_MODELS.get(backend_name)
     for model in _models_for_backend(backend_name, app_state):
         def _is_current(_item, _b=backend_name, _m=model):
             t = app_state.transcriber
             return (t is not None
                     and getattr(t, "backend", None) == _b
                     and getattr(t, "model_name", None) == _m)
+        label = format_model_label(backend_name, model, include_vendor=False)
+        if model == recommended:
+            label = f"{label} (recommended)"
         item = Item(
-            format_model_label(backend_name, model, include_vendor=False),
+            label,
             app_state.cb_set_model(backend_name, model),
             checked=_is_current,
         )
