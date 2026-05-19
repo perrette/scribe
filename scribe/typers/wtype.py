@@ -12,11 +12,23 @@ class WtypeTyper:
     name = "wtype"
 
     def available(self) -> bool:
-        return (
-            shutil.which("wtype") is not None
-            and bool(os.environ.get("WAYLAND_DISPLAY"))
-            and bool(os.environ.get("XDG_RUNTIME_DIR"))
-        )
+        if shutil.which("wtype") is None:
+            return False
+        if not os.environ.get("WAYLAND_DISPLAY"):
+            return False
+        if not os.environ.get("XDG_RUNTIME_DIR"):
+            return False
+        # wtype speaks zwp_virtual_keyboard_v1, which only wlroots-based
+        # compositors implement. GNOME/Mutter, KDE/KWin and Unity don't —
+        # invoking wtype there fails at runtime with "Compositor does not
+        # support the virtual keyboard protocol".
+        desktop = (
+            os.environ.get("XDG_CURRENT_DESKTOP", "")
+            + ":" + os.environ.get("XDG_SESSION_DESKTOP", "")
+        ).lower()
+        if any(x in desktop for x in ("gnome", "kde", "plasma", "unity")):
+            return False
+        return True
 
     def type(self, text: str) -> None:
         try:
