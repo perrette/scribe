@@ -5,17 +5,22 @@
 
 `scribe` is a speech recognition tool that provides real-time transcription using cutting-edge AI models, with the goal of serving as a virtual keyboard on a computer.
 
-It supports four backends:
+## Backends
 
-| Backend | `--backend` value | Type | Notes |
-|---------|------------------|------|-------|
-| Groq | `groq` | remote | `whisper-large-v3-turbo` via OpenAI-compatible API (requires `GROQ_API_KEY`) |
-| OpenAI | `openai` | remote | defaults to `gpt-4o-mini-transcribe` (requires `OPENAI_API_KEY`) |
-| Whisper | `whisper` | local | `faster-whisper`, defaults to `large-v3-turbo` |
-| Vosk | `vosk` | local | streaming, real-time, no punctuation |
+It supports four backends; Groq is the default cloud backend when `GROQ_API_KEY` is set:
 
-When started without `--backend`, scribe picks the first one that's
-available, preferring cloud backends (`groq` → `openai` → `whisper` → `vosk`).
+| Backend | Display label | `--backend` | Type | Default model | Requires |
+|---------|--------------|-------------|------|---------------|---------|
+| Groq | `Groq` | `groq` | cloud | `whisper-large-v3-turbo` | `GROQ_API_KEY` |
+| OpenAI | `OpenAI` | `openai` | cloud | `gpt-4o-mini-transcribe` | `OPENAI_API_KEY` |
+| Whisper | `Whisper (local)` | `whisper` | local | `large-v3-turbo` | `pip install scribe-cli[whisper]` |
+| Vosk | `Vosk (local, live partials)` | `vosk` | local | language model | `pip install scribe-cli[vosk]` |
+
+When started without `--backend`, scribe picks the first available backend in order: `groq` → `openai` → `whisper` → `vosk`.
+
+> **Naming note.** `openai` is the cloud OpenAI backend (model: `gpt-4o-mini-transcribe`); `whisper` is the *local* [faster-whisper](https://github.com/SYSTRAN/faster-whisper) backend — a different model pipeline from OpenAI's `whisper-1` (deprecated) and Groq's `whisper-large-v3-turbo`. The tray and terminal menus show vendor-prefixed labels (`OpenAI`, `Groq`, `Whisper (local)`, `Vosk (local, live partials)`) to make this unambiguous.
+>
+> **Migration note.** The OpenAI cloud backend is now selected with `--backend openai`. The `whisper-1` model is still selectable via `Choose Model → OpenAI` but is deprecated in favour of `gpt-4o-mini-transcribe`.
 
 ## Compatibility
 
@@ -212,6 +217,22 @@ That option requires `pystray` to be installed. This is included with the `pip i
 The `--vosk-models` and `--whisper-models` allow to predefine the set of available models to choose from in the app menu. E.g.
 ```bash
 scribe --vosk-models vosk-model-fr-0.22 --whisper-models small turbo ...
+```
+
+#### Menu structure
+
+Both the tray and terminal frontends share the same menu tree:
+
+```
+Record                        start recording (default tray action)
+Stop / Cancel                 end or discard an in-flight recording
+Choose Model ▶                per-vendor submenus:
+    OpenAI ▶                    gpt-4o-mini-transcribe, whisper-1 (deprecated)
+    Groq ▶                      whisper-large-v3-turbo
+    Whisper (local) ▶           models via --whisper-models (default: large-v3-turbo)
+    Vosk (local) ▶              models via --vosk-models
+Toggle Options ▶              clipboard, keyboard, auto-paste, latency, …
+Quit
 ```
 
 #### Global hotkey integration
