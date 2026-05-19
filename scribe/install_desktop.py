@@ -12,14 +12,14 @@ def main():
     parser = argparse.ArgumentParser("Install the desktop file for the scribe package. Any arguments to this script will be passed on to `scribe`.")
     parser.add_argument("--name", help="The title of the desktop app", default="Scribe")
     parser.add_argument("--startup-wm-class")
-    parser.add_argument("--no-terminal", action="store_false", dest="terminal", help="Don't show the terminal (goes in --app mode)")
+    parser.add_argument("--frontend", choices=["tray", "terminal"], default="tray",
+                        help="Frontend to launch (default: tray). 'terminal' opens a terminal window.")
     o, rest = parser.parse_known_args()
     o.arguments = rest
 
-    if not o.terminal and "--app" not in o.arguments:
-        o.arguments.append("--app")
-    if not o.terminal and "--no-prompt" not in o.arguments:
-        o.arguments.append("--no-prompt")
+    terminal = (o.frontend == "terminal")
+    if o.frontend == "terminal" and "--frontend" not in o.arguments:
+        o.arguments.extend(["--frontend", "terminal"])
 
     SOURCE_SCRIBE_DATA = os.path.dirname(scribe_data.__file__)
 
@@ -37,7 +37,7 @@ def main():
     bin_folder = sysconfig.get_path("scripts")
     icon_folder = os.path.join(SOURCE_SCRIBE_DATA, 'share')
     desktop_filecontent = template.format(icon_folder=icon_folder, bin_folder=bin_folder,
-                                          name=o.name, terminal=str(o.terminal).lower(),
+                                          name=o.name, terminal=str(terminal).lower(),
                                           StartupWMClass=o.startup_wm_class or f"crx_mpnasdanpmm_{simple_name}",
                                           options=' ' + ' '.join(o.arguments) if o.arguments else '')
 

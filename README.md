@@ -195,12 +195,12 @@ You're on the right path :)
 
 <img src=https://github.com/user-attachments/assets/4c97f4b1-1a65-4d49-9f5a-a9f4287cfa5a width=300px>
 
-To avoid switching back and forth with the terminal, it's possible to interact with the program via an icon tray.
-To activate start with:
+Tray mode is the default — running `scribe` with no arguments launches the system tray icon. If you'd rather use the interactive terminal menu, pass `--frontend terminal`:
 ```bash
-scribe --app ...
+scribe                       # tray (default)
+scribe --frontend terminal   # interactive TUI
 ```
-or toggle the app option in the interactive menu. The scribe icon will show, with Record, Cancel (discards an in-flight recording without transcribing) and other options. The icon changes based on what the app is doing. It is possible to choose from a set
+From inside the TUI menu you can toggle to tray mode at any time. The scribe icon will show, with Record, Cancel (discards an in-flight recording without transcribing) and other options. The icon changes based on what the app is doing. It is possible to choose from a set
 of predefined models (controlled by `--vosk-models` and `--whisper-models`) and options, or to Quit and choose from the terminal before pressing Enter again.
 For the vosk model, there are only two states : recording + transcribing or Idle. For the whisper / openaiapi / groq backends there are three states visible from the icon: recording/waiting, transcribing and idle.
 
@@ -211,7 +211,7 @@ That option requires `pystray` to be installed. This is included with the `pip i
 
 The `--vosk-models` and `--whisper-models` allow to predefine the set of available models to choose from in the app menu. E.g.
 ```bash
-scribe --app --vosk-models vosk-model-fr-0.22 --whisper-models small turbo ...
+scribe --vosk-models vosk-model-fr-0.22 --whisper-models small turbo ...
 ```
 
 #### Global hotkey integration
@@ -243,16 +243,15 @@ pip install PyGObject
 ## Start as an application in GNOME
 
 If you run Ubuntu (or else?) with GNOME, the script `scribe-install [...]` will create a `scribe.desktop` file and place it under `$HOME/.local/share/applications`
-to make it available from the quick launch menu. Any option will be passed on to `scribe`, with the additional options `--name` and `--no-terminal`.
-`--no-terminal` means no terminal will show up, and it also implies the options `--app --no-prompt`.
+to make it available from the quick launch menu. Any option will be passed on to `scribe`, with the additional options `--name` and `--frontend {tray,terminal}` (default: `tray`).
 
 Consider the following two flavors:
 ```bash
-scribe-install --name "Scribe Terminal" --clipboard ...
-scribe-install --name "Scribe" --no-terminal --clipboard ...
+scribe-install --name "Scribe" --clipboard ...
+scribe-install --name "Scribe Terminal" --frontend terminal --clipboard ...
 ```
-The first will create an app named Scribe (the default) that simply opens a terminal and execute the command `scribe --clipboard ...`.
-The second will create an app named Scribe App that executes in a hidden terminal: `scribe --no-prompt --app --clipboard ...`, thus leaving the tray icon as only mode of interaction.
+The first (default) creates an app named Scribe that runs in tray mode (no terminal window), with the tray icon as the only mode of interaction.
+The second creates an app named Scribe Terminal that opens a terminal window and runs the interactive TUI.
 
 
 ## Fine tuning
