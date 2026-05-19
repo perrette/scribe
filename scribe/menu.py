@@ -477,9 +477,14 @@ def _item_to_pystray(item, app_state):
 
     visible = _make_visible(item)
 
+    # Tray-friendly label: `item.name` is the terminal keystroke (e.g. "c",
+    # "k") while `item.help` is the human-readable description ("toggle
+    # clipboard"). Prefer the latter for pystray rendering.
+    label = item.help or item.name
+
     if isinstance(item._callback, Menu):
         submenu = _menu_to_pystray(item._callback, app_state)
-        return pystray.MenuItem(item.name, submenu, visible=visible)
+        return pystray.MenuItem(label, submenu, visible=visible)
 
     if isinstance(item, SetValueItem):
         return pystray.MenuItem(
@@ -491,7 +496,7 @@ def _item_to_pystray(item, app_state):
 
     checked = _make_checked(item) if item.checkable else None
     return pystray.MenuItem(
-        item.name,
+        label,
         _make_action(item),
         checked=checked,
         radio=item.checkable,
