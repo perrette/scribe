@@ -225,6 +225,7 @@ class AppState(AbstractFrontendApp):
                     latency=getattr(o, "latency", 0),
                     ascii=getattr(o, "ascii", False),
                     output_file=getattr(o, "output_file", None),
+                    typer=getattr(o, "typer", "auto"),
                     start_message="Listening... Use the tray icon menu to stop.",
                 )
             except Exception as exc:

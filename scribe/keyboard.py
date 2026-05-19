@@ -3,9 +3,9 @@ import time
 import unidecode
 
 
-def type_text(text, interval=0, paste=False, ascii=False):
+def type_text(text, interval=0, paste=False, ascii=False, typer="auto"):
     from scribe.typers import pick_typer
-    typer = pick_typer()
+    _typer = pick_typer(typer if typer != "auto" else None)
 
     if ascii:
         text = unidecode.unidecode(text)
@@ -14,13 +14,13 @@ def type_text(text, interval=0, paste=False, ascii=False):
         import pyperclip
         keep_state = pyperclip.paste()
         pyperclip.copy(text)
-        typer.paste()
+        _typer.paste()
         pyperclip.copy(keep_state)
         return
 
     if interval > 0:
         for c in text:
-            typer.type(c)
+            _typer.type(c)
             time.sleep(interval)
     else:
-        typer.type(text)
+        _typer.type(text)

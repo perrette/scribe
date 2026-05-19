@@ -190,6 +190,9 @@ def get_parser():
                        action=argparse.BooleanOptionalAction, default=False,
                        help="Type the transcription character-by-character via a synthesized virtual keyboard "
                             "(default: off). Useful with the vosk streaming backend; not recommended on Wayland.")
+    group.add_argument("--typer", default="auto", type=str,
+                       help="Keystroke-injection backend. auto (default) probes the available backends. "
+                            "Explicit values: eitype, pynput, wtype, ydotool.")
     group.add_argument("-o", "--output-file")
 
     group = parser.add_argument_group("keyboard options")
@@ -217,7 +220,7 @@ def get_parser():
 
 
 # Commencer l'enregistrement
-def start_recording(micro, session, clipboard=True, keyboard=False, auto_paste=False, latency=0, ascii=False, output_file=None, callback=None, **greetings):
+def start_recording(micro, session, clipboard=True, keyboard=False, auto_paste=False, latency=0, ascii=False, output_file=None, callback=None, typer="auto", **greetings):
 
     if keyboard:
         from scribe.keyboard import type_text
@@ -235,7 +238,7 @@ def start_recording(micro, session, clipboard=True, keyboard=False, auto_paste=F
             clear_line()
             print(result.get('text'))
             if keyboard:
-                type_text(result['text'] + " ", interval=latency, ascii=ascii) # Simulate typing
+                type_text(result['text'] + " ", interval=latency, ascii=ascii, typer=typer) # Simulate typing
 
             if output_file:
                 with open(output_file, "a") as f:
@@ -251,7 +254,7 @@ def start_recording(micro, session, clipboard=True, keyboard=False, auto_paste=F
     if auto_paste and clipboard and not keyboard and fulltext.strip():
         from scribe.typers import pick_typer
         time.sleep(0.1)  # let clipboard settle (xclip/wl-copy are async)
-        pick_typer().paste()
+        pick_typer(typer if typer != "auto" else None).paste()
 
     if callback:
         callback()
@@ -345,6 +348,16 @@ def main(args=None):
     parser = get_parser()
     o = parser.parse_args(args)
 
+    from scribe.typers import pick_typer as _pick_typer
+    if o.typer != "auto":
+        print(f"Typer: {colored(o.typer, 'light_blue', attrs=['bold'])}")
+    else:
+        try:
+            _selected = _pick_typer(None)
+            print(f"Typer: {colored(_selected.name, 'light_blue', attrs=['bold'])} (auto)")
+        except RuntimeError:
+            print(colored("Typer: none available", "light_red"))
+
     micro = Microphone(samplerate=o.samplerate, device=o.input_device)
 
     state = AppState(transcriber=None, session=None, o=o, error_callback=show_error_dialog)
@@ -377,7 +390,8 @@ def main(args=None):
             greetings = dict(start_message="Listening... Press Ctrl+C to stop.")
             start_recording(micro, state.session if state.session is not None else state.transcriber,
                             clipboard=o.clipboard, output_file=o.output_file,
-                            keyboard=o.keyboard, auto_paste=o.auto_paste, latency=o.latency, ascii=o.ascii, **greetings)
+                            keyboard=o.keyboard, auto_paste=o.auto_paste, latency=o.latency, ascii=o.ascii,
+                            typer=o.typer, **greetings)
 
         o.prompt = True
         o.backend = None
