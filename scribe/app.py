@@ -1,6 +1,5 @@
 from pathlib import Path
 import tomllib
-import re
 import time
 import signal
 import argparse
@@ -12,8 +11,7 @@ from scribe.backends.vosk import VoskTranscriber
 from scribe.session import RecordingSession
 from desktop_ai_core.frontends.tray import MultiStateTrayIcon, write_pidfile, remove_pidfile, register_signal_toggle
 from desktop_ai_core.frontends.dialog import show_error_dialog
-from desktop_ai_core.frontends.terminal import Menu, Item, SetValueItem
-from scribe.menu import format_model_label
+from scribe.menu import format_model_label, build_menu, AppState
 
 with open(Path(__file__).parent / "models.toml", "rb") as f:
     language_config_default = tomllib.load(f)
@@ -481,112 +479,7 @@ def _print_main_status(state, o):
         print(f"Options: {' | '.join(activated_options)}")
 
 
-def _build_main_menu(state, o):
-    def cb_change_model(app, item):
-        state.transcriber = None
-        o.model = None
-        o.dummy = False
-        o.backend = None
-        o.language = None
-        return False
-
-    def cb_toggle_clipboard(app, item):
-        o.clipboard = not o.clipboard
-        return True
-
-    def cb_toggle_keyboard(app, item):
-        o.keyboard = not o.keyboard
-        return True
-
-    def cb_toggle_frontend(app, item):
-        o.frontend = "terminal" if o.frontend == "tray" else "tray"
-        return True
-
-    def cb_toggle_auto_restart(app, item):
-        new = not state.transcriber.restart_after_silence
-        state.transcriber.restart_after_silence = new
-        o.restart_after_silence = new
-        return True
-
-    def cb_quit(app, item):
-        exit(0)
-
-    def cb_record(app, item):
-        return False
-
-    def _coerce_float(s, label):
-        try:
-            return float(s)
-        except (TypeError, ValueError):
-            print(f"Invalid {label}. Must be a float.")
-            return None
-
-    def cb_set_duration(app, item):
-        val = _coerce_float(item.value(item), "duration")
-        if val is not None:
-            o.duration = state.transcriber.timeout = val
-        return True
-
-    def cb_set_silence(app, item):
-        val = _coerce_float(item.value(item), "duration")
-        if val is not None:
-            o.silence = state.transcriber.silence_duration = val
-        return True
-
-    def cb_set_silence_db(app, item):
-        val = _coerce_float(item.value(item), "threshold")
-        if val is not None:
-            o.silence_db = state.transcriber.silence_thresh = val
-        return True
-
-    def cb_set_output_file(app, item):
-        ans = item.value(item)
-        if not ans:
-            o.output_file = None
-            return True
-        invalid_regex = re.compile(r'[^A-Za-z0-9_\-\\\/\.]')
-        if not invalid_regex.search(ans):
-            o.output_file = ans
-        else:
-            print(f"Invalid characters: {' '.join(map(repr, invalid_regex.findall(ans)))}")
-            print(f"Invalid file name: {repr(ans)}")
-        return True
-
-    def cb_set_latency(app, item):
-        val = _coerce_float(item.value(item), "latency")
-        if val is not None:
-            o.latency = val
-        return True
-
-    is_whisper = lambda item: state.transcriber is not None and state.transcriber.backend == "whisper"
-    has_keyboard = lambda item: bool(o.keyboard)
-
-    return Menu([
-        Item("", cb_record, help="[Enter] start recording"),
-        Item("e", cb_change_model, help="change model"),
-        Item("c", cb_toggle_clipboard, help="toggle clipboard", checked=lambda item: o.clipboard),
-        Item("k", cb_toggle_keyboard, help="toggle keyboard", checked=lambda item: o.keyboard),
-        Item("x", cb_toggle_frontend, help="toggle tray app mode", checked=lambda item: o.frontend == "tray"),
-        Item("a", cb_toggle_auto_restart, help="auto-restart after silence",
-             checked=lambda item: bool(getattr(state.transcriber, "restart_after_silence", False)),
-             visible=is_whisper),
-        SetValueItem("t", cb_set_duration, value=lambda item: state.transcriber.timeout,
-                     type=float, help="duration (s)", visible=is_whisper),
-        SetValueItem("b", cb_set_silence, value=lambda item: state.transcriber.silence_duration,
-                     type=float, help="silence break (s)", visible=is_whisper),
-        SetValueItem("db", cb_set_silence_db, value=lambda item: state.transcriber.silence_thresh,
-                     type=float, help="silence threshold (db)", visible=is_whisper),
-        SetValueItem("f", cb_set_output_file, value=lambda item: o.output_file or "",
-                     type=str, help="output file"),
-        SetValueItem("latency", cb_set_latency, value=lambda item: o.latency,
-                     type=float, help="keyboard latency (s)", visible=has_keyboard),
-        Item("q", cb_quit, help="quit"),
-    ])
-
-
 def main(args=None):
-    from types import SimpleNamespace
-
     parser = get_parser()
     o = parser.parse_args(args)
 
@@ -595,7 +488,7 @@ def main(args=None):
 
     micro = Microphone(samplerate=o.samplerate, device=o.input_device)
 
-    state = SimpleNamespace(transcriber=None, session=None, is_running=True)
+    state = AppState(transcriber=None, session=None, o=o, error_callback=show_error_dialog)
 
     while True:
         if state.transcriber is None:
@@ -612,7 +505,7 @@ def main(args=None):
         _print_main_status(state, o)
 
         if o.frontend == "terminal" and o.prompt:
-            _build_main_menu(state, o)(state, None)
+            build_menu(state)(state, None)
             if state.transcriber is None:
                 continue
 
