@@ -552,29 +552,53 @@ def _output_mode_submenu(app_state) -> Menu:
     return Menu(items, name="Keyboard mode")
 
 
-_TYPER_ORDER = ("eitype", "wtype", "pynput", "ydotool")
+_TYPER_ORDER = ("eitype", "pynput", "ydotool", "wtype")
+
+
+def _compatible_typers() -> list[tuple[str, object]]:
+    """Return [(name, instance), …] for typers that could in principle run on
+    this OS / session. Filters out structurally-impossible backends (wtype on
+    GNOME, ydotool on macOS, etc.). Order follows ``_TYPER_ORDER``."""
+    from scribe.typers import TYPERS
+
+    ordered = [n for n in _TYPER_ORDER if n in TYPERS] + \
+              [n for n in TYPERS if n not in _TYPER_ORDER]
+    compatible = []
+    for name in ordered:
+        try:
+            instance = TYPERS[name]()
+        except Exception:
+            continue
+        try:
+            ok = instance.compatible() if hasattr(instance, "compatible") else True
+        except Exception:
+            ok = False
+        if ok:
+            compatible.append((name, instance))
+    return compatible
 
 
 def _typer_menu(app_state) -> Menu:
-    """Radio submenu listing the available keystroke-injection backends.
-
-    The menu shows the concrete backends only — 'Auto' is resolved at
-    startup in scribe.app.main, so by the time the menu renders ``o.typer``
-    is already a concrete name (e.g. 'eitype'). Unavailable typers stay in
-    the list disabled, so the user can see *why* a particular backend
-    wasn't picked.
-    """
-    from scribe.typers import TYPERS
-
+    """Radio submenu listing the keystroke-injection backends compatible with
+    the current OS. Incompatible backends are hidden entirely; compatible-but-
+    unset-up backends are shown disabled with a hint. 'Auto' is resolved at
+    startup in scribe.app.main, so ``o.typer`` is already a concrete name."""
     items = []
-    ordered = [n for n in _TYPER_ORDER if n in TYPERS] + \
-              [n for n in TYPERS if n not in _TYPER_ORDER]
-    for name in ordered:
+    for name, instance in _compatible_typers():
         try:
-            available = TYPERS[name]().available()
+            available = instance.available()
         except Exception:
             available = False
-        label = name if available else f"{name} — unavailable"
+        try:
+            caveat = instance.caveat() if hasattr(instance, "caveat") else None
+        except Exception:
+            caveat = None
+        if not available:
+            label = f"{name} — not set up"
+        elif caveat:
+            label = f"{name} ({caveat})"
+        else:
+            label = name
 
         def _is_current(_item, _n=name):
             return getattr(app_state.o, "typer", None) == _n
@@ -622,7 +646,11 @@ def _toggle_options_menu(app_state) -> Menu:
         Item("x", app_state.cb_toggle_frontend, help="Toggle tray app mode",
              checked=lambda item: getattr(app_state.o, "frontend", None) == "tray",
              visible=is_terminal),
-        Item("backend", _typer_menu(app_state), help="Keyboard backend"),
+        # Only show the Keyboard backend submenu when there is a real choice
+        # — when only one (or zero) backend is compatible with this OS, the
+        # submenu has nothing to pick from and just adds noise.
+        *([Item("backend", _typer_menu(app_state), help="Keyboard backend")]
+          if len(_compatible_typers()) > 1 else []),
         Item("advanced", _advanced_options_menu(app_state), help="Advanced"),
     ]
     return Menu(items, name="Options")

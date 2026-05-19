@@ -14,7 +14,14 @@ from scribe.typers.base import Typer
 class YdotoolTyper:
     name = "ydotool"
 
+    def compatible(self) -> bool:
+        """Linux only — uses /dev/uinput, no equivalent on macOS / Windows."""
+        import platform as _platform
+        return _platform.system() == "Linux"
+
     def available(self) -> bool:
+        if not self.compatible():
+            return False
         if shutil.which("ydotool") is None:
             return False
         uid = os.getuid()

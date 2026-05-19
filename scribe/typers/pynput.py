@@ -15,11 +15,28 @@ class PynputTyper:
     def __init__(self):
         self._keyboard = Controller()
 
-    def available(self) -> bool:
+    def compatible(self) -> bool:
+        """OS/environment supports this backend at all (ignores setup)."""
         sys = platform.system()
         if sys in ("Darwin", "Windows"):
             return True
+        # Linux: compatible iff an X server is reachable (X11 or XWayland).
         return bool(os.environ.get("DISPLAY"))
+
+    def available(self) -> bool:
+        return self.compatible()
+
+    def caveat(self) -> str | None:
+        """Context-aware qualifier for menu display. None means no caveat."""
+        # pynput's Linux backend uses XTest. On a Wayland session it still
+        # connects (because XWayland sets $DISPLAY), but the events only
+        # reach XWayland-hosted apps — native Wayland clients drop them.
+        if platform.system() == "Linux" and (
+            os.environ.get("WAYLAND_DISPLAY")
+            or os.environ.get("XDG_SESSION_TYPE") == "wayland"
+        ):
+            return "XWayland apps only"
+        return None
 
     def type(self, text: str) -> None:
         try:

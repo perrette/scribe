@@ -12,22 +12,29 @@ from scribe.typers.base import Typer
 class WtypeTyper:
     name = "wtype"
 
-    def available(self) -> bool:
-        if shutil.which("wtype") is None:
+    def compatible(self) -> bool:
+        """Linux Wayland on a wlroots-based compositor (Sway, Hyprland, …).
+        wtype speaks zwp_virtual_keyboard_v1, which GNOME/Mutter, KDE/KWin
+        and Unity have explicitly refused to implement."""
+        import platform as _platform
+        if _platform.system() != "Linux":
             return False
         if not os.environ.get("WAYLAND_DISPLAY"):
             return False
-        if not os.environ.get("XDG_RUNTIME_DIR"):
-            return False
-        # wtype speaks zwp_virtual_keyboard_v1, which only wlroots-based
-        # compositors implement. GNOME/Mutter, KDE/KWin and Unity don't —
-        # invoking wtype there fails at runtime with "Compositor does not
-        # support the virtual keyboard protocol".
         desktop = (
             os.environ.get("XDG_CURRENT_DESKTOP", "")
             + ":" + os.environ.get("XDG_SESSION_DESKTOP", "")
         ).lower()
         if any(x in desktop for x in ("gnome", "kde", "plasma", "unity")):
+            return False
+        return True
+
+    def available(self) -> bool:
+        if not self.compatible():
+            return False
+        if shutil.which("wtype") is None:
+            return False
+        if not os.environ.get("XDG_RUNTIME_DIR"):
             return False
         return True
 

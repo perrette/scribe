@@ -13,8 +13,19 @@ from scribe.typers.base import Typer
 class EitypeTyper:
     name = "eitype"
 
+    def compatible(self) -> bool:
+        """Linux Wayland session; libei is a Wayland-specific protocol."""
+        import platform as _platform
+        import os as _os
+        if _platform.system() != "Linux":
+            return False
+        return bool(
+            _os.environ.get("WAYLAND_DISPLAY")
+            or _os.environ.get("XDG_SESSION_TYPE") == "wayland"
+        )
+
     def available(self) -> bool:
-        return shutil.which("eitype") is not None
+        return self.compatible() and shutil.which("eitype") is not None
 
     def type(self, text: str) -> None:
         try:
