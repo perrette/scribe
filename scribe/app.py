@@ -98,6 +98,9 @@ def _prompt_model_for_backend(backend, language, prompt):
     if backend == "openai":
         return "gpt-4o-mini-transcribe"
 
+    if backend == "groq":
+        return "whisper-large-v3-turbo"
+
     raise ValueError(f"Unknown backend: {backend}")
 
 
@@ -113,12 +116,12 @@ def _build_backend_kwargs(backend, model, language, samplerate, duration, silenc
                     timeout=duration, silence_duration=silence, silence_thresh=silence_db,
                     restart_after_silence=restart_after_silence,
                     model_kwargs={"download_root": download_folder_whisper})
-    if backend == "openai":
+    if backend in ("openai", "groq"):
         from scribe.backends.openai_api import REALTIME_MODELS
         kwargs = dict(model_name=model, samplerate=samplerate,
                       timeout=duration, silence_duration=silence, silence_thresh=silence_db,
                       restart_after_silence=restart_after_silence, api_key=api_key)
-        if model in REALTIME_MODELS:
+        if backend == "openai" and model in REALTIME_MODELS:
             kwargs["realtime_delay"] = realtime_delay
         return kwargs
     raise ValueError(f"Unknown backend: {backend}")
