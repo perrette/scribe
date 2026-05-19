@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import os
 import shutil
 import subprocess
@@ -34,7 +35,26 @@ class WtypeTyper:
         try:
             subprocess.run(["wtype", "--", text], check=True, capture_output=True)
         except subprocess.CalledProcessError as e:
-            raise RuntimeError(f"wtype failed: {e.stderr.decode(errors='replace')}") from e
+            # wtype refuses chars not in the active xkb layout. Retry with
+            # diacritics stripped so streaming-keyboard mode degrades
+            # gracefully on French / German / etc. text.
+            import unidecode  # local import to keep cold-start cheap
+            ascii_text = unidecode.unidecode(text)
+            if ascii_text == text:
+                raise RuntimeError(
+                    f"wtype failed: {e.stderr.decode(errors='replace')}"
+                ) from e
+            logging.warning(
+                f"wtype cannot type {text!r}; retrying as ASCII {ascii_text!r}"
+            )
+            try:
+                subprocess.run(
+                    ["wtype", "--", ascii_text], check=True, capture_output=True
+                )
+            except subprocess.CalledProcessError as e2:
+                raise RuntimeError(
+                    f"wtype failed: {e2.stderr.decode(errors='replace')}"
+                ) from e2
 
     def paste(self) -> None:
         try:
