@@ -321,17 +321,36 @@ class AppState(AbstractFrontendApp):
         self._refresh_tray_menu()
         return True
 
-    def cb_toggle_keyboard(self, view, item):
-        self.o.keyboard = not bool(self.o.keyboard)
-        self.params["keyboard"] = self.o.keyboard
-        self._refresh_tray_menu()
-        return True
+    def cb_set_output_mode(self, mode: str) -> Callable:
+        """Factory: callback that sets the output keystroke mode.
 
-    def cb_toggle_auto_paste(self, view, item):
-        self.o.auto_paste = not bool(getattr(self.o, "auto_paste", False))
-        self.params["auto_paste"] = self.o.auto_paste
-        self._refresh_tray_menu()
-        return True
+        mode ∈ {'auto_paste', 'keyboard', 'off'}. The three are mutually
+        exclusive in app.start_recording (keyboard takes precedence over
+        auto_paste), so the menu surfaces them as a radio group.
+        Selecting auto_paste also turns clipboard on, since auto-paste
+        is silently a no-op without it.
+        """
+        def _cb(view, item):
+            if mode == "auto_paste":
+                self.o.auto_paste = True
+                self.o.keyboard = False
+                self.o.clipboard = True
+                self.params["auto_paste"] = True
+                self.params["keyboard"] = False
+                self.params["clipboard"] = True
+            elif mode == "keyboard":
+                self.o.auto_paste = False
+                self.o.keyboard = True
+                self.params["auto_paste"] = False
+                self.params["keyboard"] = True
+            else:  # "off"
+                self.o.auto_paste = False
+                self.o.keyboard = False
+                self.params["auto_paste"] = False
+                self.params["keyboard"] = False
+            self._refresh_tray_menu()
+            return True
+        return _cb
 
     def cb_toggle_frontend(self, view, item):
         self.o.frontend = "terminal" if self.o.frontend == "tray" else "tray"
@@ -495,6 +514,24 @@ def _noop_callback(view, item):
     return None
 
 
+def _output_mode(o) -> str:
+    """Derive the current output keystroke mode from the (auto_paste, keyboard)
+    flags. ``keyboard`` wins if both are set (matches app.start_recording)."""
+    if getattr(o, "keyboard", False):
+        return "keyboard"
+    if getattr(o, "auto_paste", False):
+        return "auto_paste"
+    return "off"
+
+
+def _output_mode_radio(app_state, key: str, mode: str, label: str) -> Item:
+    def _is_current(_item, _m=mode):
+        return _output_mode(app_state.o) == _m
+    item = Item(key, app_state.cb_set_output_mode(mode), help=label, checked=_is_current)
+    item.radio = True
+    return item
+
+
 _TYPER_ORDER = ("eitype", "wtype", "pynput", "ydotool")
 
 
@@ -568,10 +605,9 @@ def _toggle_options_menu(app_state) -> Menu:
     items = [
         Item("c", app_state.cb_toggle_clipboard, help="Copy to clipboard",
              checked=lambda item: bool(getattr(app_state.o, "clipboard", False))),
-        Item("p", app_state.cb_toggle_auto_paste, help="Auto-paste (Ctrl+V after recording)",
-             checked=lambda item: bool(getattr(app_state.o, "auto_paste", False))),
-        Item("k", app_state.cb_toggle_keyboard, help="Auto-type via keyboard",
-             checked=lambda item: bool(getattr(app_state.o, "keyboard", False))),
+        _output_mode_radio(app_state, "p", "auto_paste", "Auto-paste (Ctrl+V at end)"),
+        _output_mode_radio(app_state, "k", "keyboard", "Type each character"),
+        _output_mode_radio(app_state, "n", "off", "Manual paste (press Ctrl+V yourself)"),
         Item("x", app_state.cb_toggle_frontend, help="Toggle tray app mode",
              checked=lambda item: getattr(app_state.o, "frontend", None) == "tray",
              visible=is_terminal),
