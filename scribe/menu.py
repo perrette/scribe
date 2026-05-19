@@ -529,16 +529,12 @@ def _typer_menu(app_state) -> Menu:
     return Menu(items, name="Typer")
 
 
-def _toggle_options_menu(app_state) -> Menu:
-    is_terminal = _is_terminal_frontend(app_state)
+def _advanced_options_menu(app_state) -> Menu:
+    """Backend-specific knobs + numerical tuning — kept off the main Options
+    panel so it stays uncluttered for common use. Items retain their
+    ``visible=`` predicates so vosk users still don't see whisper-only
+    fields."""
     items = [
-        Item("c", app_state.cb_toggle_clipboard, help="Copy to clipboard",
-             checked=lambda item: bool(getattr(app_state.o, "clipboard", False))),
-        Item("k", app_state.cb_toggle_keyboard, help="Auto-type via keyboard",
-             checked=lambda item: bool(getattr(app_state.o, "keyboard", False))),
-        Item("x", app_state.cb_toggle_frontend, help="Toggle tray app mode",
-             checked=lambda item: getattr(app_state.o, "frontend", None) == "tray",
-             visible=is_terminal),
         Item("a", app_state.cb_toggle_auto_restart, help="Auto-restart after silence",
              checked=lambda item: bool(getattr(app_state.transcriber, "restart_after_silence", False)),
              visible=app_state._is_whisper),
@@ -557,7 +553,22 @@ def _toggle_options_menu(app_state) -> Menu:
         SetValueItem("latency", app_state.cb_set_latency,
                      value=lambda item: getattr(app_state.o, "latency", None),
                      type=float, help="Keyboard latency (s)", visible=app_state._has_keyboard),
+    ]
+    return Menu(items, name="Advanced")
+
+
+def _toggle_options_menu(app_state) -> Menu:
+    is_terminal = _is_terminal_frontend(app_state)
+    items = [
+        Item("c", app_state.cb_toggle_clipboard, help="Copy to clipboard",
+             checked=lambda item: bool(getattr(app_state.o, "clipboard", False))),
+        Item("k", app_state.cb_toggle_keyboard, help="Auto-type via keyboard",
+             checked=lambda item: bool(getattr(app_state.o, "keyboard", False))),
+        Item("x", app_state.cb_toggle_frontend, help="Toggle tray app mode",
+             checked=lambda item: getattr(app_state.o, "frontend", None) == "tray",
+             visible=is_terminal),
         Item("typer", _typer_menu(app_state), help="Typer backend"),
+        Item("advanced", _advanced_options_menu(app_state), help="Advanced"),
     ]
     return Menu(items, name="Options")
 
