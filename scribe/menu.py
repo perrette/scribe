@@ -253,6 +253,7 @@ class AppState(AbstractFrontendApp):
         return None
 
     def _tray_set_model(self, backend_name: str, model_id: str):
+        import threading
         from scribe.app import get_transcriber
         from scribe.session import RecordingSession
         from desktop_ai_core.frontends.dialog import show_error_dialog
@@ -270,17 +271,37 @@ class AppState(AbstractFrontendApp):
         self._tray_join_recording_threads()
 
         new_kwargs = {**vars(self.o), "backend": backend_name, "model": model_id, "prompt": False}
-        new_transcriber = get_transcriber(**new_kwargs)
 
-        icon._transcriber = new_transcriber
-        icon._session = RecordingSession(backend=new_transcriber, error_callback=show_error_dialog)
-        icon.title = f"scribe — {format_model_label(new_transcriber.backend, new_transcriber.model_name)}"
-        icon._model_selection = False
-        self.transcriber = new_transcriber
-        self.session = icon._session
-        self.o.backend = backend_name
-        self.o.model = model_id
+        # Construction can block on model-weight downloads (faster-whisper)
+        # or other I/O. Run on a background thread so the tray stays
+        # responsive; the busy icon flags activity to the user.
+        def _swap():
+            new_transcriber = None
+            try:
+                new_transcriber = get_transcriber(**new_kwargs)
+            except Exception as exc:
+                self.logger.error(f"Failed to load {backend_name}/{model_id}: {exc}")
+                show_error_dialog(
+                    "Model load failed",
+                    f"{backend_name}/{model_id}: {type(exc).__name__}: {exc}",
+                )
+            icon._loading = False
+            if new_transcriber is None:
+                icon.update_menu()
+                return
+            icon._transcriber = new_transcriber
+            icon._session = RecordingSession(backend=new_transcriber, error_callback=show_error_dialog)
+            icon.title = f"scribe — {format_model_label(new_transcriber.backend, new_transcriber.model_name)}"
+            icon._model_selection = False
+            self.transcriber = new_transcriber
+            self.session = icon._session
+            self.o.backend = backend_name
+            self.o.model = model_id
+            icon.update_menu()
+
+        icon._loading = True
         icon.update_menu()
+        threading.Thread(target=_swap, daemon=True, name="scribe-model-swap").start()
         return None
 
     def _refresh_tray_menu(self):

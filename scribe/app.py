@@ -295,8 +295,11 @@ def create_app(micro, app_state):
     icon._model_selection = False
     icon._transcriber = transcriber
     icon._session = session
+    icon._loading = False  # set True during background model-swap; reuses busy image
 
     def _get_icon_state():
+        if getattr(icon, "_loading", False):
+            return "busy"
         s = icon._session
         if s.recording:
             return "recording"
