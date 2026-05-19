@@ -102,7 +102,8 @@ def _prompt_model_for_backend(backend, language, prompt):
 
 
 def _build_backend_kwargs(backend, model, language, samplerate, duration, silence, silence_db,
-                          restart_after_silence, api_key, download_folder_vosk, download_folder_whisper):
+                          restart_after_silence, api_key, download_folder_vosk, download_folder_whisper,
+                          realtime_delay):
     if backend == "vosk":
         return dict(model_name=model, language=language, samplerate=samplerate,
                     timeout=None, silence_duration=None,
@@ -113,15 +114,20 @@ def _build_backend_kwargs(backend, model, language, samplerate, duration, silenc
                     restart_after_silence=restart_after_silence,
                     model_kwargs={"download_root": download_folder_whisper})
     if backend == "openai":
-        return dict(model_name=model, samplerate=samplerate,
-                    timeout=duration, silence_duration=silence, silence_thresh=silence_db,
-                    restart_after_silence=restart_after_silence, api_key=api_key)
+        from scribe.backends.openai_api import REALTIME_MODELS
+        kwargs = dict(model_name=model, samplerate=samplerate,
+                      timeout=duration, silence_duration=silence, silence_thresh=silence_db,
+                      restart_after_silence=restart_after_silence, api_key=api_key)
+        if model in REALTIME_MODELS:
+            kwargs["realtime_delay"] = realtime_delay
+        return kwargs
     raise ValueError(f"Unknown backend: {backend}")
 
 
 def get_transcriber(model=None, backend=None, dummy=False, prompt=True, language=None,
                     samplerate=None, duration=None, silence=None, silence_db=None, restart_after_silence=None,
-                    api_key=None, download_folder_vosk=None, download_folder_whisper=None, **kwargs):
+                    api_key=None, download_folder_vosk=None, download_folder_whisper=None,
+                    realtime_delay="medium", **kwargs):
     if dummy:
         return DummyTranscriber("whisper", "dummy")
     if model and not backend:
@@ -143,7 +149,8 @@ def get_transcriber(model=None, backend=None, dummy=False, prompt=True, language
     print(f"Selected model: {model}")
     backend_kwargs = _build_backend_kwargs(backend, model, language, samplerate, duration, silence,
                                           silence_db, restart_after_silence, api_key,
-                                          download_folder_vosk, download_folder_whisper)
+                                          download_folder_vosk, download_folder_whisper,
+                                          realtime_delay)
     try:
         return _build_transcriber(backend, **backend_kwargs)
     except Exception as error:
@@ -183,6 +190,14 @@ def get_parser():
     group.add_argument("-o", "--output-file",
                        help="Also append the transcription to this file.")
 
+    group = parser.add_argument_group("Realtime (gpt-realtime-whisper)")
+    group.add_argument("--realtime-delay",
+                       choices=("minimal", "low", "medium", "high", "xhigh"),
+                       default="medium",
+                       help="Trade off latency vs accuracy on gpt-realtime-whisper "
+                            "(default: %(default)s; lower = faster partials but more "
+                            "paste churn in the focused window).")
+
     group = parser.add_argument_group("Silence detection (whisper, openai, groq)")
     group.add_argument("--duration", default=120, type=float,
                        help="Max recording duration in seconds (default: %(default)s).")
@@ -207,16 +222,6 @@ def get_parser():
 
 
 # Commencer l'enregistrement
-def _backend_name_of(session):
-    """Robust accessor: works whether ``session`` is a RecordingSession (whose
-    ``.backend`` is a transcriber) or a transcriber directly (whose ``.backend``
-    is already a string name)."""
-    obj = getattr(session, "backend", session)
-    if isinstance(obj, str):
-        return obj
-    return getattr(obj, "backend", None)
-
-
 def start_recording(micro, session, mode="keystroke", typer="auto",
                     output_file=None, callback=None, **greetings):
     """Drive a recording, dispatching the transcript to the destination implied
@@ -231,8 +236,11 @@ def start_recording(micro, session, mode="keystroke", typer="auto",
     if mode not in ("keystroke", "clipboard", "terminal"):
         raise ValueError(f"Unknown mode {mode!r} (expected keystroke|clipboard|terminal)")
 
-    backend_name = _backend_name_of(session)
-    is_streaming = bool(getattr(BACKENDS.get(backend_name), "supports_streaming", False))
+    # Query the live transcriber instance — the registered class may dispatch
+    # to a streaming sibling for specific models (e.g. openai →
+    # gpt-realtime-whisper), so a class-level lookup via BACKENDS would lie.
+    backend_obj = getattr(session, "backend", session)
+    is_streaming = bool(getattr(backend_obj, "supports_streaming", False)) if not isinstance(backend_obj, str) else False
     do_clipboard = mode != "terminal"
     do_live_paste = (mode == "keystroke") and is_streaming
     do_paste_at_end = (mode == "keystroke") and not is_streaming
@@ -252,7 +260,11 @@ def start_recording(micro, session, mode="keystroke", typer="auto",
         if result.get('text'):
             clear_line()
             print(result.get('text'))
-            chunk_text = result['text'] + " "
+            # Backends own their own inter-chunk spacing — Vosk appends a
+            # space to each phrase, gpt-realtime-whisper deltas already
+            # carry leading whitespace per Whisper tokenization. The app
+            # just concatenates verbatim.
+            chunk_text = result['text']
             fulltext += chunk_text
 
             if output_file:

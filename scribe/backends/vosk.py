@@ -31,6 +31,11 @@ class VoskTranscriber(AbstractStreamingTranscriber):
         result_dict = json.loads(result)
         if not final and "text" in result_dict:
             del result_dict["text"]
+        # Vosk's `text` is a bare phrase ("hello world"); the app
+        # concatenates consecutive `text` events verbatim, so the
+        # backend owns its own inter-phrase separator.
+        elif final and result_dict.get("text"):
+            result_dict["text"] = result_dict["text"] + " "
         yield result_dict
 
     def transcribe_audio(self, audio_data=b""):

@@ -8,11 +8,22 @@ from scribe.backends.whisper import WhisperTranscriber
 from scribe.models import AbstractTranscriber
 
 
+REALTIME_MODELS = frozenset({"gpt-realtime-whisper"})
+
+
 class OpenaiAPITranscriber(WhisperTranscriber):
     name = "openai"
     backend = "openai"
     default_model: str | None = "gpt-4o-mini-transcribe"
     is_local: ClassVar[bool] = False
+
+    def __new__(cls, *args, **kwargs):
+        if cls is OpenaiAPITranscriber:
+            model_name = kwargs.get("model_name")
+            if model_name in REALTIME_MODELS:
+                from scribe.backends.openai_realtime import OpenaiRealtimeTranscriber
+                return OpenaiRealtimeTranscriber(*args, **kwargs)
+        return super().__new__(cls)
 
     def __init__(self, model_name="gpt-4o-mini-transcribe", language=None, model_kwargs={}, model=None, api_key=None, **kwargs):
         if model is None:

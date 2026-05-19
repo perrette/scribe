@@ -15,8 +15,8 @@ log = logging.getLogger(__name__)
 
 
 class OpenaiRealtimeTranscriber(AbstractStreamingTranscriber):
-    name = "openai-realtime"
-    backend = "openai-realtime"
+    name = "openai"
+    backend = "openai"
     default_model: str | None = "gpt-realtime-whisper"
     is_local: ClassVar[bool] = False
     supports_streaming: ClassVar[bool] = True
@@ -25,8 +25,12 @@ class OpenaiRealtimeTranscriber(AbstractStreamingTranscriber):
     _FINALIZE_TIMEOUT = 5.0
     _CLOSE_JOIN_TIMEOUT = 0.25
 
+    # OpenAI GA realtime PCM only supports 24 kHz; scribe records at 16 kHz, so
+    # feed_audio upsamples int16 frames before send.
+    _GA_SAMPLE_RATE = 24000
+
     def __init__(self, model_name="gpt-realtime-whisper", language=None, model_kwargs={},
-                 model=None, api_key=None, **kwargs):
+                 model=None, api_key=None, realtime_delay="medium", **kwargs):
         # The realtime model has its own VAD; mirror VoskTranscriber and disable
         # scribe's silence-detection path entirely.
         kwargs["silence_thresh"] = -np.inf
@@ -34,6 +38,7 @@ class OpenaiRealtimeTranscriber(AbstractStreamingTranscriber):
             self, model, model_name, language, model_kwargs=model_kwargs, **kwargs,
         )
         self._api_key = api_key
+        self._realtime_delay = realtime_delay
         self._client = None
         self._connection = None
         self._connection_manager = None
@@ -43,6 +48,26 @@ class OpenaiRealtimeTranscriber(AbstractStreamingTranscriber):
         self._completed_event = threading.Event()
         self._final_transcript = None
         self._closed = True
+        self._resample_tail: np.ndarray = np.zeros(0, dtype=np.int16)
+
+    def _session_config(self) -> dict:
+        # gpt-realtime-whisper does NOT support server VAD (rejected as
+        # "Turn detection is not supported for this transcription model").
+        # The streaming knob for this model is `delay` — "minimal" emits
+        # partials as early as possible; higher values trade latency for
+        # accuracy. Surfaced as the --realtime-delay CLI flag.
+        transcription: dict = {"model": self.model_name, "delay": self._realtime_delay}
+        if self.language:
+            transcription["language"] = self.language
+        audio_input: dict = {
+            "format": {"type": "audio/pcm", "rate": self._GA_SAMPLE_RATE},
+            "transcription": transcription,
+            "turn_detection": None,
+        }
+        return {
+            "type": "transcription",
+            "audio": {"input": audio_input},
+        }
 
     def open_session(self, session):
         import openai
@@ -52,33 +77,27 @@ class OpenaiRealtimeTranscriber(AbstractStreamingTranscriber):
         self._completed_event.clear()
         self._final_transcript = None
         self._event_queue = queue.Queue()
+        self._resample_tail = np.zeros(0, dtype=np.int16)
 
         api_key = self._api_key or os.environ.get("OPENAI_API_KEY")
         self._client = openai.OpenAI(api_key=api_key)
 
-        # Per roadmap §E Item 6: POST /realtime/transcription_sessions to
-        # validate config before opening the WS. The returned client_secret is
-        # only needed for browser-side ephemeral-token flows; with a real API
-        # key we open the WS directly and re-send the same config via
-        # transcription_session.update.
-        self._client.beta.realtime.transcription_sessions.create(
-            input_audio_format="pcm16",
-            input_audio_transcription={"model": self.model_name},
-        )
+        # GA flow: POST /v1/realtime/client_secrets to validate config (the
+        # ephemeral secret it returns is for browser-side flows; with a real
+        # API key we connect directly and resend the same config via
+        # session.update).
+        session_config = self._session_config()
+        self._client.realtime.client_secrets.create(session=session_config)
 
-        self._connection_manager = self._client.beta.realtime.connect(
-            model=self.model_name,
+        # GA transcription WS: `?intent=transcription` discriminator, no
+        # `model=` query (the transcription model lives in session.update).
+        # The `OpenAI-Beta` header is what was retired — the URL shape with
+        # intent=transcription carried over to GA unchanged.
+        self._connection_manager = self._client.realtime.connect(
             extra_query={"intent": "transcription"},
         )
         self._connection = self._connection_manager.enter()
-
-        self._connection.send({
-            "type": "transcription_session.update",
-            "session": {
-                "input_audio_format": "pcm16",
-                "input_audio_transcription": {"model": self.model_name},
-            },
-        })
+        self._connection.session.update(session=session_config)
 
         self._recv_thread = threading.Thread(
             target=self._recv_loop, name="openai-realtime-recv", daemon=True,
@@ -110,12 +129,20 @@ class OpenaiRealtimeTranscriber(AbstractStreamingTranscriber):
 
                 etype = getattr(event, "type", None)
                 if etype == "conversation.item.input_audio_transcription.delta":
+                    # gpt-realtime-whisper deltas are append-only token
+                    # fragments — already-committed text, just delivered in
+                    # fine-grained pieces. Route them as `text` so scribe's
+                    # live-paste path types each token as it arrives, the
+                    # same UX Vosk gets from its per-phrase commits.
                     delta = getattr(event, "delta", None) or ""
-                    self._event_queue.put({"partial": delta})
+                    self._event_queue.put({"text": delta})
                 elif etype == "conversation.item.input_audio_transcription.completed":
-                    transcript = getattr(event, "transcript", None) or ""
-                    self._final_transcript = transcript
-                    self._event_queue.put({"text": transcript})
+                    # The session-end `.completed` carries the full
+                    # transcript, but every token has already been yielded
+                    # as a `text` delta above — re-emitting it would paste
+                    # the entire utterance again. Only keep the final
+                    # transcript for finalize()'s return value.
+                    self._final_transcript = getattr(event, "transcript", None) or ""
                     self._completed_event.set()
                 elif etype == "conversation.item.input_audio_transcription.failed":
                     err = getattr(event, "error", None)
@@ -133,14 +160,44 @@ class OpenaiRealtimeTranscriber(AbstractStreamingTranscriber):
         finally:
             self._completed_event.set()
 
+    def _upsample_to_ga(self, chunk: bytes) -> bytes:
+        """Resample int16 mono PCM from self.samplerate to 24 kHz.
+
+        Carries a one-sample tail across chunks so interpolated boundaries
+        don't pop. Returns b"" if there is nothing to send yet.
+        """
+        if not chunk:
+            return b""
+        src_rate = self.samplerate
+        dst_rate = self._GA_SAMPLE_RATE
+        samples = np.frombuffer(chunk, dtype=np.int16)
+        if src_rate == dst_rate:
+            return samples.tobytes()
+        # Prepend one sample of tail so linear interp is continuous across chunks.
+        joined = np.concatenate([self._resample_tail, samples])
+        if joined.size < 2:
+            self._resample_tail = joined
+            return b""
+        # Indices in the source space, mapped from a uniform 24 kHz grid.
+        n_out = int((joined.size - 1) * dst_rate / src_rate)
+        if n_out <= 0:
+            self._resample_tail = joined[-1:]
+            return b""
+        x_new = np.arange(n_out, dtype=np.float64) * (src_rate / dst_rate)
+        x_old = np.arange(joined.size, dtype=np.float64)
+        y_new = np.interp(x_new, x_old, joined.astype(np.float64))
+        self._resample_tail = joined[-1:]
+        return np.clip(y_new, -32768, 32767).astype(np.int16).tobytes()
+
     def feed_audio(self, chunk=b""):
         self.session.audio_buffer += chunk
         if chunk and self._connection is not None and not self._closed:
             try:
-                self._connection.send({
-                    "type": "input_audio_buffer.append",
-                    "audio": base64.b64encode(chunk).decode("ascii"),
-                })
+                payload = self._upsample_to_ga(chunk)
+                if payload:
+                    self._connection.input_audio_buffer.append(
+                        audio=base64.b64encode(payload).decode("ascii"),
+                    )
             except Exception as exc:
                 self.notify_error("Realtime send failed", repr(exc))
 
@@ -157,16 +214,35 @@ class OpenaiRealtimeTranscriber(AbstractStreamingTranscriber):
 
     def finalize(self):
         if self._connection is None or self._closed:
-            return {"text": self._final_transcript or ""}
+            return {"text": ""}
 
         self._completed_event.clear()
         try:
-            self._connection.send({"type": "input_audio_buffer.commit"})
+            self._connection.input_audio_buffer.commit()
         except Exception:
-            return {"text": self._final_transcript or ""}
+            return {"text": ""}
 
+        # Wait for the server's `.completed` event; trailing deltas land on
+        # the queue between commit and completion. The recording loop has
+        # already exited, so drain the queue here and stitch the tail
+        # together — otherwise the last words spoken just before stop get
+        # dropped. The bulk of the transcript was already streamed live as
+        # `text` deltas during recording, so we only return the tail.
         self._completed_event.wait(timeout=self._FINALIZE_TIMEOUT)
-        return {"text": self._final_transcript or ""}
+        tail_parts: list[str] = []
+        while True:
+            try:
+                item = self._event_queue.get_nowait()
+            except queue.Empty:
+                break
+            if "_error" in item:
+                title, message = item["_error"]
+                self.notify_error(title, message)
+                continue
+            text = item.get("text")
+            if text:
+                tail_parts.append(text)
+        return {"text": "".join(tail_parts)}
 
     def close_session(self):
         if self._closed:
@@ -196,7 +272,3 @@ class OpenaiRealtimeTranscriber(AbstractStreamingTranscriber):
                 break
 
 
-def _probe_openai_realtime() -> tuple[bool, str | None]:
-    if os.environ.get("OPENAI_API_KEY"):
-        return True, None
-    return False, "OPENAI_API_KEY not set"
