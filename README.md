@@ -1,416 +1,74 @@
 [![pypi](https://img.shields.io/pypi/v/scribe-cli)](https://pypi.org/project/scribe-cli)
 ![](https://img.shields.io/python/required-version-toml?tomlFilePath=https%3A%2F%2Fraw.githubusercontent.com%2Fperrette%2Fscribe%2Frefs%2Fheads%2Fmain%2Fpyproject.toml)
 
-# Scribe  <img src="https://github.com/perrette/scribe/raw/main/scribe_data/share/icon.png" width=48px>
+# Scribe  <img src="https://github.com/perrette/scribe/raw/main/scribe_data/share/icon.png" width="48">
 
-`scribe` is a speech to text (STT) tool that can be used as a virtual keyboard on a computer. It provides local or cloud-based, batch or real-time transcription using cutting-edge AI models.
+**Talk. It types.** Scribe is a speech-to-text CLI and tray app that
+pipes transcribed text straight into the focused window. It supports local and
+cloud-based APIs, batch and streaming workflows.
 
-## Backends
+## What it does
 
-It currently supports four backends; Groq is the default cloud backend when `GROQ_API_KEY` is set:
+- Records from your mic and transcribes via one of four backends —
+  **Vosk** (local, streaming), **Whisper** (local, batch), **OpenAI**
+  (cloud, batch *or* streaming), **Groq** (cloud, batch).
+- Delivers the transcript three ways: paste into the focused window
+  (default), copy to clipboard, or print to the terminal.
+- Runs as a **system tray icon** with a single Record button, or as an
+  interactive **terminal TUI** — same menu in both.
+- Hooks into your DE's keyboard shortcuts via `SIGUSR1` (toggle
+  recording) and `SIGUSR2` (cancel).
+- Cross-platform: tested on Ubuntu (X11 and Wayland), macOS, Windows;
+  works under Termux for clipboard / terminal output.
 
-| Backend | `--backend` | Streaming ? | Default model | Requires |
-|---------|-------------|-------------|---------------|---------|
-| Groq (cloud) | `groq` | no | `whisper-large-v3-turbo` | `GROQ_API_KEY` |
-| OpenAI (cloud) | `openai` | yes (`gpt-realtime-whisper`) | `gpt-4o-mini-transcribe` | `OPENAI_API_KEY` |
-| Whisper (local) | `whisper` | no | `small` | `pip install scribe-cli[whisper]` |
-| Vosk (local) | `vosk` | yes | language model | `pip install scribe-cli[vosk]` |
+## Getting started
 
-When started without `--backend`, scribe picks the first available backend in order: `groq` → `openai` → `whisper` → `vosk`.
+```bash
+sudo apt-get install portaudio19-dev xclip   # Ubuntu; macOS: brew install portaudio
+pip install scribe-cli[all]
+export GROQ_API_KEY=YOURAPIKEY                # or OPENAI_API_KEY, or skip and run local
+scribe
+```
 
+Scribe picks the first backend whose key / dependency is present, in
+order **`groq` → `openai` → `whisper` → `vosk`**, and launches the
+tray icon. Press Record, speak, press Stop.
+
+See documentation below for setting up keyboard input on Ubuntu Wayland.
+
+
+## Backends at a glance
+
+| Backend         | `--backend` | Default model              | Streaming model(s)        | Requires                            |
+|-----------------|-------------|----------------------------|---------------------------|-------------------------------------|
+| Groq (cloud)    | `groq`      | `whisper-large-v3-turbo`   | —                         | `GROQ_API_KEY`                      |
+| OpenAI (cloud)  | `openai`    | `gpt-4o-mini-transcribe`   | `gpt-realtime-whisper`    | `OPENAI_API_KEY`                    |
+| Whisper (local) | `whisper`   | `small`                    | —                         | `pip install scribe-cli[whisper]`   |
+| Vosk (local)    | `vosk`      | language-dependent         | all Vosk models           | `pip install scribe-cli[vosk]`      |
+
+Whether a transcription appears live as you speak or all at once when
+you stop depends on the **model** picked — see
+[docs/backends.md](docs/backends.md).
+
+## Documentation
+
+- [Installation & dependencies](docs/installation.md) — PortAudio,
+  extras, Ubuntu / GNOME tray libs.
+- [Backends in detail](docs/backends.md) — model lists, when to pick
+  which, the realtime model.
+- [Keyboard modes & typer backends](docs/keyboard.md) — keystroke vs
+  clipboard, Wayland / `eitype`, `--type-direct`.
+- [System tray & global hotkeys](docs/tray.md) — menu tree, icon
+  states, `SIGUSR1`/`SIGUSR2`.
+- [Desktop entry & autostart (`scribe-install`)](docs/desktop-install.md)
+  — GNOME / KDE launcher integration.
+- [Fine tuning & CLI reference](docs/cli.md) — every `scribe --help`
+  flag with examples.
 
 ## Compatibility
 
-The package is initially developped for python 3 with Ubuntu 24.04 with Gnome + Wayland, but it should work on other platforms as well. Tested and fully functional on MacOS. Functional in terminal frontend and via user-triggered pasting on Android Termux. On Ubuntu Wayland the keyboard input is convoluted but [works](#keyboard-backend-typer).
-Basically check the pages of the dependencies for more info (i.e. pynput for the keyboard, pystray for the app).
-
-
-## Installation
-
-Install PortAudio library (required by `sounddevice`) and xclip library (required by `pyperclip`). E.g. on Ubuntu:
-
-```bash
-sudo apt-get install portaudio19-dev xclip
-```
-
-(`portaudio19-dev` becomes `portaudio ` with homebrew)
-
-See additional requirements for the [icon tray](#system-tray-icon-experimental-) and [keyboard backends](#keyboard-backend-typer). The python dependencies should be dealt with automatically:
-
-```bash
-pip install scribe-cli[all]
-```
-
-(note the `-cli` suffix for client)
-
-or for local development:
-
-```bash
-git clone https://github.com/perrette/scribe.git
-cd scribe
-pip install -e .[all]
-```
-
-You can leave the optional dependencies (leave out `[all]`) but must install at least one of `vosk` or `faster-whisper` or `openai` packages (see Usage below). The `groq` backend reuses the `openai` client, so installing the `openai` extra is enough for both `openai` and `groq`.
-
-`[all]` pulls in `pynput` automatically, which covers the pynput
-typer backend (XTest on Linux X11, Quartz on macOS, WinAPI on Windows).
-The other typer backends (`eitype`, `wtype`, `ydotool`) are OS-level
-binaries, *not* Python packages — install them via your distro
-package manager or `cargo` (see the [Keyboard backend](#keyboard-backend-typer)
-section). They are optional; scribe falls back to whichever one is
-available.
-
-### Manual selection of the dependencies
-
-```bash
-# language models (at least one must be installed !)
-pip install vosk
-pip install openai soundfile  # openai and groq
-pip install faster-whisper
-
-# PortAUDIO (sounddevice)
-pip install sounddevice # automatically installed as required dependency
-sudo apt-get install portaudio19-dev
-# MAC OS: brew install portaudio
-
-# clipboard
-pip install pyperclip  # automatically installed as required dependency
-sudo apt-get install xclip
-
-# keyboard backends
-pip install pynput    # Python lib used by the pynput typer
-# Optional OS-level binaries for the other typer backends:
-#   eitype  — Linux Wayland (GNOME/KDE/Hyprland). Install via:
-#             cargo install --git https://github.com/Adam-D-Lewis/eitype
-#   wtype   — Linux Wayland on wlroots (Sway etc.). Install via:
-#             sudo apt install wtype
-#   ydotool — Linux any session. Install via:
-#             sudo apt install ydotool   (needs daemon + input group)
-
-# app mode
-sudo apt install libcairo-dev libgirepository1.0-dev gir1.2-appindicator3-0.1  # Ubuntu ONLY (not needed on MacOS)
-pip install PyGObject # Ubuntu ONLY (not needed on MacOS)
-pip install pystray
-
-# And finally
-pip install scribe-cli
-```
-
-The language models for local backends `vosk` and `whisper` will download on-the-fly.
-The default download folder is `$XDG_CACHE_HOME/{backend}` where `$XDG_CACHE_HOME` defaults to `$HOME/.cache`.
-
-## Usage
-
-Just type in the terminal:
-
-```bash
-scribe
-```
-and the script will guide you through the choice of backend (`groq`, `openai`, `whisper` or `vosk`) and the specific language model. The first backend whose dependency or API key is present is selected by default, with a preference for the cloud ones.
-After this, you will be prompted to start recording your microphone and print the transcribed text in real-time (`vosk`)
-or until after recording is complete (`whisper`, `openai`, `groq`).
-You can interrupt the recording via Ctrl + C and start again or change model.
-
-### `whisper` (local)
-
-The `whisper` backend runs locally via [`faster-whisper`](https://github.com/SYSTRAN/faster-whisper) and defaults to the `small` model. It is excellent at transcribing full-length audio sequences in [many languages](https://github.com/openai/whisper?tab=readme-ov-file#available-models-and-languages), but it cannot do real-time and the execution time depends on the model and hardware. Larger models (`medium`, `large-v3-turbo`) trade speed for accuracy.
-
-With the `whisper`, `openai`, and `groq` backends the recording continues for 2 minutes until you stop it manually to trigger the transcription (Stop in the app, Ctrl + C in the terminal).
-These parameters can be changed. There is also the possibility to interrupt after a silence is detected. For example `--silence-db -40 --silence 2` interrupts recording when a silence (less than -40 dB recorded) lasts more than 2 seconds. The default `--silence-db -200` / `--silence 120` effectively disables this feature and keeps full manual control.
-
-### `vosk` (local, streaming)
-
-The `vosk` backend is much faster and very good at real-time transcription for one language, but tends to make more mistakes than whisper and it does not produce punctuation.
-It becomes really powerful in longer or interactive typing sessions with the [keyboard](#virtual-keyboard-experimental) option, e.g. to make notes or chat with an AI.
-There are many [vosk models](https://alphacephei.com/vosk/models) available, and a handful are associated to [common languages](scribe/models.toml) `en`, `fr`, `it`, `de` (so far).
-
-### `openai` (OpenAI cloud)
-
-The `openai` backend defaults to `gpt-4o-mini-transcribe` (`whisper-1` is also selectable but deprecated). It requires an API key best passed as an environment variable:
-```bash
-export OPENAI_API_KEY=YOURAPIKEY
-scribe --backend openai
-```
-Lightweight and handy if you have an API key and a low-spec computer (and don't care too much about privacy, obviously).
-
-The OpenAI submenu also includes **`gpt-realtime-whisper`** (select via Model → OpenAI → gpt-realtime-whisper (streaming)). Unlike the batch `openai` backend which transcribes once when you stop recording, `gpt-realtime-whisper` streams partial results live as you speak — identical UX to Vosk but using OpenAI's cloud model. It uses the same `OPENAI_API_KEY` and the `[openai]` extra; no extra dependencies are required. See the model card at https://developers.openai.com/api/docs/models/gpt-realtime-whisper.
-
-### `groq` (Groq cloud)
-
-The `groq` backend talks to Groq's OpenAI-compatible API and uses `whisper-large-v3-turbo`. It is typically the fastest option for full-utterance transcription:
-```bash
-export GROQ_API_KEY=YOURAPIKEY
-scribe --backend groq
-```
-
-## Keyboard mode
-
-Scribe delivers the transcription to your computer in one of three
-mutually-exclusive modes, selected via the `-m / --mode` CLI flag or
-the tray's **Options → Keyboard mode** radio. The same three modes
-are exposed in both places — there is no separate "auto-paste" /
-"keyboard" / "clipboard" set of toggles.
-
-| `--mode` value                | What happens                                                                                                                       |
-|-------------------------------|------------------------------------------------------------------------------------------------------------------------------------|
-| `keystroke` *(default)*       | The transcription lands in the focused window. **Batch backends** (whisper, openai, groq): single Ctrl+V at end of recording. **Streaming backends** (vosk, openai-realtime): each chunk is pasted live as it arrives — "appears as you speak". |
-| `clipboard`                   | Transcription copied to clipboard; you press Ctrl+V yourself.                                                                      |
-| `terminal`                    | No clipboard, no keystroke — transcription is only printed to the terminal.                                                        |
-
-```bash
-scribe                    # keystroke (default)
-scribe --mode clipboard   # clipboard only
-scribe --mode terminal    # terminal only
-scribe -o transcript.txt  # also append to a file (orthogonal to --mode)
-```
-
-The mechanism inside `keystroke` mode (Ctrl+V at end vs paste-per-chunk)
-is auto-picked from the active backend. Switching backend via the Model
-menu re-evaluates the mechanism on the next recording — no need to
-re-pick the radio.
-
-The clipboard is left holding the transcription after scribe finishes — if
-you want to preserve your previous clipboard contents, save them somewhere
-else first.
-
-> **Pasting into a terminal.** Terminals (GNOME Terminal, Kitty, Alacritty,
-> VS Code's integrated terminal, …) don't bind plain `Ctrl+V` to paste —
-> they interpret it as the `^V` control character and bind paste to
-> `Ctrl+Shift+V` instead. Scribe always synthesises `Ctrl+V`, so the
-> simplest workaround when you're dictating *into a terminal* is to **hold
-> Shift physically** at the moment scribe fires the paste: the terminal
-> then sees `Ctrl+Shift+V` and pastes normally. No code change needed —
-> just remember Shift for terminal targets, nothing for GUI apps where
-> plain `Ctrl+V` already works (including VS Code's editor pane).
-
-> **Or: `--type-direct` / Options → Keyboard backend → Type directly.**
-> In keystroke mode this bypasses the clipboard and types the transcription
-> as raw keystrokes — so it lands in any focused input, terminals included,
-> without depending on a paste shortcut. Caveat: keystrokes are synthesised
-> against the **active xkb keyboard layout**, so non-ASCII characters only
-> come through if the current layout actually contains them. A French
-> dictation on a French (or Italian, for shared accents) layout types `é`
-> verbatim; on a US layout the same `é` is silently degraded to `e` via
-> `unidecode` and a warning is logged. Switch your system keyboard layout
-> to one that covers the script you're dictating, or stick to the paste
-> path (plain `Ctrl+V`, or the Shift trick above) for lossless Unicode.
-
-### Output file
-
-An output file can also be indicated:
-
-```bash
-scribe -o transcription.txt
-```
-
-### Keyboard backend (typer)
-
-Whichever mode you pick, the Ctrl+V keystroke (or live per-chunk paste)
-goes through a *typer* backend. Scribe probes the available backends at
-startup and picks the first one that works in the current session.
-Backends that are *structurally incompatible* with your OS / session
-are hidden from the menu entirely — the **Keyboard backend** submenu
-only appears when there is a real choice (≥ 2 compatible backends).
-
-| Backend  | Mechanism                            | Compatible with                                                       |
-|----------|--------------------------------------|-----------------------------------------------------------------------|
-| `eitype` | libei via XDG RemoteDesktop portal   | Linux Wayland (GNOME 45+, KDE Plasma 6.1+, Hyprland)                  |
-| `pynput` | XTest (X11 protocol) / Quartz / WinAPI | macOS, Windows, Linux X11 / XWayland; partial on Wayland (XWayland apps only) |
-| `ydotool`| Kernel `/dev/uinput` daemon          | Linux (needs `input` group or `ydotoold` daemon)                      |
-| `wtype`  | `zwp_virtual_keyboard_v1`            | wlroots-based Wayland compositors (Sway and friends — not GNOME/KDE)  |
-
-Force a specific backend with `--typer eitype` (etc.), or pick it from
-the tray / terminal menu under **Options → Keyboard backend**. The
-selected backend's name is logged at startup so you can tell which path
-your keystrokes are taking.
-
-**Per-OS behaviour summary**:
-
-- **macOS / Windows** → `pynput` is the only compatible backend (Quartz /
-  WinAPI, both native and Unicode-correct). The Keyboard backend
-  submenu is hidden entirely — there is nothing to choose.
-- **Linux X11** → `pynput` (XTest) is the natural choice; `ydotool` also
-  works if you have its daemon set up. `eitype` / `wtype` are not
-  applicable. Submenu appears only if both pynput and ydotool are ready.
-- **Linux Wayland (GNOME / KDE / Hyprland)** → `eitype` recommended;
-  `pynput` available with the *XWayland apps only* caveat; `ydotool` as
-  a universal fallback. The submenu lists exactly those rows and labels
-  pynput accordingly.
-- **Linux Wayland (Sway and friends — wlroots-based)** → `wtype` works
-  without setup; `eitype` not yet (no libei portal there); `pynput` /
-  `ydotool` are the other fallbacks.
-
-#### Ubuntu / Wayland caveats and recommended fix
-
-Ubuntu 24.04+ defaults to GNOME on Wayland. Without extra setup scribe
-falls back to `pynput` → XTest, which lands keystrokes in
-XWayland-hosted apps (most Chromium-based, including VSCode; Electron;
-many GTK apps) but **not** in native Wayland clients (Firefox with
-`MOZ_ENABLE_WAYLAND=1`, recent KDE apps, GNOME Console, etc.). The
-symptom is "scribe says it typed something but nothing appeared".
-
-The clean fix is to install **`eitype`**, a small CLI that speaks
-[libei](https://gitlab.freedesktop.org/libinput/libei) and reaches every
-modern Wayland app through the XDG RemoteDesktop portal. It is not yet
-packaged by Ubuntu, so you install it from source via the Rust
-toolchain:
-
-```bash
-# 1. Install rustup (one-line installer from https://rustup.rs)
-curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
-# follow the prompts, then either restart your shell or:
-source "$HOME/.cargo/env"
-
-# 2. Install eitype
-cargo install --git https://github.com/Adam-D-Lewis/eitype
-```
-
-After installation `eitype` lives in `~/.cargo/bin/`. Scribe will pick
-it up automatically on the next launch (the auto-detected backend is
-printed at startup). The **first** time scribe types via eitype, your
-compositor (GNOME, KDE, Hyprland — whichever you're on) will pop up
-the XDG RemoteDesktop portal dialog asking for permission to "control
-input devices" — accept once and the token is remembered for the
-session.
-
-> **Tip.** If you already have `cargo` installed, just running
-> `scribe-install` once will detect the missing eitype and prompt to
-> `cargo install` it for you. No need to copy the commands above by
-> hand.
-
-If `eitype` is unavailable, two older workarounds also work:
-
-- **Xorg session.** In `/etc/gdm3/custom.conf` uncomment
-  `# WaylandEnable=false` and restart. Everything goes back to working
-  via `pynput` → XTest.
-- **`pynput` uinput backend with root.** Requires `sudo`, the `uinput`
-  kernel module, and a matching keyboard layout (e.g. French/Italian
-  for `é`). With sudo you also need to preserve `HOME` and
-  `XDG_RUNTIME_DIR` so the audio device list and model cache still
-  resolve:
-
-  ```bash
-  sudo modprobe uinput
-  sudo HOME=$HOME XDG_RUNTIME_DIR=$XDG_RUNTIME_DIR \
-       PYNPUT_BACKEND_KEYBOARD=uinput $(which scribe)
-  ```
-
-  This path only matters if you want per-character live typing through
-  pynput's uinput backend specifically. The modern way is `eitype`,
-  which doesn't need any of this.
-
-Roadmap for native libei integration (eventual Python bindings,
-expanded compositor support) is tracked in
-[docs/roadmap-libei.md](docs/roadmap-libei.md).
-
-## System tray icon <img src="https://github.com/perrette/scribe/raw/main/scribe_data/share/icon.png" width=48px>
-
-<img src=https://raw.githubusercontent.com/perrette/scribe/main/docs/app-tray-menu.png width=300px>
-
-Tray mode is the default — running `scribe` with no arguments launches the system tray icon. If you'd rather use the interactive terminal menu, pass `--frontend terminal`:
-```bash
-scribe                       # tray (default)
-scribe --frontend terminal   # interactive TUI
-```
-From inside the TUI menu you can toggle to tray mode at any time. The scribe icon will show, with Record, Cancel (discards an in-flight recording without transcribing) and other options. The icon changes based on what the app is doing. It is possible to choose from a set
-of predefined models (controlled by `--vosk-models` and `--whisper-models`) and options, or to Quit and choose from the terminal before pressing Enter again.
-For the vosk model, there are only two states : recording + transcribing or Idle. For the whisper / openai / groq backends there are three states visible from the icon: recording/waiting, transcribing and idle.
-
-Transcription and API errors are surfaced as a pop-up dialog instead of just
-crashing the tray.
-
-That option requires `pystray` to be installed. This is included with the `pip install ...[all]` option.
-
-The `--vosk-models` and `--whisper-models` allow to predefine the set of available models to choose from in the app menu. E.g.
-```bash
-scribe --vosk-models vosk-model-fr-0.22 --whisper-models small turbo ...
-```
-
-#### Menu structure
-
-Both the tray and terminal frontends share the same menu tree:
-
-```
-Record                          start recording (default tray action)
-Stop / Cancel                   end or discard an in-flight recording
-Model ▶                         per-vendor submenus:
-    OpenAI ▶                      gpt-4o-mini-transcribe, gpt-realtime-whisper (streaming), whisper-1 (deprecated)
-    Groq ▶                        whisper-large-v3-turbo
-    Whisper (local) ▶             models via --whisper-models — 'small (recommended)'
-    Vosk (local, streaming) ▶     models via --vosk-models
-Options ▶
-    Keyboard mode ▶               Clipboard only / Send to focused window /
-                                    Terminal only   (mirrors --mode)
-    Toggle tray app mode          (terminal frontend only)
-    Keyboard backend ▶            eitype / pynput / ydotool / wtype
-                                  (rows incompatible with this OS are hidden;
-                                   submenu hidden entirely when ≤ 1 row left)
-    Advanced ▶                    auto-restart after silence, duration,
-                                    silence threshold, output file
-Quit
-```
-
-#### Global hotkey integration
-
-In tray / app mode scribe writes its PID to a pidfile and listens for two
-signals:
-
-- `SIGUSR1` — toggle recording (same as clicking Record / Stop).
-- `SIGUSR2` — cancel an in-flight recording.
-
-Bind these to keyboard shortcuts in your desktop environment to start /
-stop / cancel scribe from anywhere. The pidfile lives at
-`$XDG_RUNTIME_DIR/scribe.pid` (`/tmp/scribe.pid` if unset):
-
-```bash
-kill -SIGUSR1 $(cat "${XDG_RUNTIME_DIR:-/tmp}/scribe.pid")  # toggle record
-kill -SIGUSR2 $(cat "${XDG_RUNTIME_DIR:-/tmp}/scribe.pid")  # cancel
-```
-
-### Ubuntu
-
-In Ubuntu the following dependencies were required to make the menus appear:
-
-```bash
-sudo apt install libcairo-dev libgirepository1.0-dev gir1.2-appindicator3-0.1
-pip install PyGObject
-```
-
-## Start as an application in GNOME
-
-If you run Ubuntu (or else?) with GNOME, the script `scribe-install [...]` will create a `scribe.desktop` file and place it under `$HOME/.local/share/applications`
-to make it available from the quick launch menu. Any option will be passed on to `scribe`, with the additional options `--name` and `--frontend {tray,terminal}` (default: `tray`).
-
-Consider the following two flavors:
-```bash
-scribe-install --name "Scribe"
-scribe-install --name "Scribe Terminal" --frontend terminal
-```
-The first (default) creates an app named Scribe that runs in tray mode (no terminal window), with the tray icon as the only mode of interaction.
-The second creates an app named Scribe Terminal that opens a terminal window and runs the interactive TUI.
-
-(Keyboard mode defaults to `keystroke` — pass `--mode clipboard` or `--mode terminal` to either invocation if you want a different default for the installed app.)
-
-After writing the desktop file, `scribe-install` checks whether you're
-on a Wayland session without `eitype`. If so:
-
-- If `cargo` is already on your `$PATH`, it asks whether to run
-  `cargo install --git https://github.com/Adam-D-Lewis/eitype` for you
-  (~1–2 min, no `sudo`, writes only to `~/.cargo/bin`).
-- If `cargo` is missing, it prints the rustup + cargo-install recipe so
-  you can run it manually.
-
-`ydotool` is never auto-installed: enabling it grants kernel-level
-input access (via the `input` group or a setuid daemon) and ought to
-be a conscious choice. See its package docs if you need it.
-
-
-## Fine tuning
-
-There are a number of options to control the silence threshold, duration and more.
-Best is to check the available options in the online help:
-
-```bash
-scribe --help
-```
+Initially developed for Python 3 on Ubuntu 24.04 (GNOME + Wayland);
+works on macOS and Windows too. Wayland keystroke injection is
+convoluted but [solved](docs/keyboard.md). For dependencies of
+individual subsystems, check `pynput` (keyboard) and `pystray` (tray
+icon).

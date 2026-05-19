@@ -17,7 +17,7 @@ language_config = language_config_default.copy()
 
 
 def get_default_backend():
-    for name in ("whisper", "groq", "openai", "vosk"):
+    for name in ("groq", "openai", "whisper", "vosk"):
         ok, _ = probe_backend(name)
         if ok:
             return name
@@ -60,7 +60,7 @@ class DummyTranscriber:
 
 whisper_models = ["tiny", "base", "small", "medium", "large-v3", "large-v3-turbo"]
 whisper_english_models = ["tiny.en", "base.en", "small.en", "medium.en"]
-whisperapi_models = ["gpt-4o-transcribe", "gpt-4o-mini-transcribe"]
+whisperapi_models = ["gpt-4o-transcribe", "gpt-4o-mini-transcribe", "gpt-realtime-whisper"]
 vosk_models = [language_config["vosk"][lang]["model"] for lang in language_config["vosk"]]
 
 
