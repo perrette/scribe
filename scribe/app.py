@@ -187,6 +187,12 @@ def get_parser():
                        help="Where transcribed text goes: keystroke (focused window), clipboard, or terminal (default: %(default)s).")
     group.add_argument("--typer", default="auto", type=str,
                        help="Keystroke-injection backend: auto, eitype, pynput, wtype, ydotool (default: %(default)s).")
+    group.add_argument("--type-direct", action="store_true",
+                       help="In keystroke mode, type the transcription as keystrokes instead of "
+                            "synthesising Ctrl+V from the clipboard. Works in terminals where Ctrl+V "
+                            "is the ^V control character. Cost: slower for long text; on wtype/ydotool "
+                            "non-ASCII characters fall back to their ASCII equivalents (eitype is "
+                            "Unicode-correct).")
     group.add_argument("-o", "--output-file",
                        help="Also append the transcription to this file.")
 
@@ -223,13 +229,15 @@ def get_parser():
 
 # Commencer l'enregistrement
 def start_recording(micro, session, mode="keystroke", typer="auto",
-                    output_file=None, callback=None, **greetings):
+                    output_file=None, callback=None, type_direct=False, **greetings):
     """Drive a recording, dispatching the transcript to the destination implied
     by ``mode`` (the same three-way choice the tray exposes as Keyboard mode):
 
       - 'keystroke': land in the focused window. For streaming backends (vosk)
         each chunk is pasted live as it arrives; for batch backends the full
-        text is pasted once at end-of-recording.
+        text is pasted once at end-of-recording. With ``type_direct=True`` the
+        chunks/text are typed as raw keystrokes instead of pasted from the
+        clipboard — useful for terminals where Ctrl+V is the ^V control char.
       - 'clipboard': copy to clipboard, user pastes manually.
       - 'terminal':  no clipboard, no keystroke — text only printed.
     """
@@ -241,13 +249,27 @@ def start_recording(micro, session, mode="keystroke", typer="auto",
     # gpt-realtime-whisper), so a class-level lookup via BACKENDS would lie.
     backend_obj = getattr(session, "backend", session)
     is_streaming = bool(getattr(backend_obj, "supports_streaming", False)) if not isinstance(backend_obj, str) else False
-    do_clipboard = mode != "terminal"
-    do_live_paste = (mode == "keystroke") and is_streaming
-    do_paste_at_end = (mode == "keystroke") and not is_streaming
+    # Clipboard is written in clipboard mode (the user pastes manually) and in
+    # paste-based keystroke mode (the paste source). type_direct keystroke
+    # mode bypasses the clipboard entirely — we type the chunks/text raw.
+    do_clipboard = mode == "clipboard" or (mode == "keystroke" and not type_direct)
+    do_live_paste = (mode == "keystroke") and is_streaming and not type_direct
+    do_paste_at_end = (mode == "keystroke") and not is_streaming and not type_direct
+    do_live_type = (mode == "keystroke") and is_streaming and type_direct
+    do_type_at_end = (mode == "keystroke") and not is_streaming and type_direct
+
+    if do_live_type or do_type_at_end:
+        from scribe.typers import pick_typer
+        _typer_obj = pick_typer(typer if typer != "auto" else None)
+    else:
+        _typer_obj = None
 
     if do_live_paste:
         from scribe.keyboard import paste_via_clipboard
         session.log("Live paste-per-chunk: each chunk lands in the focused window as it arrives.")
+    elif do_live_type:
+        assert _typer_obj is not None
+        session.log(f"Live type-per-chunk via {_typer_obj.name}: each chunk is typed directly as it arrives.")
 
     if do_clipboard:
         import pyperclip
@@ -278,6 +300,9 @@ def start_recording(micro, session, mode="keystroke", typer="auto",
                 # same keystroke regardless of layout).
                 paste_via_clipboard(chunk_text, typer=typer,
                                      verify_iters=2, sleep_s=0.05)
+            elif do_live_type:
+                assert _typer_obj is not None
+                _typer_obj.type(chunk_text)
             elif do_clipboard:
                 pyperclip.copy(fulltext.strip())
 
@@ -291,6 +316,9 @@ def start_recording(micro, session, mode="keystroke", typer="auto",
         # on Wayland — paste_via_clipboard force-writes the final text and
         # polls until the clipboard reflects it before triggering Ctrl+V.
         paste_via_clipboard(fulltext.strip(), typer=typer)
+    elif do_type_at_end and fulltext.strip():
+        assert _typer_obj is not None
+        _typer_obj.type(fulltext.strip())
 
     if callback:
         callback()
@@ -442,6 +470,7 @@ def main(args=None):
             greetings = dict(start_message="Listening... Press Ctrl+C to stop.")
             start_recording(micro, state.session if state.session is not None else state.transcriber,
                             mode=o.mode, typer=o.typer, output_file=o.output_file,
+                            type_direct=getattr(o, "type_direct", False),
                             **greetings)
 
         o.prompt = True

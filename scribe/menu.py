@@ -235,6 +235,7 @@ class AppState(AbstractFrontendApp):
                     mode=getattr(o, "mode", "keystroke"),
                     typer=getattr(o, "typer", "auto"),
                     output_file=getattr(o, "output_file", None),
+                    type_direct=getattr(o, "type_direct", False),
                     start_message="Listening... Use the tray icon menu to stop.",
                 )
             except Exception as exc:
@@ -410,6 +411,13 @@ class AppState(AbstractFrontendApp):
             return True
         return _cb
 
+    def cb_toggle_type_direct(self, view, item):
+        new = not bool(getattr(self.o, "type_direct", False))
+        self.o.type_direct = new
+        self.params["type_direct"] = new
+        self._refresh_tray_menu()
+        return True
+
     def current_model_label(self) -> str:
         if self.transcriber is None:
             return ""
@@ -558,7 +566,11 @@ def _typer_menu(app_state) -> Menu:
     """Radio submenu listing the keystroke-injection backends compatible with
     the current OS. Incompatible backends are hidden entirely; compatible-but-
     unset-up backends are shown disabled with a hint. 'Auto' is resolved at
-    startup in scribe.app.main, so ``o.typer`` is already a concrete name."""
+    startup in scribe.app.main, so ``o.typer`` is already a concrete name.
+
+    Also exposes a ``Type directly`` checkbox: when on, keystroke mode types
+    the transcription raw instead of synthesising Ctrl+V — needed in terminals
+    where Ctrl+V is the ^V control character."""
     items = []
     for name, instance in _compatible_typers():
         try:
@@ -583,6 +595,13 @@ def _typer_menu(app_state) -> Menu:
         item.radio = True
         item.enabled = available
         items.append(item)
+
+    items.append(Item(
+        "type-direct",
+        app_state.cb_toggle_type_direct,
+        help="Type directly (no Ctrl+V)",
+        checked=lambda item: bool(getattr(app_state.o, "type_direct", False)),
+    ))
 
     return Menu(items, name="Keyboard backend")
 
@@ -619,11 +638,12 @@ def _toggle_options_menu(app_state) -> Menu:
         Item("x", app_state.cb_toggle_frontend, help="Toggle tray app mode",
              checked=lambda item: getattr(app_state.o, "frontend", None) == "tray",
              visible=is_terminal),
-        # Only show the Keyboard backend submenu when there is a real choice
-        # — when only one (or zero) backend is compatible with this OS, the
-        # submenu has nothing to pick from and just adds noise.
+        # The Keyboard backend submenu always carries the "Type directly"
+        # checkbox, so it's worth showing even when only one typer is
+        # compatible (macOS, Windows — pynput only). Hide only if no typer
+        # is compatible at all (unlikely).
         *([Item("backend", _typer_menu(app_state), help="Keyboard backend")]
-          if len(_compatible_typers()) > 1 else []),
+          if len(_compatible_typers()) >= 1 else []),
         Item("advanced", _advanced_options_menu(app_state), help="Advanced"),
     ]
     return Menu(items, name="Options")
