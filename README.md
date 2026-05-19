@@ -211,6 +211,22 @@ the tray / terminal menu under **Options → Keyboard backend**. The
 selected backend's name is logged at startup so you can tell which path
 your keystrokes are taking.
 
+**Per-OS behaviour summary**:
+
+- **macOS / Windows** → `pynput` is the only compatible backend (Quartz /
+  WinAPI, both native and Unicode-correct). The Keyboard backend
+  submenu is hidden entirely — there is nothing to choose.
+- **Linux X11** → `pynput` (XTest) is the natural choice; `ydotool` also
+  works if you have its daemon set up. `eitype` / `wtype` are not
+  applicable. Submenu appears only if both pynput and ydotool are ready.
+- **Linux Wayland (GNOME / KDE / Hyprland)** → `eitype` recommended;
+  `pynput` available with the *XWayland apps only* caveat; `ydotool` as
+  a universal fallback. The submenu lists exactly those rows and labels
+  pynput accordingly.
+- **Linux Wayland (Sway and friends — wlroots-based)** → `wtype` works
+  without setup; `eitype` not yet (no libei portal there); `pynput` /
+  `ydotool` are the other fallbacks.
+
 #### Ubuntu / Wayland caveats and recommended fix
 
 Ubuntu 24.04+ defaults to GNOME on Wayland. Without extra setup scribe
@@ -238,9 +254,16 @@ cargo install --git https://github.com/Adam-D-Lewis/eitype
 
 After installation `eitype` lives in `~/.cargo/bin/`. Scribe will pick
 it up automatically on the next launch (the auto-detected backend is
-printed at startup). The **first** time scribe types via eitype, GNOME
-will pop up a portal dialog asking for permission to "control input
-devices" — accept once and it will remember for the session.
+printed at startup). The **first** time scribe types via eitype, your
+compositor (GNOME, KDE, Hyprland — whichever you're on) will pop up
+the XDG RemoteDesktop portal dialog asking for permission to "control
+input devices" — accept once and the token is remembered for the
+session.
+
+> **Tip.** If you already have `cargo` installed, just running
+> `scribe-install` once will detect the missing eitype and prompt to
+> `cargo install` it for you. No need to copy the commands above by
+> hand.
 
 If `eitype` is unavailable, two older workarounds also work:
 
@@ -351,6 +374,19 @@ The first (default) creates an app named Scribe that runs in tray mode (no termi
 The second creates an app named Scribe Terminal that opens a terminal window and runs the interactive TUI.
 
 (Clipboard + auto-paste is on by default; pass `--no-auto-paste` or `--no-clipboard` to either invocation if you want the older behavior.)
+
+After writing the desktop file, `scribe-install` checks whether you're
+on a Wayland session without `eitype`. If so:
+
+- If `cargo` is already on your `$PATH`, it asks whether to run
+  `cargo install --git https://github.com/Adam-D-Lewis/eitype` for you
+  (~1–2 min, no `sudo`, writes only to `~/.cargo/bin`).
+- If `cargo` is missing, it prints the rustup + cargo-install recipe so
+  you can run it manually.
+
+`ydotool` is never auto-installed: enabling it grants kernel-level
+input access (via the `input` group or a setuid daemon) and ought to
+be a conscious choice. See its package docs if you need it.
 
 
 ## Fine tuning
