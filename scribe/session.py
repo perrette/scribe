@@ -1,5 +1,6 @@
 import time
 
+from desktop_ai_core.providers import StreamingSTTBackend
 from scribe.models import SilenceDetected, StopRecording
 
 
@@ -78,6 +79,10 @@ class RecordingSession:
         else:
             self.last_sound_time = time.time()
 
+        streaming = isinstance(self.backend, StreamingSTTBackend)
+        if streaming:
+            self.backend.open_session(self)
+
         try:
 
             with microphone.open_stream():
@@ -89,7 +94,10 @@ class RecordingSession:
 
                         # leave it to each transcriber to handle the silence in audio data
                         try:
-                            yield self.backend.transcribe_realtime_audio(data)
+                            if streaming:
+                                yield from self.backend.feed_audio(data)
+                            else:
+                                yield self.backend.transcribe_realtime_audio(data)
 
                         # This exception triggers a pause in recording to allow for a transcription of the audio buffer
                         except SilenceDetected as e:
@@ -129,6 +137,11 @@ class RecordingSession:
                     result = {"text": ""}
                     self.reset()
                 microphone.q.queue.clear()
+            if streaming:
+                try:
+                    self.backend.close_session()
+                except Exception as exc:
+                    self.log(f"close_session failed: {exc!r}")
             # Yield before clearing busy so the consumer can finish writing to
             # clipboard / keyboard / file while the icon still shows "busy".
             yield result

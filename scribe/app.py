@@ -242,7 +242,7 @@ def start_recording(micro, session, mode="keystroke", typer="auto",
         raise ValueError(f"Unknown mode {mode!r} (expected keystroke|clipboard|terminal)")
 
     backend_name = _backend_name_of(session)
-    is_streaming = backend_name == "vosk"
+    is_streaming = bool(getattr(BACKENDS.get(backend_name), "supports_streaming", False))
     do_clipboard = mode != "terminal"
     do_live_paste = (mode == "keystroke") and is_streaming
     do_paste_at_end = (mode == "keystroke") and not is_streaming
