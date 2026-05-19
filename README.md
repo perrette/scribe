@@ -30,7 +30,7 @@ Basically check the pages of the dependencies for more info (i.e. pynput for the
 - Ubuntu:
     - see caveats in the use of the keyboard under Wayland [keyboard section](#use-the-keyboard-with-wayland).
 - MacOS:
-    - tested on a Macbook Air M1 8Gb RAM, with python 3.12. It runs, but poorly, presumably because of the low memory: prefer a remote backend (`groq` or `openai`) for such machines
+    - tested on a Macbook Air M1 8Gb RAM, with python 3.12. It runs, but poorly, presumably because of the low memory: prefer a cloud backend (`groq` or `openai`) for such machines
     - I expect better memory specs will have the local models run fine
 - Windows:
     - not tested yet
