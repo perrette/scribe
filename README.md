@@ -21,29 +21,54 @@ cloud-based APIs, batch and streaming workflows.
 - Cross-platform: tested on Ubuntu (X11 and Wayland), macOS, Windows;
   works under Termux for clipboard / terminal output.
 
-## Getting started
+## Install
 
 ```bash
 sudo apt-get install portaudio19-dev xclip   # Ubuntu; macOS: brew install portaudio
 pip install scribe-cli[all]
 export GROQ_API_KEY=YOURAPIKEY                # or OPENAI_API_KEY, or skip and run local
-scribe
 ```
-
-Scribe picks the first backend whose key / dependency is present, in
-order **`groq` → `openai` → `whisper` → `vosk`**, and launches the
-tray icon. Press Record, speak, press Stop.
 
 See documentation below for setting up keyboard input on Ubuntu Wayland.
 
-### Getting an API key
 
-Groq is a good cloud backend to start with — very fast, quite accurate, and the
-**free tier** is generous enough for everyday dictation. Sign up at
-[console.groq.com](https://console.groq.com/), create an API key
-under **Settings → API Keys**, and export it as `GROQ_API_KEY`.
+## Usage
 
-I personally use [OpenAI](https://openai.com/api/) with `gpt-4o-mini-transcribe` as it is also fast and perhaps more accurate for my accent-tainted English.
+In a terminal:
+
+```bash
+scribe
+```
+
+This launches the system tray icon. Press Record, speak, press Stop —
+the transcription lands in the focused window. Scribe picks the first
+backend whose key / dependency is present, in order **`groq` →
+`openai` → `whisper` → `vosk`**, so with `GROQ_API_KEY` set the
+command above is equivalent to:
+
+```bash
+scribe --backend groq --model whisper-large-v3-turbo
+```
+
+<img src=https://raw.githubusercontent.com/perrette/scribe/main/docs/app-tray-menu.png width=300px>
+
+You can override the defaults or drop the tray entirely:
+
+```bash
+scribe --backend openai --model gpt-4o-mini-transcribe # OpenAI sweet spot
+scribe --backend openai --model gpt-realtime-whisper   # OpenAI streaming
+scribe --backend whisper --model small                 # local, no API key
+scribe --frontend terminal                             # interactive TUI menu
+scribe --frontend terminal --no-prompt                 # record immediately, no menu
+scribe --mode clipboard                                # copy to clipboard, no keystroke
+scribe --mode terminal                                 # only print to stdout
+scribe -o transcript.txt                               # also append to a file
+```
+
+With `--no-prompt` (terminal frontend only), scribe skips the interactive
+menu and starts recording right away — handy for scripted, one-shot
+transcriptions.
+
 
 ## Backends at a glance
 
@@ -57,6 +82,17 @@ I personally use [OpenAI](https://openai.com/api/) with `gpt-4o-mini-transcribe`
 Whether a transcription appears live as you speak or all at once when
 you stop depends on the **model** picked — see
 [docs/backends.md](docs/backends.md).
+
+
+### Getting an API key
+
+Groq is a good cloud backend to start with — very fast, quite accurate, and the
+**free tier** is generous enough for everyday dictation. Sign up at
+[console.groq.com](https://console.groq.com/), create an API key
+under **Settings → API Keys**, and export it as `GROQ_API_KEY`.
+
+I personally use [OpenAI](https://openai.com/api/) with `gpt-4o-mini-transcribe` as it is also fast and perhaps more accurate for my accent-tainted English.
+
 
 ## Documentation
 
