@@ -143,6 +143,11 @@ class OpenaiRealtimeTranscriber(AbstractStreamingTranscriber):
         self._delta_buffer = ""
         self._last_delta_flush = time.time()
 
+        # Start each recording with a clean gate so leftover state from a
+        # prior session (silero `_in_speech=True`, stale pre-roll buffer)
+        # doesn't leak into the new turn.
+        self.silence_gate.reset()
+
         self._client = openai.OpenAI()
 
         # GA flow: POST /v1/realtime/client_secrets to validate config (the
@@ -264,10 +269,15 @@ class OpenaiRealtimeTranscriber(AbstractStreamingTranscriber):
                 chunk, in_utterance=self._has_uncommitted_audio,
             )
 
-            # Send unless the gate is on and the chunk is silent.
+            # Send unless the gate is on and the chunk is silent. On a
+            # silent → speech transition the gate hands us up to ~300 ms
+            # of trailing pre-roll audio; prepending it recovers the
+            # phoneme onset that would otherwise be dropped on the floor
+            # while silero waits to confirm speech.
             if not (chunk_is_silent and self._gate_enabled):
+                pre_roll = self.silence_gate.consume_pre_roll()
                 try:
-                    payload = self._upsample_to_ga(chunk)
+                    payload = self._upsample_to_ga(pre_roll + chunk)
                     if payload:
                         self._connection.input_audio_buffer.append(
                             audio=base64.b64encode(payload).decode("ascii"),

@@ -86,13 +86,55 @@ class SilenceGate:
     by silero (which handles onset/offset hysteresis natively). The shared
     surface exists so the two call sites in models.py and openai_realtime.py
     can switch modes uniformly; a real unification waits on field experience.
+
+    Pre-roll: the base class keeps a small ring buffer of recent audio so
+    streaming backends that drop silent chunks (e.g. openai_realtime) can
+    recover the last ~300 ms of about-to-be-speech audio on a silent→speech
+    transition. Pseudo-streaming backends carry their own silence_buffer
+    and just ignore `consume_pre_roll()`. Subclasses override `_decide`
+    instead of `is_silent` so the buffering happens uniformly here.
     """
 
+    def __init__(self, *, samplerate: int = 16000, pre_roll_ms: int = 300):
+        self._pre_roll_max_bytes = int(pre_roll_ms / 1000 * samplerate) * 2
+        self._pre_roll_buffer = b""
+        self._pending_pre_roll = b""
+        self._prev_silent = True
+
     def is_silent(self, audio_bytes: bytes, *, in_utterance: bool) -> bool:
+        silent = self._decide(audio_bytes, in_utterance=in_utterance)
+        if self._pre_roll_max_bytes > 0:
+            # Snapshot the ring buffer BEFORE appending the current chunk,
+            # so consume_pre_roll() returns the *prior* silent audio that
+            # callers can prepend to `audio_bytes`. Including audio_bytes
+            # would double-send the chunk that triggered the transition.
+            if self._prev_silent and not silent:
+                self._pending_pre_roll = self._pre_roll_buffer
+            self._pre_roll_buffer += audio_bytes
+            if len(self._pre_roll_buffer) > self._pre_roll_max_bytes:
+                self._pre_roll_buffer = self._pre_roll_buffer[-self._pre_roll_max_bytes:]
+        self._prev_silent = silent
+        return silent
+
+    def consume_pre_roll(self) -> bytes:
+        """Pop the pre-roll bytes captured on the most recent silent →
+        speech transition, or empty bytes when none is pending. One-shot:
+        a second call returns empty until the next transition fires.
+
+        Streaming backends that gate silence (openai_realtime) prepend
+        this to the speech chunk so the first phoneme isn't clipped while
+        silero confirms the onset.
+        """
+        buf, self._pending_pre_roll = self._pending_pre_roll, b""
+        return buf
+
+    def _decide(self, audio_bytes: bytes, *, in_utterance: bool) -> bool:
         raise NotImplementedError
 
     def reset(self) -> None:
-        pass
+        self._pre_roll_buffer = b""
+        self._pending_pre_roll = b""
+        self._prev_silent = True
 
 
 class DbSilenceGate(SilenceGate):
@@ -108,10 +150,12 @@ class DbSilenceGate(SilenceGate):
     for dB's noise-rejection limits; silero replaces it properly.
     """
 
-    def __init__(self, silence_thresh: float = -40.0):
+    def __init__(self, silence_thresh: float = -40.0, *,
+                 samplerate: int = 16000, pre_roll_ms: int = 300):
+        super().__init__(samplerate=samplerate, pre_roll_ms=pre_roll_ms)
         self.silence_thresh = silence_thresh
 
-    def is_silent(self, audio_bytes, *, in_utterance):
+    def _decide(self, audio_bytes, *, in_utterance):
         return calculate_decibels(audio_bytes) < self.silence_thresh
 
 
@@ -258,11 +302,13 @@ class SileroSilenceGate(SilenceGate):
     _WINDOW_SAMPLES = 512  # silero v5 requirement at 16 kHz
 
     def __init__(self, *, sampling_rate: int = 16000, threshold: float = 0.5,
-                 min_silence_ms: int = 300, speech_pad_ms: int = 30):
+                 min_silence_ms: int = 300, speech_pad_ms: int = 30,
+                 pre_roll_ms: int = 300):
         if sampling_rate != 16000:
             raise ValueError(
                 f"SileroSilenceGate requires sampling_rate=16000 (got {sampling_rate})"
             )
+        super().__init__(samplerate=sampling_rate, pre_roll_ms=pre_roll_ms)
         try:
             import onnxruntime  # noqa: F401
         except ImportError as exc:
@@ -287,7 +333,7 @@ class SileroSilenceGate(SilenceGate):
         self._buf: np.ndarray = np.zeros(0, dtype=np.int16)
         self._in_speech = False
 
-    def is_silent(self, audio_bytes, *, in_utterance):
+    def _decide(self, audio_bytes, *, in_utterance):
         if audio_bytes:
             samples = np.frombuffer(audio_bytes, dtype=np.int16)
             self._buf = np.concatenate([self._buf, samples])
@@ -304,6 +350,7 @@ class SileroSilenceGate(SilenceGate):
         return not self._in_speech
 
     def reset(self):
+        super().reset()
         self._iterator.reset_states()
         self._buf = np.zeros(0, dtype=np.int16)
         self._in_speech = False
