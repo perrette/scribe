@@ -458,6 +458,16 @@ def start_recording(micro, session, mode="keystroke", typer="auto",
         import pyperclip
         session.log("The transcription will be copied to clipboard as it becomes available.")
 
+    # Tell streaming backends whether their output is about to hit the
+    # clipboard-paste race or a direct-keystroke typer. The realtime
+    # backend's per-token deltas only need coalescing in paste mode;
+    # type-direct (ydotool/wtype/pynput via uinput/xtest) types each
+    # character synchronously and benefits from raw per-delta emission
+    # for snappier UX. Set as a plain attribute — backends that don't
+    # implement coalescing ignore it.
+    if not isinstance(backend_obj, str) and hasattr(backend_obj, "_coalesce_deltas"):
+        backend_obj._coalesce_deltas = do_live_paste
+
     fulltext = ""
 
     for result in session.start_recording(micro, **greetings):

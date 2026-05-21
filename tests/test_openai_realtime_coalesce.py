@@ -180,3 +180,42 @@ def test_finalize_returns_empty_when_closed(tr):
     tr._closed = True
     tr._delta_buffer = " should not leak"
     assert tr.finalize() == {"text": ""}
+
+
+# Bypass mode (type-direct / ydotool): no clipboard race exists, the app
+# wants per-delta yields so each token hits the typer immediately.
+
+def test_bypass_mode_yields_each_delta_raw(tr):
+    tr._coalesce_deltas = False
+    push_delta(tr, " hello")
+    push_delta(tr, " world")
+    push_delta(tr, ".")
+    out = drain(tr)
+    assert out == [{"text": " hello"}, {"text": " world"}, {"text": "."}]
+    # Nothing accumulated in the coalescing buffer.
+    assert tr._delta_buffer == ""
+
+
+def test_bypass_mode_does_not_set_flush_clock(tr):
+    tr._coalesce_deltas = False
+    before = tr._last_delta_flush
+    push_delta(tr, " hello.")
+    drain(tr)
+    # No flush event happened — the clock anchor stays put.
+    assert tr._last_delta_flush == before
+
+
+def test_bypass_mode_still_surfaces_errors(tr):
+    tr._coalesce_deltas = False
+    tr._event_queue.put({"_error": ("Realtime error", "boom")})
+    push_delta(tr, " text")
+    out = drain(tr)
+    assert out == [{"text": " text"}]
+    assert tr.session.errors == [("Realtime error", "boom")]
+
+
+def test_default_mode_is_coalesce_on(tr):
+    # Sanity: the constructor defaults to coalescing-on so backends
+    # used outside the scribe app loop (smoke tests, library use) get
+    # the safer batched behaviour.
+    assert tr._coalesce_deltas is True

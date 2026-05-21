@@ -90,7 +90,14 @@ class OpenaiRealtimeTranscriber(AbstractStreamingTranscriber):
         self._has_uncommitted_audio = False
         self._silent_samples = 0
         self._uncommitted_ms = 0.0
-        # Delta coalescing state (see _DELTA_FLUSH_INTERVAL_S).
+        # Delta coalescing state (see _DELTA_FLUSH_INTERVAL_S). The flag
+        # below is set by the app layer at recording time: True when
+        # live-paste-via-clipboard is the output (clipboard race exists
+        # → coalesce); False in type-direct mode (uinput/xtest tap each
+        # character — no clipboard, no race, no need to batch). Default
+        # True so backends instantiated outside the scribe app loop
+        # (smoke tests, library use) keep the safer batched behaviour.
+        self._coalesce_deltas = True
         self._delta_buffer = ""
         self._last_delta_flush = 0.0
 
@@ -285,9 +292,9 @@ class OpenaiRealtimeTranscriber(AbstractStreamingTranscriber):
             else:
                 self._silent_samples = 0
 
-        # Drain queue into the coalescing buffer (text) or surface errors
-        # immediately. Don't yield text deltas raw — see
-        # _DELTA_FLUSH_INTERVAL_S for the rationale.
+        # Drain queue. Errors surface immediately in both modes. Text
+        # deltas either get buffered for coalesced flush (paste mode)
+        # or yielded raw (type-direct mode — see _coalesce_deltas).
         while True:
             try:
                 item = self._event_queue.get_nowait()
@@ -298,8 +305,12 @@ class OpenaiRealtimeTranscriber(AbstractStreamingTranscriber):
                 self.notify_error(title, message)
                 continue
             text = item.get("text", "")
-            if text:
+            if not text:
+                continue
+            if self._coalesce_deltas:
                 self._delta_buffer += text
+            else:
+                yield {"text": text}
 
         # Flush the coalesced buffer when both:
         #   (a) the floor _DELTA_FLUSH_MIN_INTERVAL_S has elapsed since
@@ -307,6 +318,7 @@ class OpenaiRealtimeTranscriber(AbstractStreamingTranscriber):
         #       window, regardless of trigger; and
         #   (b) either the regular interval elapsed, or the buffer ends
         #       on sentence-final punctuation (natural commit boundary).
+        # In raw-delta mode the buffer stays empty so this is a no-op.
         if self._delta_buffer:
             now = time.time()
             elapsed = now - self._last_delta_flush
