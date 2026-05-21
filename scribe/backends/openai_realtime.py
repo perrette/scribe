@@ -40,11 +40,22 @@ class OpenaiRealtimeTranscriber(AbstractStreamingTranscriber):
     # apart). The live-paste path (paste_via_clipboard) needs ~100 ms
     # per call to defeat Wayland's wl-copy async race — pasting every
     # delta caused token drops + duplications because the clipboard got
-    # overwritten before Ctrl+V landed. Buffer deltas and emit when
-    # either: the interval elapses, OR the buffer ends on
-    # sentence-final punctuation (natural commit boundary). 250 ms is
-    # well above the clipboard race window and still feels live.
-    _DELTA_FLUSH_INTERVAL_S = 0.25
+    # overwritten before Ctrl+V landed.
+    #
+    # _INTERVAL: regular cadence for in-progress sentences (no punct
+    # yet). Long enough that most short sentences finish before it fires
+    # — that way the natural commit point is the period, not a mid-
+    # sentence timeout (which would split a phrase across two pastes and
+    # race them through the clipboard).
+    #
+    # _MIN_INTERVAL: floor between successive flushes regardless of
+    # trigger. Even when the buffer ends on a period, we hold the flush
+    # until the floor has elapsed since the prior one. Two punctuation
+    # flushes <200ms apart was the residual failure mode that mangled
+    # rapid repeated phrases ("Tout rentre dans l'ordre. Tout rentre
+    # dans l'ordre.") even after the initial coalescing landed.
+    _DELTA_FLUSH_INTERVAL_S = 0.4
+    _DELTA_FLUSH_MIN_INTERVAL_S = 0.2
     _DELTA_FLUSH_PUNCT = frozenset(".!?\n")
 
     def __init__(self, model_name="gpt-realtime-whisper", language=None, model_kwargs={},
@@ -290,15 +301,19 @@ class OpenaiRealtimeTranscriber(AbstractStreamingTranscriber):
             if text:
                 self._delta_buffer += text
 
-        # Flush the coalesced buffer when either the interval elapsed or
-        # we hit a sentence-final character. Trailing punctuation is a
-        # natural commit boundary, so emitting at that moment keeps the
-        # paste-per-chunk UX feeling live without racing the clipboard.
+        # Flush the coalesced buffer when both:
+        #   (a) the floor _DELTA_FLUSH_MIN_INTERVAL_S has elapsed since
+        #       the last flush — no two pastes within the clipboard race
+        #       window, regardless of trigger; and
+        #   (b) either the regular interval elapsed, or the buffer ends
+        #       on sentence-final punctuation (natural commit boundary).
         if self._delta_buffer:
             now = time.time()
             elapsed = now - self._last_delta_flush
             ends_on_punct = self._delta_buffer[-1] in self._DELTA_FLUSH_PUNCT
-            if elapsed >= self._DELTA_FLUSH_INTERVAL_S or ends_on_punct:
+            if elapsed >= self._DELTA_FLUSH_MIN_INTERVAL_S and (
+                elapsed >= self._DELTA_FLUSH_INTERVAL_S or ends_on_punct
+            ):
                 yield {"text": self._delta_buffer}
                 self._delta_buffer = ""
                 self._last_delta_flush = now

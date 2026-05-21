@@ -36,8 +36,12 @@ def tr():
     backend = OpenaiRealtimeTranscriber(model_name="gpt-realtime-whisper",
                                         model=object())
     backend.session = FakeSession()
-    # Anchor the flush clock so each test starts from a known baseline.
-    backend._last_delta_flush = time.time()
+    # Backdate the flush clock past _DELTA_FLUSH_MIN_INTERVAL_S so the
+    # floor doesn't block punctuation-triggered tests. The
+    # explicit-floor tests reset the clock themselves.
+    backend._last_delta_flush = (time.time()
+                                 - backend._DELTA_FLUSH_MIN_INTERVAL_S
+                                 - 0.05)
     return backend
 
 
@@ -111,6 +115,32 @@ def test_flush_resets_the_interval_clock(tr):
     push_delta(tr, " second")
     assert drain(tr) == []
     assert tr._last_delta_flush == after_first
+
+
+def test_floor_blocks_back_to_back_punctuation_flushes(tr):
+    # Two sentences arrive in quick succession. The first flushes
+    # immediately on its period. The second should be HELD until the
+    # floor has elapsed, otherwise its paste would race the first
+    # through the clipboard.
+    push_delta(tr, " one.")
+    out = drain(tr)
+    assert out == [{"text": " one."}]
+    # Right after the flush: even a punctuation-terminated buffer
+    # cannot trigger a second flush yet.
+    push_delta(tr, " two.")
+    assert drain(tr) == []
+    assert tr._delta_buffer == " two."
+
+
+def test_floor_releases_punctuation_flush_after_min_interval(tr):
+    push_delta(tr, " one.")
+    drain(tr)
+    # Backdate the flush clock past the floor; the buffered ".-ending"
+    # text now becomes eligible.
+    tr._last_delta_flush = time.time() - tr._DELTA_FLUSH_MIN_INTERVAL_S - 0.01
+    push_delta(tr, " two.")
+    out = drain(tr)
+    assert out == [{"text": " two."}]
 
 
 def test_error_events_bypass_buffer_and_surface_immediately(tr):
