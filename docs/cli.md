@@ -65,20 +65,39 @@ flag suppresses only its own side (giving `--prompt ""` still loads
 | `--type-direct`             | In keystroke mode, type the transcription as keystrokes instead of synthesising Ctrl+V.     |
 | `-o, --output-file FILE`    | Also append the transcription to this file.                                                 |
 
-## Silence detection (shared)
+## Silence detection
 
 | Flag                       | Default | Purpose                                                                |
 |----------------------------|---------|------------------------------------------------------------------------|
 | `--duration SECS`          | `120`   | Max recording duration in seconds.                                     |
-| `--silence-db DB`          | `-40`   | dBFS volume floor for "this frame is silent". Used by every silence-driven behavior. |
 | `--silence-duration SECS`  | `0.6`   | How long silence must persist before triggering a backend's silence behavior (realtime auto-commit, pseudo-streaming cut). |
+
+## Voice activity detection
+
+scribe ships two silence-detection backends. By default
+(`--vad-mode auto`) it picks **silero-vad** when `onnxruntime` is
+importable (always true on a stock `pip install scribe-cli` since
+`onnxruntime` is a base dependency) and falls back to a plain dB
+volume threshold otherwise. silero is much more robust to ambient
+noise (clicks, fan, traffic) and to soft speech than dB, which drops
+sub-threshold syllables and gets fooled by loud non-speech.
+
+The dB and silero parameter groups are independent — the inactive
+mode's knobs are ignored.
+
+| Flag                          | Default | Purpose                                                                |
+|-------------------------------|---------|------------------------------------------------------------------------|
+| `--vad-mode {auto,db,silero}` | `auto`  | Silence-detection backend. `auto` picks silero when available, dB otherwise. |
+| `--vad-threshold FLOAT`       | `0.5`   | **[silero only]** Speech-probability threshold in `[0,1]`. Lower = more permissive (catches quiet speech and more noise); higher = stricter. |
+| `--vad-min-silence-ms INT`    | `300`   | **[silero only]** Minimum sustained low-probability span before speech-end fires, in ms. silero's onset/offset smoothing window. |
+| `--silence-db DB`             | `-40`   | **[dB only]** dBFS volume floor for "this frame is silent". Ignored when silero is the active mode. |
 
 ## Realtime (`gpt-realtime-whisper`)
 
 | Flag                                              | Default  | Purpose                                                                                                                                                                                  |
 |---------------------------------------------------|----------|------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | `--realtime-delay {minimal,low,medium,high,xhigh}` | `medium` | Trade off latency vs accuracy on `gpt-realtime-whisper`. Lower = faster partials but more paste churn in the focused window.                                                             |
-| `--realtime-gate` / `--no-realtime-gate`          | on       | Drop silent frames (per `--silence-db`) before sending them over the WebSocket so silent audio isn't billed as input tokens. After `--silence-duration` of silence, also commit mid-session so trailing words flush live. |
+| `--realtime-gate` / `--no-realtime-gate`          | on       | Drop silent frames (per the active `--vad-mode`) before sending them over the WebSocket so silent audio isn't billed as input tokens. After `--silence-duration` of silence, also commit mid-session so trailing words flush live. |
 
 Streaming models (Vosk, `gpt-realtime-whisper`) ignore the batch
 silence-chunking knobs; they have their own end-of-utterance signal.

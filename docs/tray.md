@@ -58,10 +58,15 @@ Options ▶
     Keyboard backend ▶            eitype / pynput / ydotool / wtype
                                   (rows incompatible with this OS are hidden;
                                    submenu hidden entirely when ≤ 1 row left)
-    Advanced ▶                    silence duration, silence threshold,
-                                    realtime gate, pseudo-streaming
-                                    [experimental], streaming window
-                                    [experimental], output file
+    Advanced ▶                    silence duration, VAD mode toggle
+                                    (silero ↔ dB), per-mode VAD knobs
+                                    (silero: speech-probability threshold,
+                                    min silence duration; dB: silence
+                                    threshold — only the active mode's
+                                    knobs are shown), realtime gate,
+                                    pseudo-streaming [experimental],
+                                    streaming window [experimental],
+                                    output file
 Quit
 ```
 

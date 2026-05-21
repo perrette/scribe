@@ -225,8 +225,8 @@ Whisper's prompt window is capped at ~224 tokens; 200 chars of French
 sits well under that and leaves room for your static prompt + words
 list.
 
-The rolling tail is **dropped** whenever the pause that triggered the
-chunk cut exceeded 1.5 seconds — a long pause is treated as a new
+The rolling tail is **dropped** when the silence between two
+utterances exceeds 1.5 seconds — a long pause is treated as a new
 sentence/idea boundary, where carrying a possibly-bad prior chunk
 forward biases the next one more than it helps. This mirrors
 `whisper.cpp`'s `--keep-context off` default: prior-text conditioning
