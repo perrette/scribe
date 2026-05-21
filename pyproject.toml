@@ -20,6 +20,7 @@ dependencies = [
     "pyperclip",
     "unidecode",
     "termcolor",
+    "platformdirs",
     "desktop-ai-core>=0.2.0",
 ]
 

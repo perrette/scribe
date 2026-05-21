@@ -146,12 +146,14 @@ scribe --prompt-file ~/.config/scribe/prompt.txt \
 ```
 
 When *no* prompt/words flag is given, scribe also auto-loads
-`$XDG_CONFIG_HOME/scribe/prompt.txt` and `$XDG_CONFIG_HOME/scribe/words.txt`
-(default `~/.config/scribe/{prompt,words}.txt`) if they exist. To suppress
-the default for one invocation, pass an explicit empty value:
-`--prompt ""` (or `--prompt-file ""`) suppresses the prompt default;
-`--words` with no arguments (or `--words-file ""`) suppresses the words
-default. Each side is independent.
+`prompt.txt` and `words.txt` from the platform user-config dir
+(`~/.config/scribe/` on Linux, `~/Library/Application Support/scribe/`
+on macOS, `%LOCALAPPDATA%\scribe\` on Windows — resolved via
+`platformdirs`) if they exist. To suppress the default for one
+invocation, pass an explicit empty value: `--prompt ""` (or
+`--prompt-file ""`) suppresses the prompt default; `--words` with no
+arguments (or `--words-file ""`) suppresses the words default. Each
+side is independent.
 
 ## Pseudo-streaming (experimental)
 

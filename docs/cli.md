@@ -38,13 +38,18 @@ See [backends.md › Vocabulary biasing](backends.md#vocabulary-biasing)
 for the per-backend wiring.
 
 **Default files.** When none of the four flags above are given, scribe
-also looks for `$XDG_CONFIG_HOME/scribe/prompt.txt` and
-`$XDG_CONFIG_HOME/scribe/words.txt` (default
-`~/.config/scribe/{prompt,words}.txt`) and loads them if they exist —
-handy for a long-lived personal glossary. To suppress the default on a
-single invocation, pass an empty value: `--prompt ""`, `--prompt-file
-""`, or `--words` with no arguments. Each flag suppresses only its own
-side (giving `--prompt ""` still loads `words.txt` if present).
+also looks for `prompt.txt` and `words.txt` in the platform user-config
+dir and loads them if they exist — handy for a long-lived personal
+glossary. The path is resolved via `platformdirs`:
+
+- Linux: `$XDG_CONFIG_HOME/scribe/` (default `~/.config/scribe/`)
+- macOS: `~/Library/Application Support/scribe/`
+- Windows: `%LOCALAPPDATA%\scribe\`
+
+To suppress the default on a single invocation, pass an empty value:
+`--prompt ""`, `--prompt-file ""`, or `--words` with no arguments. Each
+flag suppresses only its own side (giving `--prompt ""` still loads
+`words.txt` if present).
 
 ## Audio
 

@@ -3,6 +3,7 @@ from pathlib import Path
 import tomllib
 import signal
 import argparse
+import platformdirs
 from scribe.audio import Microphone
 from scribe.util import print_partial, clear_line, prompt_choices, ansi_link, colored
 from scribe.backends import BACKENDS, available_backends, probe_backend, get_transcriber as _build_transcriber
@@ -105,14 +106,12 @@ def _prompt_model_for_backend(backend, language, interactive):
     raise ValueError(f"Unknown backend: {backend}")
 
 
-# Default config dir for prompt.txt / words.txt auto-discovery. Mirrors
-# the raw-XDG style already used in scribe/models.py for VOSK_MODELS_FOLDER.
-# TODO: cross-platform support via `platformdirs` (handles %APPDATA% on
-# Windows, ~/Library/Application Support on macOS) if a non-Linux user
-# needs it. Separate concern from this feature.
-_HOME = os.environ.get("HOME", os.path.expanduser("~"))
-_XDG_CONFIG_HOME = os.environ.get("XDG_CONFIG_HOME", os.path.join(_HOME, ".config"))
-SCRIBE_CONFIG_DIR = os.path.join(_XDG_CONFIG_HOME, "scribe")
+# Default config dir for prompt.txt / words.txt auto-discovery. Uses
+# platformdirs so the path matches each OS's convention:
+#   Linux:   $XDG_CONFIG_HOME/scribe  (default ~/.config/scribe)
+#   macOS:   ~/Library/Application Support/scribe
+#   Windows: %LOCALAPPDATA%\scribe
+SCRIBE_CONFIG_DIR = platformdirs.user_config_dir("scribe")
 DEFAULT_PROMPT_FILE = os.path.join(SCRIBE_CONFIG_DIR, "prompt.txt")
 DEFAULT_WORDS_FILE = os.path.join(SCRIBE_CONFIG_DIR, "words.txt")
 
