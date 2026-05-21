@@ -66,8 +66,9 @@ class DummyTranscriber:
 
 whisper_models = ["tiny", "base", "small", "medium", "large-v3", "large-v3-turbo"]
 whisper_english_models = ["tiny.en", "base.en", "small.en", "medium.en"]
-# FUTO ACFT publishes only tiny/base/small (+ .en variants); no medium/large/turbo.
-whisper_futo_models = ["tiny", "base", "small"]
+# FUTO ACFT publishes only tiny/base/small (+ .en variants); larger sizes
+# (turbo here) come from community conversions hosted on HuggingFace.
+whisper_futo_models = ["tiny", "base", "small", "turbo"]
 whisper_futo_english_models = ["tiny.en", "base.en", "small.en"]
 whisperapi_models = ["gpt-4o-transcribe", "gpt-4o-mini-transcribe", "gpt-realtime-whisper"]
 vosk_models = [language_config["vosk"][lang]["model"] for lang in language_config["vosk"]]
