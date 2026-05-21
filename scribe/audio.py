@@ -119,19 +119,144 @@ class DbSilenceGate(SilenceGate):
         return calculate_decibels(audio_bytes) < thresh
 
 
+def _bundled_silero_onnx_path():
+    """Locate the bundled silero VAD ONNX model shipped under scribe_data.
+
+    Uses the same `scribe_data.__file__` lookup pattern as the tray-icon
+    loader in scribe/app.py — keeps the data discovery consistent and
+    works whether the package is installed or run from a source checkout.
+    """
+    from pathlib import Path
+    import scribe_data
+    return Path(scribe_data.__file__).parent / "silero_vad.onnx"
+
+
+class _SileroOnnxModel:
+    """Thin port of silero-vad's OnnxWrapper, numpy-only.
+
+    Runs the bundled silero VAD ONNX through onnxruntime. The model is
+    stateful — it takes (audio_window, state, sr), returns
+    (speech_prob, new_state). State is carried across calls; `_context`
+    is the trailing 64 samples of the previous window (silero v5
+    requires this for the 1024-sample receptive field).
+
+    The state/context/sr protocol mirrors the reference implementation
+    in silero_vad/utils_vad.py byte for byte — we just drop the torch
+    wrappers and use numpy directly.
+    """
+
+    _CONTEXT_SIZE = 64  # 16 kHz only; would be 32 at 8 kHz
+
+    def __init__(self, model_path: str):
+        import onnxruntime
+        opts = onnxruntime.SessionOptions()
+        opts.inter_op_num_threads = 1
+        opts.intra_op_num_threads = 1
+        self._session = onnxruntime.InferenceSession(
+            model_path,
+            providers=["CPUExecutionProvider"],
+            sess_options=opts,
+        )
+        self._sr_array = np.array(16000, dtype=np.int64)
+        self.reset_states()
+
+    def reset_states(self, batch_size: int = 1):
+        self._state = np.zeros((2, batch_size, 128), dtype=np.float32)
+        self._context = np.zeros((batch_size, self._CONTEXT_SIZE), dtype=np.float32)
+        self._initialised_context = False
+
+    def __call__(self, window: np.ndarray) -> float:
+        """Run one 512-sample window (float32, shape (512,)) and return speech prob."""
+        x = window.reshape(1, -1).astype(np.float32, copy=False)
+        if not self._initialised_context:
+            self._context = np.zeros((x.shape[0], self._CONTEXT_SIZE), dtype=np.float32)
+            self._initialised_context = True
+        x_with_context = np.concatenate([self._context, x], axis=1)
+        outs = self._session.run(
+            None,
+            {
+                "input": x_with_context,
+                "state": self._state,
+                "sr": self._sr_array,
+            },
+        )
+        prob, new_state = outs
+        self._state = new_state
+        self._context = x_with_context[:, -self._CONTEXT_SIZE:]
+        return float(prob.item())
+
+
+class _SileroVADIterator:
+    """Pure-Python port of silero_vad.VADIterator's state machine.
+
+    Same `triggered` / `temp_end` / `current_sample` semantics, same
+    speech_start/speech_end event shape ({"start": int} / {"end": int}
+    in sample units). Drops the torch wrapper around the model call —
+    `_SileroOnnxModel` takes a numpy array directly.
+    """
+
+    def __init__(self, model: _SileroOnnxModel, *, threshold: float,
+                 sampling_rate: int, min_silence_duration_ms: int,
+                 speech_pad_ms: int):
+        self.model = model
+        self.threshold = threshold
+        self.sampling_rate = sampling_rate
+        self.min_silence_samples = sampling_rate * min_silence_duration_ms / 1000
+        self.speech_pad_samples = sampling_rate * speech_pad_ms / 1000
+        self.reset_states()
+
+    def reset_states(self):
+        self.model.reset_states()
+        self.triggered = False
+        self.temp_end = 0
+        self.current_sample = 0
+
+    def __call__(self, window: np.ndarray):
+        window_size_samples = window.shape[-1]
+        self.current_sample += window_size_samples
+
+        speech_prob = self.model(window)
+
+        if (speech_prob >= self.threshold) and self.temp_end:
+            self.temp_end = 0
+
+        if (speech_prob >= self.threshold) and not self.triggered:
+            self.triggered = True
+            speech_start = max(
+                0, self.current_sample - self.speech_pad_samples - window_size_samples
+            )
+            return {"start": int(speech_start)}
+
+        if (speech_prob < self.threshold - 0.15) and self.triggered:
+            if not self.temp_end:
+                self.temp_end = self.current_sample
+            if self.current_sample - self.temp_end < self.min_silence_samples:
+                return None
+            speech_end = self.temp_end + self.speech_pad_samples - window_size_samples
+            self.temp_end = 0
+            self.triggered = False
+            return {"end": int(speech_end)}
+
+        return None
+
+
 class SileroSilenceGate(SilenceGate):
-    """Voice-activity-based silence detection backed by silero-vad.
+    """Voice-activity-based silence detection backed by the silero VAD model.
 
-    Owns a silero_vad.VADIterator that does all the actual work — per-frame
-    speech probability against `threshold`, plus `min_silence_duration_ms`
-    smoothing to debounce speech-end events. Around it we only do two
-    things: a rechunker buffer (silero needs exactly 512-sample windows at
+    Runs the bundled `silero_vad.onnx` (~2 MB) via `onnxruntime` — same
+    model, same algorithm, same parameters as the upstream silero-vad
+    package, but without pulling in torch (~1.6 GB). The `[vad]` extra
+    installs only onnxruntime.
+
+    Around the ONNX model + state machine we only do two things: a
+    rechunker buffer (the model needs exactly 512-sample windows at
     16 kHz, sounddevice gives variable sizes), and a tiny state machine
-    that flips `_in_speech` based on the iterator's speech_start/speech_end
-    events.
+    that flips `_in_speech` based on the iterator's speech_start /
+    speech_end events.
 
-    `in_utterance` is ignored; silero's own onset/offset smoothing replaces
-    the dB gate's two-threshold trick.
+    `in_utterance` is ignored; silero's own onset/offset smoothing
+    (`min_silence_duration_ms`) replaces the dB gate's two-threshold
+    trick.
     """
 
     _WINDOW_SAMPLES = 512  # silero v5 requirement at 16 kHz
@@ -143,16 +268,20 @@ class SileroSilenceGate(SilenceGate):
                 f"SileroSilenceGate requires sampling_rate=16000 (got {sampling_rate})"
             )
         try:
-            import torch
-            from silero_vad import load_silero_vad, VADIterator
+            import onnxruntime  # noqa: F401
         except ImportError as exc:
             raise ImportError(
-                "silero-vad is not installed. Install with: "
-                "pip install 'scribe-cli[vad]' (or: pip install silero-vad)"
+                "onnxruntime is not installed. Install with: "
+                "pip install 'scribe-cli[vad]' (or: pip install onnxruntime)"
             ) from exc
-        self._torch = torch
-        self._model = load_silero_vad(onnx=True)
-        self._iterator = VADIterator(
+        model_path = _bundled_silero_onnx_path()
+        if not model_path.exists():
+            raise FileNotFoundError(
+                f"Bundled silero VAD model not found at {model_path}. "
+                "The scribe-cli install is broken — reinstall scribe-cli."
+            )
+        self._model = _SileroOnnxModel(str(model_path))
+        self._iterator = _SileroVADIterator(
             self._model,
             threshold=threshold,
             sampling_rate=sampling_rate,
@@ -169,7 +298,7 @@ class SileroSilenceGate(SilenceGate):
         while self._buf.size >= self._WINDOW_SAMPLES:
             window = self._buf[:self._WINDOW_SAMPLES]
             self._buf = self._buf[self._WINDOW_SAMPLES:]
-            x = self._torch.from_numpy(window.astype(np.float32) / 32768.0)
+            x = window.astype(np.float32) / 32768.0
             event = self._iterator(x)
             if event:
                 if "start" in event:

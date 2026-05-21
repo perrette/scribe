@@ -88,14 +88,16 @@ class AbstractTranscriber(STTBackend):
         # of the codebase only ever sees a concrete mode.
         if vad_mode == "auto":
             try:
-                import silero_vad  # noqa: F401
-                import torch  # noqa: F401
+                import onnxruntime  # noqa: F401
+                from scribe.audio import _bundled_silero_onnx_path
+                if not _bundled_silero_onnx_path().exists():
+                    raise ImportError("bundled silero_vad.onnx not found")
                 vad_mode = "silero"
                 self._vad_auto_log = "VAD: silero (auto-selected)"
-            except ImportError:
+            except (ImportError, FileNotFoundError):
                 vad_mode = "db"
                 self._vad_auto_log = (
-                    "VAD: silero not available, using dB threshold "
+                    "VAD: onnxruntime not available, using dB threshold "
                     "(install with: pip install 'scribe-cli[vad]')"
                 )
         else:

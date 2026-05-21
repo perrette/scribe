@@ -67,12 +67,15 @@ vosk = ["vosk"]
 app = ["pystray", "PyGObject"]
 openai = ["openai>=2.37.0,<3", "soundfile"]
 groq = ["openai>=2.37.0,<3", "soundfile"]
-vad = ["silero-vad"]
-all = ["pynput", "faster-whisper", "pywhispercpp", "openai>=2.37.0,<3", "soundfile", "vosk", "pystray", "silero-vad"]
+vad = ["onnxruntime"]
+all = ["pynput", "faster-whisper", "pywhispercpp", "openai>=2.37.0,<3", "soundfile", "vosk", "pystray", "onnxruntime"]
 
 
 [tool.setuptools]
 packages = [ "scribe", "scribe_data" ]
+
+[tool.setuptools.package-data]
+scribe_data = ["share/*.png", "templates/*", "silero_vad.onnx", "silero_vad.LICENSE"]
 
 [tool.setuptools_scm]
 write_to = "scribe/_version.py"
