@@ -145,6 +145,14 @@ scribe --prompt-file ~/.config/scribe/prompt.txt \
        --words-file  ~/.config/scribe/glossary.txt
 ```
 
+When *no* prompt/words flag is given, scribe also auto-loads
+`$XDG_CONFIG_HOME/scribe/prompt.txt` and `$XDG_CONFIG_HOME/scribe/words.txt`
+(default `~/.config/scribe/{prompt,words}.txt`) if they exist. To suppress
+the default for one invocation, pass an explicit empty value:
+`--prompt ""` (or `--prompt-file ""`) suppresses the prompt default;
+`--words` with no arguments (or `--words-file ""`) suppresses the words
+default. Each side is independent.
+
 ## Pseudo-streaming (experimental)
 
 `--pseudo-streaming` makes a batch backend behave streaming-like by

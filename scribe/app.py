@@ -1,3 +1,4 @@
+import os
 from pathlib import Path
 import tomllib
 import signal
@@ -104,13 +105,39 @@ def _prompt_model_for_backend(backend, language, interactive):
     raise ValueError(f"Unknown backend: {backend}")
 
 
+# Default config dir for prompt.txt / words.txt auto-discovery. Mirrors
+# the raw-XDG style already used in scribe/models.py for VOSK_MODELS_FOLDER.
+# TODO: cross-platform support via `platformdirs` (handles %APPDATA% on
+# Windows, ~/Library/Application Support on macOS) if a non-Linux user
+# needs it. Separate concern from this feature.
+_HOME = os.environ.get("HOME", os.path.expanduser("~"))
+_XDG_CONFIG_HOME = os.environ.get("XDG_CONFIG_HOME", os.path.join(_HOME, ".config"))
+SCRIBE_CONFIG_DIR = os.path.join(_XDG_CONFIG_HOME, "scribe")
+DEFAULT_PROMPT_FILE = os.path.join(SCRIBE_CONFIG_DIR, "prompt.txt")
+DEFAULT_WORDS_FILE = os.path.join(SCRIBE_CONFIG_DIR, "words.txt")
+
+
 def _resolve_prompt_and_words(prompt_text, prompt_file, words, words_file):
     """Read --prompt-file / --words-file from disk and merge with the inline
     flags. Returns ``(prompt_str_or_None, words_list_or_empty)``.
 
+    When neither inline arg nor an explicit file is provided, falls back
+    to ``$XDG_CONFIG_HOME/scribe/{prompt,words}.txt`` (default
+    ``~/.config/scribe/``) if those files exist. Passing an empty string
+    (e.g. ``--prompt ""`` or ``--prompt-file ""``) counts as an explicit
+    "no, leave it empty" and suppresses the default-file lookup — argparse
+    distinguishes "flag omitted" (``None``) from "flag given an empty
+    value" (``""``).
+
     Empty / whitespace-only inputs collapse to None / [] so backends can do a
     simple truthy check before adding the field to their request.
     """
+    if prompt_text is None and prompt_file is None and os.path.exists(DEFAULT_PROMPT_FILE):
+        prompt_file = DEFAULT_PROMPT_FILE
+        print(f"Using default prompt file: {prompt_file}")
+    if words is None and words_file is None and os.path.exists(DEFAULT_WORDS_FILE):
+        words_file = DEFAULT_WORDS_FILE
+        print(f"Using default words file: {words_file}")
     if prompt_file:
         with open(prompt_file) as f:
             file_text = f.read().strip()
