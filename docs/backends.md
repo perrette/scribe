@@ -142,7 +142,7 @@ scribe --prompt "ML systems infra: K8s, etcd, Envoy." \
 
 # From files (handy for long-lived glossaries)
 scribe --prompt-file ~/.config/scribe/prompt.txt \
-       --words-file  ~/.config/scribe/glossary.txt
+       --words-file  ~/.config/scribe/words.txt
 ```
 
 When *no* prompt/words flag is given, scribe also auto-loads

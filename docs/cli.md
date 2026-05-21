@@ -129,5 +129,5 @@ Or store the lists in files for reuse across sessions:
 
 ```bash
 scribe --prompt-file ~/.config/scribe/prompt.txt \
-       --words-file  ~/.config/scribe/glossary.txt
+       --words-file  ~/.config/scribe/words.txt
 ```
