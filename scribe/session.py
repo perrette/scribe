@@ -108,7 +108,11 @@ class RecordingSession:
                             except Exception as exc:
                                 self.notify_error("Transcription error", repr(exc))
                                 result = {"text": ""}
-                            microphone.q.queue.clear()
+                            # Do NOT clear microphone.q here: on slow backends
+                            # (Groq, OpenAI batch) the round-trip can take 1-2 s,
+                            # during which the user is still speaking. Audio in
+                            # the queue at this point is their next words —
+                            # dropping it loses the tail of the recording.
                             self.reset()
                             yield result
                             self.recording = True  # for the system tray icon
