@@ -161,13 +161,16 @@ side is independent.
 cutting the running buffer into chunks driven by silence:
 
 ```bash
-scribe --pseudo-streaming --streaming-window 15
+scribe --pseudo-streaming --streaming-window 5
 ```
 
 After `--streaming-window` seconds of buffered audio, scribe cuts at
 the first silence of at least `--silence-duration` and transcribes the
 chunk; if no silence arrives by `2 × --streaming-window`, it
-force-cuts. The session continues until you stop it.
+force-cuts. The session continues until you stop it. Default `5` s
+trades a little Whisper context for snappier "text appears as you
+speak" UX; raise it (10–30 s) if accuracy on long sentences matters
+more than latency.
 
 This is experimental and off by default. The tray menu surfaces the
 same toggle under Options ▶ Advanced ▶ Pseudo-streaming.

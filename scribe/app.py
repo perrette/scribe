@@ -201,7 +201,7 @@ def get_transcriber(model=None, backend=None, dummy=False, interactive=True, lan
                     silence_db=-40.0, silence_duration=0.6,
                     api_key=None, download_folder_vosk=None, download_folder_whisper=None,
                     realtime_delay="medium", realtime_gate=True,
-                    pseudo_streaming=False, streaming_window=30.0,
+                    pseudo_streaming=False, streaming_window=5.0,
                     prompt=None, prompt_file=None, words=None, words_file=None,
                     **kwargs):
     if dummy:
@@ -324,7 +324,7 @@ def get_parser():
                             "using --streaming-window and --silence-duration. "
                             "Off by default — the batch backend transcribes the "
                             "whole recording on stop.")
-    group.add_argument("--streaming-window", default=30.0, type=float,
+    group.add_argument("--streaming-window", default=5.0, type=float,
                        help="[EXPERIMENTAL] Target streaming window in seconds for "
                             "--pseudo-streaming (default: %(default)s). After this "
                             "many seconds of buffered audio, cut at the first "

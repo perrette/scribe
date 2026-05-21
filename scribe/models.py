@@ -37,7 +37,7 @@ class AbstractTranscriber(STTBackend):
 
     def __init__(self, model, model_name=None, language=None, samplerate=16000, timeout=None, model_kwargs={},
                  silence_thresh=-40, silence_duration=0.6,
-                 pseudo_streaming=False, streaming_window=30.0):
+                 pseudo_streaming=False, streaming_window=5.0):
         self.model_name = model_name
         self.language = language
         self.model = model
