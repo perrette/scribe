@@ -21,9 +21,16 @@ SR = 16000  # 16 kHz, matches scribe defaults
 
 class FakeBackend(AbstractTranscriber):
     """Minimal AbstractTranscriber subclass: drives transcribe_realtime_audio
-    without needing a real STT model."""
+    without needing a real STT model.
+
+    Pins vad_mode="db" so the tests exercise the dB threshold gate
+    deterministically — most fixtures use square waves that silero (the
+    auto-mode pick when available) correctly classifies as non-speech."""
     name = "fake"
     backend = "fake"
+
+    def __init__(self, *args, vad_mode="db", **kwargs):
+        super().__init__(*args, vad_mode=vad_mode, **kwargs)
 
     def transcribe_audio(self, audio_bytes):
         return {"text": "fake"}

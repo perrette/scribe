@@ -238,7 +238,7 @@ def _build_backend_kwargs(backend, model, language, samplerate, duration,
 def get_transcriber(model=None, backend=None, dummy=False, interactive=True, language=None,
                     samplerate=None, duration=None,
                     silence_db=None, silence_onset_db=None, silence_duration=0.6,
-                    vad_mode="db", vad_threshold=0.5, vad_min_silence_ms=300,
+                    vad_mode="auto", vad_threshold=0.5, vad_min_silence_ms=300,
                     download_folder_vosk=None, download_folder_whisper=None,
                     download_folder_whisper_futo=None,
                     realtime_delay="medium", realtime_gate=True,
@@ -367,13 +367,16 @@ def get_parser():
                             "streaming window.")
 
     group = parser.add_argument_group("Voice activity detection")
-    group.add_argument("--vad-mode", choices=("db", "silero"), default="db",
+    group.add_argument("--vad-mode", choices=("auto", "db", "silero"), default="auto",
                        help="Silence-detection backend (default: %(default)s). "
+                            "'auto' picks silero if installed, dB otherwise. "
                             "'db' uses volume thresholds (--silence-db / "
                             "--silence-onset-db); 'silero' uses silero-vad — much "
                             "more robust to ambient noise (ticks, fan, traffic) "
-                            "but requires `pip install scribe-cli[vad]`. The dB "
-                            "and silero parameter groups are independent.")
+                            "AND to soft speech (the dB gate drops sub-threshold "
+                            "syllables; silero recognises speech spectrally). "
+                            "Requires `pip install scribe-cli[vad]` for silero. "
+                            "The dB and silero parameter groups are independent.")
     group.add_argument("--vad-threshold", default=0.5, type=float,
                        help="Silero only: speech-probability threshold in [0,1] "
                             "(default: %(default)s). Lower = more permissive (catches "

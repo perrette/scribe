@@ -56,7 +56,7 @@ class AbstractTranscriber(STTBackend):
 
     def __init__(self, model, model_name=None, language=None, samplerate=16000, timeout=None, model_kwargs={},
                  silence_thresh=-40, silence_thresh_onset=-25, silence_duration=0.6,
-                 vad_mode="db", vad_threshold=0.5, vad_min_silence_ms=300,
+                 vad_mode="auto", vad_threshold=0.5, vad_min_silence_ms=300,
                  vad_speech_pad_ms=30,
                  pseudo_streaming=False, streaming_window=5.0):
         self.model_name = model_name
@@ -79,10 +79,27 @@ class AbstractTranscriber(STTBackend):
         self.silence_thresh_onset = silence_thresh_onset
         self.silence_duration = silence_duration
         # VAD configuration. `vad_mode` picks the SilenceGate implementation
-        # in scribe/audio.py: "db" (volume-only, current behaviour) or
-        # "silero" (silero-vad — robust to ambient noise, requires the
-        # scribe-cli[vad] extra). The vad_* knobs are passed through to
-        # silero's VADIterator and ignored in dB mode.
+        # in scribe/audio.py:
+        #   "auto"   — prefer silero if installed, fall back to dB.
+        #   "db"     — volume-only threshold (the legacy gate).
+        #   "silero" — silero-vad, robust to ambient noise + soft speech.
+        # The vad_* knobs are passed through to silero's VADIterator and
+        # ignored in dB mode. "auto" is resolved here, eagerly, so the rest
+        # of the codebase only ever sees a concrete mode.
+        if vad_mode == "auto":
+            try:
+                import silero_vad  # noqa: F401
+                import torch  # noqa: F401
+                vad_mode = "silero"
+                self._vad_auto_log = "VAD: silero (auto-selected)"
+            except ImportError:
+                vad_mode = "db"
+                self._vad_auto_log = (
+                    "VAD: silero not available, using dB threshold "
+                    "(install with: pip install 'scribe-cli[vad]')"
+                )
+        else:
+            self._vad_auto_log = None
         self.vad_mode = vad_mode
         self.vad_threshold = vad_threshold
         self.vad_min_silence_ms = vad_min_silence_ms
@@ -103,6 +120,8 @@ class AbstractTranscriber(STTBackend):
         # recording; NOT cleared on per-chunk session.reset() (that would
         # defeat the purpose).
         self._streaming_context = ""
+        if self._vad_auto_log:
+            self.log(self._vad_auto_log)
 
     @property
     def silence_gate(self):
