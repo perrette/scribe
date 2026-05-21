@@ -25,12 +25,11 @@ class OpenaiAPITranscriber(WhisperTranscriber):
                 return OpenaiRealtimeTranscriber(*args, **kwargs)
         return super().__new__(cls)
 
-    def __init__(self, model_name="gpt-4o-mini-transcribe", language=None, model_kwargs={}, model=None, api_key=None,
+    def __init__(self, model_name="gpt-4o-mini-transcribe", language=None, model_kwargs={}, model=None,
                  prompt=None, **kwargs):
         if model is None:
             import openai
             model = openai.OpenAI(
-                api_key=api_key or openai.api_key,
                 # 20 seconds (default is 10 minutes)
                 timeout=20.0,
             )

@@ -1,6 +1,5 @@
 import base64
 import logging
-import os
 import queue
 import threading
 from typing import ClassVar
@@ -36,7 +35,7 @@ class OpenaiRealtimeTranscriber(AbstractStreamingTranscriber):
     _SERVER_COMMIT_MIN_MS = 100.0
 
     def __init__(self, model_name="gpt-realtime-whisper", language=None, model_kwargs={},
-                 model=None, api_key=None, realtime_delay="medium",
+                 model=None, realtime_delay="medium",
                  realtime_gate=True, prompt=None, **kwargs):
         AbstractTranscriber.__init__(
             self, model, model_name, language, model_kwargs=model_kwargs, **kwargs,
@@ -52,7 +51,6 @@ class OpenaiRealtimeTranscriber(AbstractStreamingTranscriber):
         # flushes the trailing deltas live so the user sees the end of
         # their phrase without having to stop the recording. Triggered
         # after silence_duration seconds of sustained silence.
-        self._api_key = api_key
         self._realtime_delay = realtime_delay
         self._client = None
         self._connection = None
@@ -103,8 +101,7 @@ class OpenaiRealtimeTranscriber(AbstractStreamingTranscriber):
         self._silent_samples = 0
         self._uncommitted_ms = 0.0
 
-        api_key = self._api_key or os.environ.get("OPENAI_API_KEY")
-        self._client = openai.OpenAI(api_key=api_key)
+        self._client = openai.OpenAI()
 
         # GA flow: POST /v1/realtime/client_secrets to validate config (the
         # ephemeral secret it returns is for browser-side flows; with a real

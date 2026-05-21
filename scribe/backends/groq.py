@@ -9,12 +9,12 @@ class GroqTranscriber(OpenaiAPITranscriber):
     backend = "groq"
     default_model: str | None = "whisper-large-v3-turbo"
 
-    def __init__(self, model_name="whisper-large-v3-turbo", language=None, model_kwargs={}, model=None, api_key=None,
+    def __init__(self, model_name="whisper-large-v3-turbo", language=None, model_kwargs={}, model=None,
                  prompt=None, **kwargs):
         if model is None:
             import openai
             model = openai.OpenAI(
-                api_key=os.environ.get("GROQ_API_KEY") or api_key,
+                api_key=os.environ.get("GROQ_API_KEY"),
                 base_url="https://api.groq.com/openai/v1",
                 timeout=20.0,
             )

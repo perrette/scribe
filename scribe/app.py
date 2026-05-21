@@ -168,7 +168,7 @@ def _resolve_prompt_and_words(prompt_text, prompt_file, words, words_file):
 
 
 def _build_backend_kwargs(backend, model, language, samplerate, duration,
-                          silence_db, silence_duration, api_key,
+                          silence_db, silence_duration,
                           download_folder_vosk, download_folder_whisper,
                           download_folder_whisper_futo,
                           realtime_delay, realtime_gate,
@@ -208,7 +208,6 @@ def _build_backend_kwargs(backend, model, language, samplerate, duration,
         kwargs = dict(model_name=model, samplerate=samplerate,
                       timeout=duration, silence_duration=silence_duration, silence_thresh=silence_db,
                       pseudo_streaming=pseudo_streaming, streaming_window=streaming_window,
-                      api_key=api_key,
                       prompt=merged_prompt)
         if backend == "openai" and model in REALTIME_MODELS:
             kwargs["realtime_delay"] = realtime_delay
@@ -225,7 +224,7 @@ def _build_backend_kwargs(backend, model, language, samplerate, duration,
 def get_transcriber(model=None, backend=None, dummy=False, interactive=True, language=None,
                     samplerate=None, duration=None,
                     silence_db=-40.0, silence_duration=0.6,
-                    api_key=None, download_folder_vosk=None, download_folder_whisper=None,
+                    download_folder_vosk=None, download_folder_whisper=None,
                     download_folder_whisper_futo=None,
                     realtime_delay="medium", realtime_gate=True,
                     pseudo_streaming=False, streaming_window=5.0,
@@ -256,7 +255,7 @@ def get_transcriber(model=None, backend=None, dummy=False, interactive=True, lan
     print(f"Selected model: {model}")
     prompt_text, word_list = _resolve_prompt_and_words(prompt, prompt_file, words, words_file)
     backend_kwargs = _build_backend_kwargs(backend, model, language, samplerate, duration,
-                                          silence_db, silence_duration, api_key,
+                                          silence_db, silence_duration,
                                           download_folder_vosk, download_folder_whisper,
                                           download_folder_whisper_futo,
                                           realtime_delay, realtime_gate,
@@ -280,8 +279,6 @@ def get_parser():
                        help="Model name for the chosen backend (see README).")
     group.add_argument("-l", "--language", choices=list(language_config["vosk"]),
                        help="Language alias selecting a preset vosk model, or 'en' for English-only whisper models.")
-    group.add_argument("--api-key",
-                       help="API key for cloud backends (openai, groq); falls back to OPENAI_API_KEY / GROQ_API_KEY.")
     group.add_argument("--download-folder-whisper", help="Folder to store Whisper models.")
     group.add_argument("--download-folder-whisper-futo",
                        help="Folder to store FUTO ACFT ggml models "

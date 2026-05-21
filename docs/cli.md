@@ -16,7 +16,6 @@ The flags are grouped to mirror the source-of-truth in
 | `--backend {vosk,whisper,openai,groq}` | Speech-recognition backend (prompted if omitted).                |
 | `--model NAME`                  | Model name for the chosen backend. Auto-routes to the right backend for known model names (e.g. `--model gpt-realtime-whisper` selects `openai`). |
 | `-l, --language LANG`           | Language alias selecting a preset Vosk model (`en`/`fr`/`de`/`it`), or `en` for English-only Whisper models. |
-| `--api-key KEY`                 | API key for cloud backends; falls back to `OPENAI_API_KEY` / `GROQ_API_KEY` env. |
 | `--download-folder-whisper DIR` | Folder to store Whisper models.                                         |
 | `--download-folder-vosk DIR`    | Folder to store Vosk models.                                            |
 
