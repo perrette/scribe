@@ -2,6 +2,7 @@ import base64
 import logging
 import queue
 import threading
+import time
 from typing import ClassVar
 
 import numpy as np
@@ -33,6 +34,18 @@ class OpenaiRealtimeTranscriber(AbstractStreamingTranscriber):
     # audio duration and skip commits below this — a tiny burst (cough,
     # click) followed by silence would otherwise trigger an error popup.
     _SERVER_COMMIT_MIN_MS = 100.0
+
+    # Coalesce token-level deltas before yielding to the app layer.
+    # gpt-realtime-whisper emits one delta per word/subword (~30-80 ms
+    # apart). The live-paste path (paste_via_clipboard) needs ~100 ms
+    # per call to defeat Wayland's wl-copy async race — pasting every
+    # delta caused token drops + duplications because the clipboard got
+    # overwritten before Ctrl+V landed. Buffer deltas and emit when
+    # either: the interval elapses, OR the buffer ends on
+    # sentence-final punctuation (natural commit boundary). 250 ms is
+    # well above the clipboard race window and still feels live.
+    _DELTA_FLUSH_INTERVAL_S = 0.25
+    _DELTA_FLUSH_PUNCT = frozenset(".!?\n")
 
     def __init__(self, model_name="gpt-realtime-whisper", language=None, model_kwargs={},
                  model=None, realtime_delay="medium",
@@ -66,6 +79,9 @@ class OpenaiRealtimeTranscriber(AbstractStreamingTranscriber):
         self._has_uncommitted_audio = False
         self._silent_samples = 0
         self._uncommitted_ms = 0.0
+        # Delta coalescing state (see _DELTA_FLUSH_INTERVAL_S).
+        self._delta_buffer = ""
+        self._last_delta_flush = 0.0
 
     def _session_config(self) -> dict:
         # gpt-realtime-whisper does NOT support server VAD (rejected as
@@ -73,11 +89,17 @@ class OpenaiRealtimeTranscriber(AbstractStreamingTranscriber):
         # The streaming knob for this model is `delay` — "minimal" emits
         # partials as early as possible; higher values trade latency for
         # accuracy. Surfaced as the --realtime-delay CLI flag.
+        #
+        # NOTE: this model also rejects `prompt` server-side
+        # (400 "The 'prompt' parameter is not supported for this model.",
+        # param `session.audio.input.transcription.prompt`). The shared
+        # backend kwarg `prompt` is silently ignored here — the
+        # pseudo-streaming chunk-tail context machinery doesn't apply
+        # either (this backend is true streaming, not chunked). If a
+        # future REALTIME_MODELS entry supports it, gate by model name.
         transcription: dict = {"model": self.model_name, "delay": self._realtime_delay}
         if self.language:
             transcription["language"] = self.language
-        if self._prompt:
-            transcription["prompt"] = self._prompt
         audio_input: dict = {
             "format": {"type": "audio/pcm", "rate": self._GA_SAMPLE_RATE},
             "transcription": transcription,
@@ -100,6 +122,8 @@ class OpenaiRealtimeTranscriber(AbstractStreamingTranscriber):
         self._has_uncommitted_audio = False
         self._silent_samples = 0
         self._uncommitted_ms = 0.0
+        self._delta_buffer = ""
+        self._last_delta_flush = time.time()
 
         self._client = openai.OpenAI()
 
@@ -250,6 +274,9 @@ class OpenaiRealtimeTranscriber(AbstractStreamingTranscriber):
             else:
                 self._silent_samples = 0
 
+        # Drain queue into the coalescing buffer (text) or surface errors
+        # immediately. Don't yield text deltas raw — see
+        # _DELTA_FLUSH_INTERVAL_S for the rationale.
         while True:
             try:
                 item = self._event_queue.get_nowait()
@@ -259,7 +286,22 @@ class OpenaiRealtimeTranscriber(AbstractStreamingTranscriber):
                 title, message = item["_error"]
                 self.notify_error(title, message)
                 continue
-            yield item
+            text = item.get("text", "")
+            if text:
+                self._delta_buffer += text
+
+        # Flush the coalesced buffer when either the interval elapsed or
+        # we hit a sentence-final character. Trailing punctuation is a
+        # natural commit boundary, so emitting at that moment keeps the
+        # paste-per-chunk UX feeling live without racing the clipboard.
+        if self._delta_buffer:
+            now = time.time()
+            elapsed = now - self._last_delta_flush
+            ends_on_punct = self._delta_buffer[-1] in self._DELTA_FLUSH_PUNCT
+            if elapsed >= self._DELTA_FLUSH_INTERVAL_S or ends_on_punct:
+                yield {"text": self._delta_buffer}
+                self._delta_buffer = ""
+                self._last_delta_flush = now
 
     def finalize(self):
         if self._connection is None or self._closed:
@@ -288,7 +330,14 @@ class OpenaiRealtimeTranscriber(AbstractStreamingTranscriber):
             # transcript was already streamed live as `text` deltas during
             # recording, so we only return the tail.
             self._completed_event.wait(timeout=self._FINALIZE_TIMEOUT)
+        # Start with whatever sat in the coalescing buffer (deltas seen
+        # by feed_audio but not yet flushed by the interval/punct check),
+        # then append any tail deltas the recv_loop pushed in after the
+        # recording loop exited.
         tail_parts: list[str] = []
+        if self._delta_buffer:
+            tail_parts.append(self._delta_buffer)
+            self._delta_buffer = ""
         while True:
             try:
                 item = self._event_queue.get_nowait()
