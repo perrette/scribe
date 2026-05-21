@@ -233,16 +233,20 @@ class _SileroVADIterator:
     speech_start/speech_end event shape ({"start": int} / {"end": int}
     in sample units). Drops the torch wrapper around the model call —
     `_SileroOnnxModel` takes a numpy array directly.
+
+    Upstream's `speech_pad_ms` knob is dropped: it only padded the
+    reported sample positions, and SileroSilenceGate uses just the
+    presence of `"start"` / `"end"` keys to flip its boolean state.
+    Pre-roll for streaming backends is handled by SilenceGate's ring
+    buffer instead.
     """
 
     def __init__(self, model: _SileroOnnxModel, *, threshold: float,
-                 sampling_rate: int, min_silence_duration_ms: int,
-                 speech_pad_ms: int):
+                 sampling_rate: int, min_silence_duration_ms: int):
         self.model = model
         self.threshold = threshold
         self.sampling_rate = sampling_rate
         self.min_silence_samples = sampling_rate * min_silence_duration_ms / 1000
-        self.speech_pad_samples = sampling_rate * speech_pad_ms / 1000
         self.reset_states()
 
     def reset_states(self):
@@ -262,9 +266,7 @@ class _SileroVADIterator:
 
         if (speech_prob >= self.threshold) and not self.triggered:
             self.triggered = True
-            speech_start = max(
-                0, self.current_sample - self.speech_pad_samples - window_size_samples
-            )
+            speech_start = max(0, self.current_sample - window_size_samples)
             return {"start": int(speech_start)}
 
         if (speech_prob < self.threshold - 0.15) and self.triggered:
@@ -272,7 +274,7 @@ class _SileroVADIterator:
                 self.temp_end = self.current_sample
             if self.current_sample - self.temp_end < self.min_silence_samples:
                 return None
-            speech_end = self.temp_end + self.speech_pad_samples - window_size_samples
+            speech_end = self.temp_end - window_size_samples
             self.temp_end = 0
             self.triggered = False
             return {"end": int(speech_end)}
@@ -303,8 +305,7 @@ class SileroSilenceGate(SilenceGate):
     _WINDOW_SAMPLES = 512  # silero v5 requirement at 16 kHz
 
     def __init__(self, *, sampling_rate: int = 16000, threshold: float = 0.5,
-                 min_silence_ms: int = 300, speech_pad_ms: int = 30,
-                 pre_roll_ms: int = 300):
+                 min_silence_ms: int = 300, pre_roll_ms: int = 300):
         if sampling_rate != 16000:
             raise ValueError(
                 f"SileroSilenceGate requires sampling_rate=16000 (got {sampling_rate})"
@@ -331,7 +332,6 @@ class SileroSilenceGate(SilenceGate):
             threshold=threshold,
             sampling_rate=sampling_rate,
             min_silence_duration_ms=min_silence_ms,
-            speech_pad_ms=speech_pad_ms,
         )
         self._buf: np.ndarray = np.zeros(0, dtype=np.int16)
         self._in_speech = False
@@ -366,7 +366,6 @@ def make_silence_gate(
     silence_thresh: float = -40.0,
     vad_threshold: float = 0.5,
     vad_min_silence_ms: int = 300,
-    vad_speech_pad_ms: int = 30,
 ) -> SilenceGate:
     """Build a SilenceGate from config. `mode` is "db" or "silero"."""
     if mode == "db":
@@ -376,6 +375,5 @@ def make_silence_gate(
             sampling_rate=samplerate,
             threshold=vad_threshold,
             min_silence_ms=vad_min_silence_ms,
-            speech_pad_ms=vad_speech_pad_ms,
         )
     raise ValueError(f"Unknown vad_mode: {mode!r} (expected 'db' or 'silero')")

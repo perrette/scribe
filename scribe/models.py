@@ -57,7 +57,6 @@ class AbstractTranscriber(STTBackend):
     def __init__(self, model, model_name=None, language=None, samplerate=16000, timeout=None, model_kwargs={},
                  silence_thresh=-40, silence_duration=0.6,
                  vad_mode="auto", vad_threshold=0.5, vad_min_silence_ms=300,
-                 vad_speech_pad_ms=30,
                  pseudo_streaming=False, streaming_window=5.0):
         self.model_name = model_name
         self.language = language
@@ -101,7 +100,6 @@ class AbstractTranscriber(STTBackend):
         self.vad_mode = vad_mode
         self.vad_threshold = vad_threshold
         self.vad_min_silence_ms = vad_min_silence_ms
-        self.vad_speech_pad_ms = vad_speech_pad_ms
         self._silence_gate = None
         # Pseudo-streaming (experimental): when on, transcribe_realtime_audio
         # cuts the running buffer into chunks driven by silence + a target
@@ -136,7 +134,6 @@ class AbstractTranscriber(STTBackend):
                 silence_thresh=self.silence_thresh,
                 vad_threshold=self.vad_threshold,
                 vad_min_silence_ms=self.vad_min_silence_ms,
-                vad_speech_pad_ms=self.vad_speech_pad_ms,
             )
         return self._silence_gate
 
