@@ -29,6 +29,12 @@ class OpenaiRealtimeTranscriber(AbstractStreamingTranscriber):
     # feed_audio upsamples int16 frames before send.
     _GA_SAMPLE_RATE = 24000
 
+    # Server-side commit() rejects buffers under 100ms with
+    # "buffer too small. Expected at least 100ms of audio". Track sent
+    # audio duration and skip commits below this — a tiny burst (cough,
+    # click) followed by silence would otherwise trigger an error popup.
+    _SERVER_COMMIT_MIN_MS = 100.0
+
     def __init__(self, model_name="gpt-realtime-whisper", language=None, model_kwargs={},
                  model=None, api_key=None, realtime_delay="medium",
                  realtime_gate=True, prompt=None, **kwargs):
@@ -58,9 +64,10 @@ class OpenaiRealtimeTranscriber(AbstractStreamingTranscriber):
         self._final_transcript = None
         self._closed = True
         self._resample_tail: np.ndarray = np.zeros(0, dtype=np.int16)
-        # Mid-session auto-commit state (see _SILENCE_COMMIT_SEC).
+        # Mid-session auto-commit state.
         self._has_uncommitted_audio = False
         self._silent_samples = 0
+        self._uncommitted_ms = 0.0
 
     def _session_config(self) -> dict:
         # gpt-realtime-whisper does NOT support server VAD (rejected as
@@ -94,6 +101,7 @@ class OpenaiRealtimeTranscriber(AbstractStreamingTranscriber):
         self._resample_tail = np.zeros(0, dtype=np.int16)
         self._has_uncommitted_audio = False
         self._silent_samples = 0
+        self._uncommitted_ms = 0.0
 
         api_key = self._api_key or os.environ.get("OPENAI_API_KEY")
         self._client = openai.OpenAI(api_key=api_key)
@@ -219,6 +227,8 @@ class OpenaiRealtimeTranscriber(AbstractStreamingTranscriber):
                             audio=base64.b64encode(payload).decode("ascii"),
                         )
                         self._has_uncommitted_audio = True
+                        # Track sent audio in ms (int16 → 2 bytes/sample).
+                        self._uncommitted_ms += (len(payload) / 2) / self._GA_SAMPLE_RATE * 1000.0
                 except Exception as exc:
                     self.notify_error("Realtime send failed", repr(exc))
 
@@ -229,11 +239,16 @@ class OpenaiRealtimeTranscriber(AbstractStreamingTranscriber):
                     self._silent_samples += len(chunk) // 2  # int16 → 2 bytes
                     commit_samples = int(self.silence_duration * self.samplerate)
                     if commit_samples > 0 and self._silent_samples >= commit_samples:
-                        try:
-                            self._connection.input_audio_buffer.commit()
-                        except Exception as exc:
-                            log.debug("mid-session commit failed: %s", exc)
-                        self._has_uncommitted_audio = False
+                        # Server rejects commits below _SERVER_COMMIT_MIN_MS;
+                        # leave a sub-threshold burst in the buffer for the
+                        # next speech to extend.
+                        if self._uncommitted_ms >= self._SERVER_COMMIT_MIN_MS:
+                            try:
+                                self._connection.input_audio_buffer.commit()
+                            except Exception as exc:
+                                log.debug("mid-session commit failed: %s", exc)
+                            self._has_uncommitted_audio = False
+                            self._uncommitted_ms = 0.0
                         self._silent_samples = 0
             else:
                 self._silent_samples = 0
@@ -253,17 +268,21 @@ class OpenaiRealtimeTranscriber(AbstractStreamingTranscriber):
         if self._connection is None or self._closed:
             return {"text": ""}
 
-        # Only commit + wait if there's audio the model hasn't flushed yet.
-        # If the mid-session silence auto-commit already fired, the buffer
-        # is empty and a fresh commit would error (and we'd block waiting
-        # for a `.completed` that never arrives).
-        if self._has_uncommitted_audio:
+        # Only commit + wait if there's audio the model hasn't flushed yet
+        # AND the buffer is over the server's 100ms minimum. If the
+        # mid-session silence auto-commit already fired, the buffer is
+        # empty; if a sub-threshold burst is sitting in the buffer,
+        # commit would error and we'd block waiting for a `.completed`
+        # that never arrives.
+        if (self._has_uncommitted_audio
+                and self._uncommitted_ms >= self._SERVER_COMMIT_MIN_MS):
             self._completed_event.clear()
             try:
                 self._connection.input_audio_buffer.commit()
             except Exception:
                 return {"text": ""}
             self._has_uncommitted_audio = False
+            self._uncommitted_ms = 0.0
             # Wait for the server's `.completed` event; trailing deltas
             # land on the queue between commit and completion. The
             # recording loop has already exited, so drain the queue here

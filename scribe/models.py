@@ -27,6 +27,14 @@ class AbstractTranscriber(STTBackend):
     default_model: str | None = None
     backend = None
     _frozen_options = frozenset()
+
+    # Pseudo-streaming: don't cut a chunk smaller than this. Remote
+    # whisper batch endpoints reject ultra-short audio (OpenAI realtime
+    # commit's lower bound is 100ms; OpenAI/Groq batch tolerate more but
+    # transcribing a 50ms burst is wasted bandwidth / noise). Sub-threshold
+    # accumulations stay in the buffer until more audio arrives.
+    _CHUNK_MIN_MS = 100.0
+
     def __init__(self, model, model_name=None, language=None, samplerate=16000, timeout=None, model_kwargs={},
                  silence_thresh=-40, silence_duration=0.6,
                  pseudo_streaming=False, streaming_window=30.0):
@@ -86,6 +94,7 @@ class AbstractTranscriber(STTBackend):
                                f"(duration: {session.get_elapsed():.2f} seconds)"}
 
         elapsed = time.time() - session.start_time
+        buffer_ms = (len(session.audio_buffer) / 2) / self.samplerate * 1000.0
 
         if is_silent(audio_bytes, self.silence_thresh):
             session.silence_buffer += audio_bytes
@@ -94,7 +103,7 @@ class AbstractTranscriber(STTBackend):
 
             if (elapsed >= self.streaming_window
                     and session.waiting
-                    and len(session.audio_buffer) > 0):
+                    and buffer_ms >= self._CHUNK_MIN_MS):
                 raise SilenceDetected(
                     f"Cut at silence after {elapsed:.2f}s "
                     f"(silent {sil_dur:.2f}s)"
@@ -108,7 +117,7 @@ class AbstractTranscriber(STTBackend):
             session.audio_buffer += silence_buffer_data[-length_of_half_a_second:].tobytes() + audio_bytes
             session.silence_buffer = b''
 
-        if elapsed >= 2 * self.streaming_window and len(session.audio_buffer) > 0:
+        if elapsed >= 2 * self.streaming_window and buffer_ms >= self._CHUNK_MIN_MS:
             raise SilenceDetected(
                 f"Force-cut at 2x streaming window ({elapsed:.2f}s)"
             )
