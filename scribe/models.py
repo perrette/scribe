@@ -100,12 +100,27 @@ class AbstractTranscriber(STTBackend):
 
         if is_silent(audio_bytes, self.silence_thresh):
             session.silence_buffer += audio_bytes
+            # Cap to max(5s, silence_duration) of trailing silence as a
+            # defensive floor — the only consumer (the pre-roll path below)
+            # uses just the last 0.5s, but 5s gives headroom for larger
+            # silence_duration settings and any future pre-roll change.
+            # Without this cap a long pause grows the buffer unboundedly
+            # (~2 KB/s at 16 kHz int16 mono → 7 MB/h of silence). 5s caps
+            # at 160 KB.
+            cap_s = max(5.0, self.silence_duration)
+            max_silence_bytes = int(cap_s * self.samplerate) * 2
+            if len(session.silence_buffer) > max_silence_bytes:
+                session.silence_buffer = session.silence_buffer[-max_silence_bytes:]
             sil_dur = time.time() - session.last_sound_time
             session.waiting = sil_dur >= self.silence_duration
 
-            if (elapsed >= self.streaming_window
-                    and session.waiting
-                    and buffer_ms >= self._CHUNK_MIN_MS):
+            # Commit on every detected silence pause. The streaming_window
+            # is no longer a "wait at least N seconds before cutting" floor —
+            # it's only the basis for the force-cut at 2 * window below.
+            # session.reset() in the session loop resets start_time on each
+            # commit, so `elapsed` here always measures time since the last
+            # commit (or start of recording).
+            if session.waiting and buffer_ms >= self._CHUNK_MIN_MS:
                 raise SilenceDetected(
                     f"Cut at silence after {elapsed:.2f}s "
                     f"(silent {sil_dur:.2f}s)"

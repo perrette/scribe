@@ -66,8 +66,7 @@ class DummyTranscriber:
 
 whisper_models = ["tiny", "base", "small", "medium", "large-v3", "large-v3-turbo"]
 whisper_english_models = ["tiny.en", "base.en", "small.en", "medium.en"]
-# FUTO ACFT publishes only tiny/base/small (+ .en variants); larger sizes
-# (turbo here) come from community conversions hosted on HuggingFace.
+# FUTO ACFT publishes only tiny/base/small (+ .en variants); no medium/large/turbo.
 whisper_futo_models = ["tiny", "base", "small", "turbo"]
 whisper_futo_english_models = ["tiny.en", "base.en", "small.en"]
 whisperapi_models = ["gpt-4o-transcribe", "gpt-4o-mini-transcribe", "gpt-realtime-whisper"]
@@ -408,8 +407,16 @@ def start_recording(micro, session, mode="keystroke", typer="auto",
     # Query the live transcriber instance — the registered class may dispatch
     # to a streaming sibling for specific models (e.g. openai →
     # gpt-realtime-whisper), so a class-level lookup via BACKENDS would lie.
+    # Pseudo-streaming also yields chunks (silence-cut batch transcriptions)
+    # so the output should treat it the same: live paste/type per chunk.
     backend_obj = getattr(session, "backend", session)
-    is_streaming = bool(getattr(backend_obj, "supports_streaming", False)) if not isinstance(backend_obj, str) else False
+    if isinstance(backend_obj, str):
+        is_streaming = False
+    else:
+        is_streaming = (
+            bool(getattr(backend_obj, "supports_streaming", False))
+            or bool(getattr(backend_obj, "pseudo_streaming", False))
+        )
     # Clipboard is written in clipboard mode (the user pastes manually) and in
     # paste-based keystroke mode (the paste source). type_direct keystroke
     # mode bypasses the clipboard entirely — we type the chunks/text raw.
