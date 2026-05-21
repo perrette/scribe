@@ -339,12 +339,9 @@ def get_parser():
     group.add_argument("-o", "--output-file",
                        help="Also append the transcription to this file.")
 
-    group = parser.add_argument_group("Silence detection (shared)")
+    group = parser.add_argument_group("Silence detection")
     group.add_argument("--duration", default=120, type=float,
                        help="Max recording duration in seconds (default: %(default)s).")
-    group.add_argument("--silence-db", default=None, type=float,
-                       help="Silence floor in dBFS for the dB-mode fallback "
-                            "(default: -40). Ignored when --vad-mode=silero.")
     group.add_argument("--silence-duration", default=0.6, type=float,
                        help="Seconds of silence required before triggering a "
                             "backend's silence behavior (default: %(default)s). "
@@ -357,22 +354,27 @@ def get_parser():
     group.add_argument("--vad-mode", choices=("auto", "db", "silero"), default="auto",
                        help="Silence-detection backend (default: %(default)s). "
                             "'auto' picks silero if installed, dB otherwise. "
-                            "'db' uses a volume threshold (--silence-db); "
                             "'silero' uses silero-vad — much more robust to "
                             "ambient noise (ticks, fan, traffic) AND to soft "
                             "speech (the dB gate drops sub-threshold syllables; "
                             "silero recognises speech spectrally). "
+                            "'db' is a no-dependency volume-threshold fallback "
+                            "(see --silence-db). "
                             "Requires `pip install scribe-cli[vad]` for silero. "
                             "The dB and silero parameter groups are independent.")
     group.add_argument("--vad-threshold", default=0.5, type=float,
-                       help="Silero only: speech-probability threshold in [0,1] "
+                       help="[silero only] Speech-probability threshold in [0,1] "
                             "(default: %(default)s). Lower = more permissive (catches "
                             "quiet speech but also more noise); higher = stricter.")
     group.add_argument("--vad-min-silence-ms", default=300, type=int,
-                       help="Silero only: minimum sustained low-probability span before "
+                       help="[silero only] Minimum sustained low-probability span before "
                             "speech-end is emitted, in ms (default: %(default)s). "
-                            "Acts as silero's onset/offset smoothing window — the "
-                            "silero counterpart of the dB hysteresis.")
+                            "Acts as silero's onset/offset smoothing window.")
+    group.add_argument("--silence-db", default=None, type=float,
+                       help="[dB only] Silence floor in dBFS for the dB-mode "
+                            "fallback (default: -40). Ignored when "
+                            "--vad-mode=silero (or =auto and silero is "
+                            "available).")
 
     group = parser.add_argument_group("Realtime (gpt-realtime-whisper)")
     group.add_argument("--realtime-delay",
@@ -383,10 +385,10 @@ def get_parser():
                             "paste churn in the focused window).")
     group.add_argument("--realtime-gate", action=argparse.BooleanOptionalAction,
                        default=True,
-                       help="Drop silent frames (per --silence-db) before sending "
-                            "them over the WebSocket so silent audio isn't billed "
-                            "as input tokens (default: on; pass --no-realtime-gate "
-                            "to disable).")
+                       help="Drop silent frames (per the active --vad-mode) before "
+                            "sending them over the WebSocket so silent audio "
+                            "isn't billed as input tokens (default: on; pass "
+                            "--no-realtime-gate to disable).")
 
     group = parser.add_argument_group("Pseudo-streaming (experimental)")
     group.add_argument("--pseudo-streaming", action="store_true",
