@@ -48,24 +48,20 @@ _PHONETIC_RE = re.compile(r"[ʰ-˿�]")
 
 _FUTO_BASE_URL = "https://voiceinput.futo.org/VoiceInput/"
 
-# Map user-visible model name → ggml download URL. FUTO hosts tiny/base/small
-# ACFT weights; medium/large/turbo come from community conversions on HF.
+# Map user-visible model name → ggml filename on FUTO's CDN. FUTO publishes
+# only tiny/base/small (+ .en variants). The DeadBranches community q8_0 of
+# large-v3-turbo was tried briefly but its large-v3 encoder is incompatible
+# with the audio_ctx-shrinkage that's the whole point of this backend
+# (Progress: 1612% / CJK garbage on short clips), so we stick to the FUTO
+# set where ACFT works as advertised.
 _FUTO_MODELS: dict[str, str] = {
-    "tiny":     _FUTO_BASE_URL + "tiny_acft_q8_0.bin",
-    "tiny.en":  _FUTO_BASE_URL + "tiny_en_acft_q8_0.bin",
-    "base":     _FUTO_BASE_URL + "base_acft_q8_0.bin",
-    "base.en":  _FUTO_BASE_URL + "base_en_acft_q8_0.bin",
-    "small":    _FUTO_BASE_URL + "small_acft_q8_0.bin",
-    "small.en": _FUTO_BASE_URL + "small_en_acft_q8_0.bin",
-    # DeadBranches' community q8_0 conversion of MahmoudAshraf's ACFT
-    # finetune of large-v3-turbo. ~800MB, ~2-3× slower than small on CPU
-    # but quality jump comparable to small→large.
-    "turbo":    "https://huggingface.co/DeadBranches/acft-whisper-large-v3-turbo_q8_0/resolve/main/acft-whisper-large-v3-turbo-q8_0.bin",
+    "tiny":     "tiny_acft_q8_0.bin",
+    "tiny.en":  "tiny_en_acft_q8_0.bin",
+    "base":     "base_acft_q8_0.bin",
+    "base.en":  "base_en_acft_q8_0.bin",
+    "small":    "small_acft_q8_0.bin",
+    "small.en": "small_en_acft_q8_0.bin",
 }
-
-
-def _local_filename(url: str) -> str:
-    return url.rsplit("/", 1)[-1]
 
 # Whisper encoder produces 1500 audio_ctx tokens for the full 30 s window
 # (50 per second after the 2× conv subsampling of 100 mel frames/s).
@@ -88,17 +84,17 @@ def _model_path(model_name: str, download_folder: str | os.PathLike | None) -> P
             f"Available: {', '.join(_FUTO_MODELS)}"
         )
     folder = Path(download_folder) if download_folder else _default_download_folder()
-    return folder / _local_filename(_FUTO_MODELS[model_name])
+    return folder / _FUTO_MODELS[model_name]
 
 
 def _ensure_model(model_name: str, path: Path) -> None:
-    """Download the ggml file if it isn't on disk yet."""
+    """Download the ggml file from voiceinput.futo.org if it isn't on disk yet."""
     if path.exists():
         return
     import requests
     import tqdm
 
-    url = _FUTO_MODELS[model_name]
+    url = _FUTO_BASE_URL + _FUTO_MODELS[model_name]
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp = path.with_suffix(path.suffix + ".tmp")
     print(f"Downloading {url} -> {path}")
@@ -137,41 +133,47 @@ class WhisperFutoTranscriber(AbstractTranscriber):
     def transcribe_audio(self, audio_bytes):
         self.log("\nTranscribing")
         audio = np.frombuffer(audio_bytes, dtype=np.int16).astype(np.float32) / 32768.0
-        # ACFT shortcut: shrink the encoder window to the actual audio length.
-        # Works for both explicit language and auto-detect (whisper.cpp runs its
-        # language ID head on the same shrunk encoder output; FUTO's L2-distill
-        # training preserves enough representational quality at short contexts).
-        # pywhispercpp wants "" (not "auto") to request auto-detection.
         duration_s = len(audio) / self.samplerate
-        audio_ctx = min(_AUDIO_CTX_MAX,
-                        max(_AUDIO_CTX_MIN,
-                            math.ceil(duration_s * _AUDIO_CTX_PER_SECOND)))
-        # Cap tokens/segment to ~2.5× a generous speech rate so a greedy
-        # repetition loop bails out in 1-3 s instead of running to
-        # whisper.cpp's internal ~224-token ceiling (60-130 s on CPU).
-        max_tokens = max(12, int(duration_s * 12))
-        segments = self.model.transcribe(
-            audio,
-            language=self.language or "",
-            audio_ctx=audio_ctx,
-            max_tokens=max_tokens,
-        )
-        # Normalize spacing: whisper.cpp segments may or may not carry a
-        # leading space depending on the BPE state at a chunk boundary.
-        # Strip and add a single trailing space so pseudo-streaming chunks
-        # concatenate cleanly (same convention as the vosk backend).
+
+        # ACFT shortcut: shrink the encoder window to the actual audio
+        # length. This is the whole point of the FUTO backend — without it,
+        # a 2 s clip runs against the full 30 s window and inference is
+        # 5-10× slower. Safe for the FUTO ACFT set (tiny/base/small +
+        # .en) which was trained to preserve quality at short audio_ctx.
+        # pywhispercpp wants "" (not "auto") to request auto-detect.
+        kwargs = {
+            "language": self.language or "",
+            "audio_ctx": min(_AUDIO_CTX_MAX,
+                             max(_AUDIO_CTX_MIN,
+                                 math.ceil(duration_s * _AUDIO_CTX_PER_SECOND))),
+        }
+        # Streaming-only safety nets. max_tokens caps decoder repetition
+        # loops on short silence-split chunks; the non-speech filter
+        # below drops "(music)"-style hallucinations from those same
+        # tiny chunks. Both can clip real speech in batch where the
+        # recording is a single longer utterance.
+        if self.pseudo_streaming:
+            kwargs["max_tokens"] = max(12, int(duration_s * 12))
+        segments = self.model.transcribe(audio, **kwargs)
         text = "".join(s.text for s in segments)
-        # Inline pass first: catches concatenated noise tokens like
-        # "[door opens][door closes][clears throat]" and mid-sentence
-        # "(typing)" inserts. Replace with " " then collapse to avoid
-        # gluing adjacent words.
-        text = _NON_SPEECH_INLINE_RE.sub(" ", text)
-        text = _WHITESPACE_RE.sub(" ", text).strip()
-        # Whole-chunk fallback for artifacts the inline pattern misses
-        # (e.g. internal punctuation inside the brackets) and phonetic
-        # garbage from the failed-decode path.
-        if _NON_SPEECH_WHOLE_RE.match(text) or _PHONETIC_RE.search(text):
+        if self.pseudo_streaming:
+            # Inline pass first: catches concatenated noise tokens like
+            # "[door opens][door closes]" and mid-sentence "(typing)"
+            # inserts. Replace with " " then collapse to avoid gluing
+            # adjacent words. Whole-chunk fallback catches artifacts the
+            # inline pattern misses (internal punctuation inside brackets).
+            text = _NON_SPEECH_INLINE_RE.sub(" ", text)
+            text = _WHITESPACE_RE.sub(" ", text).strip()
+            if _NON_SPEECH_WHOLE_RE.match(text):
+                text = ""
+        else:
+            text = text.strip()
+        # Phonetic garbage (IPA modifier letters, U+FFFD) is always a
+        # decode failure — drop in both modes.
+        if _PHONETIC_RE.search(text):
             text = ""
+        # Trailing space lets pseudo-streaming chunks concatenate cleanly
+        # (vosk convention). Harmless in batch mode — downstream strips.
         if text:
             text += " "
         return {"text": text}

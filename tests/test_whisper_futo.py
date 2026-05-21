@@ -38,11 +38,14 @@ class FakeModel:
         return self._segments
 
 
-def make_transcriber(*texts):
+def make_transcriber(*texts, pseudo_streaming=True):
     """Build a WhisperFutoTranscriber wired to a FakeModel that returns
-    the given segment texts. Passing model= bypasses the FUTO download."""
+    the given segment texts. Defaults to pseudo_streaming=True because
+    that's the mode where the cap / audio_ctx shrinkage / non-speech
+    filter apply. Batch-mode tests pass pseudo_streaming=False."""
     model = FakeModel([FakeSegment(t) for t in texts])
-    tr = WhisperFutoTranscriber("small", model=model)
+    tr = WhisperFutoTranscriber("small", model=model,
+                                pseudo_streaming=pseudo_streaming)
     return tr, model
 
 
@@ -205,3 +208,38 @@ def test_audio_ctx_has_minimum_floor():
     tr, model = make_transcriber("ok")
     tr.transcribe_audio(audio_bytes_for_duration(0.05))  # 0.05s × 50 = 2.5
     assert model.last_kwargs["audio_ctx"] >= 8
+
+
+# Batch mode: limits OFF -----------------------------------------------------
+
+def test_batch_mode_keeps_audio_ctx_shrinkage():
+    """audio_ctx shrinkage is the FUTO ACFT speedup — the whole point of
+    this backend. Applies in both batch and streaming modes for the
+    supported ACFT set (tiny/base/small + .en). Turbo / non-ACFT models
+    are not exposed here precisely because they break this shortcut."""
+    tr, model = make_transcriber("ok", pseudo_streaming=False)
+    tr.transcribe_audio(audio_bytes_for_duration(2.0))
+    assert model.last_kwargs["audio_ctx"] == 100
+
+
+def test_batch_mode_skips_max_tokens_cap():
+    tr, model = make_transcriber("ok", pseudo_streaming=False)
+    tr.transcribe_audio(audio_bytes_for_duration(2.0))
+    assert "max_tokens" not in model.last_kwargs
+
+
+def test_batch_mode_preserves_sound_effect_chunk():
+    """The non-speech filter targets short hallucinations from the silence
+    splitter. In batch mode (one full recording) it would risk eating real
+    parentheticals or proper-noun [tags]; leave the text untouched."""
+    tr, _ = make_transcriber("(music) Bonjour", pseudo_streaming=False)
+    out = tr.transcribe_audio(audio_bytes_for_duration(2.0))
+    assert out == {"text": "(music) Bonjour "}
+
+
+def test_batch_mode_still_drops_phonetic_garbage():
+    """Phonetic garbage (IPA modifier letters + U+FFFD) is always a decode
+    failure — drop in both modes."""
+    tr, _ = make_transcriber("ʰᵃᵗᵗᵗᵗ�", pseudo_streaming=False)
+    out = tr.transcribe_audio(audio_bytes_for_duration(2.0))
+    assert out == {"text": ""}

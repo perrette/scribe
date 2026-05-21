@@ -66,8 +66,11 @@ class DummyTranscriber:
 
 whisper_models = ["tiny", "base", "small", "medium", "large-v3", "large-v3-turbo"]
 whisper_english_models = ["tiny.en", "base.en", "small.en", "medium.en"]
-# FUTO ACFT publishes only tiny/base/small (+ .en variants); no medium/large/turbo.
-whisper_futo_models = ["tiny", "base", "small", "turbo"]
+# FUTO ACFT publishes only tiny/base/small (+ .en variants). Community
+# conversions exist for large/turbo but their large-v3 encoder is
+# incompatible with the audio_ctx shrinkage that's the point of this
+# backend — for large models use the `whisper` backend instead.
+whisper_futo_models = ["tiny", "base", "small"]
 whisper_futo_english_models = ["tiny.en", "base.en", "small.en"]
 whisperapi_models = ["gpt-4o-transcribe", "gpt-4o-mini-transcribe", "gpt-realtime-whisper"]
 vosk_models = [language_config["vosk"][lang]["model"] for lang in language_config["vosk"]]
