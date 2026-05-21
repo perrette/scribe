@@ -87,11 +87,14 @@ class AbstractTranscriber(STTBackend):
                     raise ImportError("bundled silero_vad.onnx not found")
                 vad_mode = "silero"
                 self._vad_auto_log = "VAD: silero (auto-selected)"
-            except (ImportError, FileNotFoundError):
+            except (ImportError, FileNotFoundError) as exc:
+                # onnxruntime is a base dependency now, so this path means
+                # the install is broken (missing model file, custom slim
+                # build, frozen env without it). Fall back to dB and surface
+                # the actual reason rather than the old "install [vad]" hint.
                 vad_mode = "db"
                 self._vad_auto_log = (
-                    "VAD: onnxruntime not available, using dB threshold "
-                    "(install with: pip install 'scribe-cli[vad]')"
+                    f"VAD: silero unavailable ({exc}); falling back to dB threshold"
                 )
         else:
             self._vad_auto_log = None

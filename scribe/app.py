@@ -358,9 +358,8 @@ def get_parser():
                             "ambient noise (ticks, fan, traffic) AND to soft "
                             "speech (the dB gate drops sub-threshold syllables; "
                             "silero recognises speech spectrally). "
-                            "'db' is a no-dependency volume-threshold fallback "
-                            "(see --silence-db). "
-                            "Requires `pip install scribe-cli[vad]` for silero. "
+                            "'db' is a volume-threshold fallback used when "
+                            "onnxruntime is unavailable (see --silence-db). "
                             "The dB and silero parameter groups are independent.")
     group.add_argument("--vad-threshold", default=0.5, type=float,
                        help="[silero only] Speech-probability threshold in [0,1] "

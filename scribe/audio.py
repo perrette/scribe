@@ -285,8 +285,9 @@ class SileroSilenceGate(SilenceGate):
 
     Runs the bundled `silero_vad.onnx` (~2 MB) via `onnxruntime` — same
     model, same algorithm, same parameters as the upstream silero-vad
-    package, but without pulling in torch (~1.6 GB). The `[vad]` extra
-    installs only onnxruntime.
+    package, but without pulling in torch (~1.6 GB). `onnxruntime` is a
+    base dependency (the `[vad]` extra is kept as a no-op alias for
+    back-compat with older install commands).
 
     Around the ONNX model + state machine we only do two things: a
     rechunker buffer (the model needs exactly 512-sample windows at
@@ -312,9 +313,11 @@ class SileroSilenceGate(SilenceGate):
         try:
             import onnxruntime  # noqa: F401
         except ImportError as exc:
+            # onnxruntime is a base dependency now; reaching this branch
+            # means the install is broken or someone stripped it manually.
             raise ImportError(
-                "onnxruntime is not installed. Install with: "
-                "pip install 'scribe-cli[vad]' (or: pip install onnxruntime)"
+                "onnxruntime is not installed. Reinstall scribe-cli, or "
+                "pip install onnxruntime."
             ) from exc
         model_path = _bundled_silero_onnx_path()
         if not model_path.exists():

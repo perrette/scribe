@@ -22,6 +22,11 @@ dependencies = [
     "termcolor",
     "platformdirs",
     "desktop-ai-core>=0.2.0",
+    # Runs the bundled silero VAD ONNX model (~2 MB shipped in scribe_data).
+    # In base deps so silero is available out of the box — see scribe/audio.py.
+    # `faster-whisper` already pulls it transitively, so installing with
+    # [whisper] is free; standalone adds ~57 MB which is trivial for an STT tool.
+    "onnxruntime",
 ]
 
 classifiers = [
@@ -67,8 +72,10 @@ vosk = ["vosk"]
 app = ["pystray", "PyGObject"]
 openai = ["openai>=2.37.0,<3", "soundfile"]
 groq = ["openai>=2.37.0,<3", "soundfile"]
-vad = ["onnxruntime"]
-all = ["pynput", "faster-whisper", "pywhispercpp", "openai>=2.37.0,<3", "soundfile", "vosk", "pystray", "onnxruntime"]
+# [vad] is now a no-op alias kept for back-compat (`pip install scribe-cli[vad]`
+# was the documented install before onnxruntime moved into base deps).
+vad = []
+all = ["pynput", "faster-whisper", "pywhispercpp", "openai>=2.37.0,<3", "soundfile", "vosk", "pystray"]
 
 
 [tool.setuptools]
