@@ -1,8 +1,6 @@
 import json
 from typing import ClassVar
 
-import numpy as np
-
 from scribe.models import AbstractStreamingTranscriber, get_vosk_model, get_vosk_recognizer
 
 
@@ -12,10 +10,14 @@ class VoskTranscriber(AbstractStreamingTranscriber):
     default_model: str | None = None
     is_local: ClassVar[bool] = True
     supports_streaming: ClassVar[bool] = True
-    _frozen_options = frozenset(["restart_after_silence", "silence_duration", "silence_thresh"])
+    _frozen_options = frozenset(["pseudo_streaming", "streaming_window",
+                                  "silence_duration", "silence_thresh"])
 
     def __init__(self, model_name, model=None, model_kwargs={}, **kwargs):
-        kwargs["silence_thresh"] = -np.inf  # disable silence detection (this is handled by Vosk)
+        # Vosk has its own internal VAD/segmentation — scribe's silence
+        # path is irrelevant. pseudo_streaming defaults to False so the
+        # abstract path is inert; pin it here to ignore any caller setting.
+        kwargs["pseudo_streaming"] = False
         if model is None:
             model = get_vosk_model(model_name, **model_kwargs)
         super().__init__(model, model_name, model_kwargs=model_kwargs, **kwargs)

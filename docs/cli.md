@@ -35,26 +35,23 @@ The flags are grouped to mirror the source-of-truth in
 | `--type-direct`             | In keystroke mode, type the transcription as keystrokes instead of synthesising Ctrl+V.     |
 | `-o, --output-file FILE`    | Also append the transcription to this file.                                                 |
 
+## Silence detection (shared)
+
+| Flag                       | Default | Purpose                                                                |
+|----------------------------|---------|------------------------------------------------------------------------|
+| `--duration SECS`          | `120`   | Max recording duration in seconds.                                     |
+| `--silence-db DB`          | `-40`   | dBFS volume floor for "this frame is silent". Used by every silence-driven behavior. |
+| `--silence-duration SECS`  | `0.6`   | How long silence must persist before triggering a backend's silence behavior (realtime auto-commit, pseudo-streaming cut). |
+
 ## Realtime (`gpt-realtime-whisper`)
 
-| Flag                                              | Purpose                                                                                      |
-|---------------------------------------------------|----------------------------------------------------------------------------------------------|
-| `--realtime-delay {minimal,low,medium,high,xhigh}` | Trade off latency vs accuracy on `gpt-realtime-whisper` (default `medium`). Lower = faster partials but more paste churn in the focused window. |
+| Flag                                              | Default  | Purpose                                                                                                                                                                                  |
+|---------------------------------------------------|----------|------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `--realtime-delay {minimal,low,medium,high,xhigh}` | `medium` | Trade off latency vs accuracy on `gpt-realtime-whisper`. Lower = faster partials but more paste churn in the focused window.                                                             |
+| `--realtime-gate` / `--no-realtime-gate`          | on       | Drop silent frames (per `--silence-db`) before sending them over the WebSocket so silent audio isn't billed as input tokens. After `--silence-duration` of silence, also commit mid-session so trailing words flush live. |
 
-This flag only affects the OpenAI realtime model; the other backends
-ignore it.
-
-## Silence detection (whisper, openai batch, groq)
-
-| Flag                          | Default | Purpose                                                       |
-|-------------------------------|---------|---------------------------------------------------------------|
-| `--duration SECS`             | `120`   | Max recording duration in seconds.                            |
-| `--silence SECS`              | `120`   | Silence duration in seconds that triggers a cut (default effectively disables it). |
-| `--silence-db DB`             | `-200`  | Silence threshold in dB (default effectively disables it).    |
-| `-a, --restart-after-silence` | off     | Resume recording after a silence-triggered transcription.     |
-
-Streaming models (Vosk, `gpt-realtime-whisper`) ignore these — they
-have their own end-of-utterance signal.
+Streaming models (Vosk, `gpt-realtime-whisper`) ignore the batch
+silence-chunking knobs; they have their own end-of-utterance signal.
 
 ## Frontend
 
@@ -74,17 +71,18 @@ scribe --vosk-models vosk-model-fr-0.22 \
        --whisper-models small large-v3-turbo
 ```
 
-Cut on 2 s of silence below −40 dB and auto-restart afterwards:
-
-```bash
-scribe --silence-db -40 --silence 2 -a
-```
-
 Stream OpenAI realtime transcripts with the most aggressive latency
 setting:
 
 ```bash
 scribe --model gpt-realtime-whisper --realtime-delay minimal
+```
+
+Disable the realtime silence gate (e.g. to A/B against a noisy
+environment) — you'll pay for silent audio while the session is open:
+
+```bash
+scribe --model gpt-realtime-whisper --no-realtime-gate
 ```
 
 Run scribe headlessly into a file without touching the clipboard or

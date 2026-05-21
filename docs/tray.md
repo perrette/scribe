@@ -58,8 +58,10 @@ Options ▶
     Keyboard backend ▶            eitype / pynput / ydotool / wtype
                                   (rows incompatible with this OS are hidden;
                                    submenu hidden entirely when ≤ 1 row left)
-    Advanced ▶                    auto-restart after silence, duration,
-                                    silence threshold, output file
+    Advanced ▶                    silence duration, silence threshold,
+                                    realtime gate, pseudo-streaming
+                                    [experimental], streaming window
+                                    [experimental], output file
 Quit
 ```
 

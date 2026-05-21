@@ -8,7 +8,7 @@ from typing import ClassVar
 import numpy as np
 
 from desktop_ai_core.providers.errors import format_openai_error
-from scribe.models import AbstractStreamingTranscriber, AbstractTranscriber
+from scribe.models import AbstractStreamingTranscriber, AbstractTranscriber, is_silent
 
 
 log = logging.getLogger(__name__)
@@ -20,7 +20,7 @@ class OpenaiRealtimeTranscriber(AbstractStreamingTranscriber):
     default_model: str | None = "gpt-realtime-whisper"
     is_local: ClassVar[bool] = False
     supports_streaming: ClassVar[bool] = True
-    _frozen_options = frozenset(["restart_after_silence", "silence_duration", "silence_thresh"])
+    _frozen_options = frozenset(["pseudo_streaming", "streaming_window"])
 
     _FINALIZE_TIMEOUT = 5.0
     _CLOSE_JOIN_TIMEOUT = 0.25
@@ -30,13 +30,21 @@ class OpenaiRealtimeTranscriber(AbstractStreamingTranscriber):
     _GA_SAMPLE_RATE = 24000
 
     def __init__(self, model_name="gpt-realtime-whisper", language=None, model_kwargs={},
-                 model=None, api_key=None, realtime_delay="medium", **kwargs):
-        # The realtime model has its own VAD; mirror VoskTranscriber and disable
-        # scribe's silence-detection path entirely.
-        kwargs["silence_thresh"] = -np.inf
+                 model=None, api_key=None, realtime_delay="medium",
+                 realtime_gate=True, **kwargs):
         AbstractTranscriber.__init__(
             self, model, model_name, language, model_kwargs=model_kwargs, **kwargs,
         )
+        # Client-side silence gate: gpt-realtime-whisper has no server VAD
+        # (turn_detection is None in _session_config), so every audio frame
+        # we send is billed as input audio — including silence. When
+        # enabled, feed_audio drops frames quieter than silence_thresh.
+        self._gate_enabled = realtime_gate
+        # Without server VAD the model also keeps trailing words in a
+        # tentative buffer until something commits; mid-session commit
+        # flushes the trailing deltas live so the user sees the end of
+        # their phrase without having to stop the recording. Triggered
+        # after silence_duration seconds of sustained silence.
         self._api_key = api_key
         self._realtime_delay = realtime_delay
         self._client = None
@@ -49,6 +57,9 @@ class OpenaiRealtimeTranscriber(AbstractStreamingTranscriber):
         self._final_transcript = None
         self._closed = True
         self._resample_tail: np.ndarray = np.zeros(0, dtype=np.int16)
+        # Mid-session auto-commit state (see _SILENCE_COMMIT_SEC).
+        self._has_uncommitted_audio = False
+        self._silent_samples = 0
 
     def _session_config(self) -> dict:
         # gpt-realtime-whisper does NOT support server VAD (rejected as
@@ -78,6 +89,8 @@ class OpenaiRealtimeTranscriber(AbstractStreamingTranscriber):
         self._final_transcript = None
         self._event_queue = queue.Queue()
         self._resample_tail = np.zeros(0, dtype=np.int16)
+        self._has_uncommitted_audio = False
+        self._silent_samples = 0
 
         api_key = self._api_key or os.environ.get("OPENAI_API_KEY")
         self._client = openai.OpenAI(api_key=api_key)
@@ -192,14 +205,35 @@ class OpenaiRealtimeTranscriber(AbstractStreamingTranscriber):
     def feed_audio(self, chunk=b""):
         self.session.audio_buffer += chunk
         if chunk and self._connection is not None and not self._closed:
-            try:
-                payload = self._upsample_to_ga(chunk)
-                if payload:
-                    self._connection.input_audio_buffer.append(
-                        audio=base64.b64encode(payload).decode("ascii"),
-                    )
-            except Exception as exc:
-                self.notify_error("Realtime send failed", repr(exc))
+            chunk_is_silent = is_silent(chunk, self.silence_thresh)
+
+            # Send unless the gate is on and the chunk is silent.
+            if not (chunk_is_silent and self._gate_enabled):
+                try:
+                    payload = self._upsample_to_ga(chunk)
+                    if payload:
+                        self._connection.input_audio_buffer.append(
+                            audio=base64.b64encode(payload).decode("ascii"),
+                        )
+                        self._has_uncommitted_audio = True
+                except Exception as exc:
+                    self.notify_error("Realtime send failed", repr(exc))
+
+            # Silence tracking for the mid-session auto-commit; driven by
+            # silence regardless of whether the gate dropped the frame.
+            if chunk_is_silent:
+                if self._has_uncommitted_audio:
+                    self._silent_samples += len(chunk) // 2  # int16 → 2 bytes
+                    commit_samples = int(self.silence_duration * self.samplerate)
+                    if commit_samples > 0 and self._silent_samples >= commit_samples:
+                        try:
+                            self._connection.input_audio_buffer.commit()
+                        except Exception as exc:
+                            log.debug("mid-session commit failed: %s", exc)
+                        self._has_uncommitted_audio = False
+                        self._silent_samples = 0
+            else:
+                self._silent_samples = 0
 
         while True:
             try:
@@ -216,19 +250,25 @@ class OpenaiRealtimeTranscriber(AbstractStreamingTranscriber):
         if self._connection is None or self._closed:
             return {"text": ""}
 
-        self._completed_event.clear()
-        try:
-            self._connection.input_audio_buffer.commit()
-        except Exception:
-            return {"text": ""}
-
-        # Wait for the server's `.completed` event; trailing deltas land on
-        # the queue between commit and completion. The recording loop has
-        # already exited, so drain the queue here and stitch the tail
-        # together — otherwise the last words spoken just before stop get
-        # dropped. The bulk of the transcript was already streamed live as
-        # `text` deltas during recording, so we only return the tail.
-        self._completed_event.wait(timeout=self._FINALIZE_TIMEOUT)
+        # Only commit + wait if there's audio the model hasn't flushed yet.
+        # If the mid-session silence auto-commit already fired, the buffer
+        # is empty and a fresh commit would error (and we'd block waiting
+        # for a `.completed` that never arrives).
+        if self._has_uncommitted_audio:
+            self._completed_event.clear()
+            try:
+                self._connection.input_audio_buffer.commit()
+            except Exception:
+                return {"text": ""}
+            self._has_uncommitted_audio = False
+            # Wait for the server's `.completed` event; trailing deltas
+            # land on the queue between commit and completion. The
+            # recording loop has already exited, so drain the queue here
+            # and stitch the tail together — otherwise the last words
+            # spoken just before stop get dropped. The bulk of the
+            # transcript was already streamed live as `text` deltas during
+            # recording, so we only return the tail.
+            self._completed_event.wait(timeout=self._FINALIZE_TIMEOUT)
         tail_parts: list[str] = []
         while True:
             try:

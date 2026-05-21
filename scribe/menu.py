@@ -143,6 +143,17 @@ class AppState(AbstractFrontendApp):
     def _is_whisper(self, item=None) -> bool:
         return self.transcriber is not None and getattr(self.transcriber, "backend", None) == "whisper"
 
+    def _is_batch_backend(self, item=None) -> bool:
+        """True for backends that don't stream natively (so pseudo-streaming
+        applies). Anything where supports_streaming is falsy on the class."""
+        if self.transcriber is None:
+            return False
+        return not getattr(type(self.transcriber), "supports_streaming", False)
+
+    def _is_realtime(self, item=None) -> bool:
+        """True for the OpenAI realtime backend (has the silence gate)."""
+        return self.transcriber is not None and hasattr(self.transcriber, "_gate_enabled")
+
     # ── Top-level callbacks ────────────────────────────────────────
     def cb_record(self, view, item):
         if self.icon is not None:
@@ -348,12 +359,21 @@ class AppState(AbstractFrontendApp):
         self._refresh_tray_menu()
         return True
 
-    def cb_toggle_auto_restart(self, view, item):
-        new = not bool(getattr(self.transcriber, "restart_after_silence", False))
+    def cb_toggle_pseudo_streaming(self, view, item):
+        new = not bool(getattr(self.transcriber, "pseudo_streaming", False))
         if self.transcriber is not None:
-            self.transcriber.restart_after_silence = new
-        self.o.restart_after_silence = new
-        self.params["restart_after_silence"] = new
+            self.transcriber.pseudo_streaming = new
+        self.o.pseudo_streaming = new
+        self.params["pseudo_streaming"] = new
+        self._refresh_tray_menu()
+        return True
+
+    def cb_toggle_realtime_gate(self, view, item):
+        new = not bool(getattr(self.transcriber, "_gate_enabled", True))
+        if self.transcriber is not None and hasattr(self.transcriber, "_gate_enabled"):
+            self.transcriber._gate_enabled = new
+        self.o.realtime_gate = new
+        self.params["realtime_gate"] = new
         self._refresh_tray_menu()
         return True
 
@@ -373,10 +393,10 @@ class AppState(AbstractFrontendApp):
                 self.transcriber.timeout = val
         return True
 
-    def cb_set_silence(self, view, item):
+    def cb_set_silence_duration(self, view, item):
         val = self._coerce_float(item.value(item), "duration")
         if val is not None:
-            self.o.silence = val
+            self.o.silence_duration = val
             if self.transcriber is not None:
                 self.transcriber.silence_duration = val
         return True
@@ -387,6 +407,14 @@ class AppState(AbstractFrontendApp):
             self.o.silence_db = val
             if self.transcriber is not None:
                 self.transcriber.silence_thresh = val
+        return True
+
+    def cb_set_streaming_window(self, view, item):
+        val = self._coerce_float(item.value(item), "window")
+        if val is not None:
+            self.o.streaming_window = val
+            if self.transcriber is not None:
+                self.transcriber.streaming_window = val
         return True
 
     def cb_set_output_file(self, view, item):
@@ -612,18 +640,27 @@ def _advanced_options_menu(app_state) -> Menu:
     ``visible=`` predicates so vosk users still don't see whisper-only
     fields."""
     items = [
-        Item("a", app_state.cb_toggle_auto_restart, help="Auto-restart after silence",
-             checked=lambda item: bool(getattr(app_state.transcriber, "restart_after_silence", False)),
-             visible=app_state._is_whisper),
         SetValueItem("t", app_state.cb_set_duration,
                      value=lambda item: getattr(app_state.transcriber, "timeout", None),
                      type=float, help="Duration (s)", visible=app_state._is_whisper),
-        SetValueItem("b", app_state.cb_set_silence,
+        SetValueItem("b", app_state.cb_set_silence_duration,
                      value=lambda item: getattr(app_state.transcriber, "silence_duration", None),
-                     type=float, help="Silence break (s)", visible=app_state._is_whisper),
+                     type=float, help="Silence duration (s)"),
         SetValueItem("db", app_state.cb_set_silence_db,
                      value=lambda item: getattr(app_state.transcriber, "silence_thresh", None),
-                     type=float, help="Silence threshold (db)", visible=app_state._is_whisper),
+                     type=float, help="Silence threshold (dB)"),
+        Item("g", app_state.cb_toggle_realtime_gate,
+             help="Realtime: drop silent frames (gate)",
+             checked=lambda item: bool(getattr(app_state.transcriber, "_gate_enabled", True)),
+             visible=app_state._is_realtime),
+        Item("p", app_state.cb_toggle_pseudo_streaming,
+             help="Pseudo-streaming [EXPERIMENTAL]",
+             checked=lambda item: bool(getattr(app_state.transcriber, "pseudo_streaming", False)),
+             visible=app_state._is_batch_backend),
+        SetValueItem("w", app_state.cb_set_streaming_window,
+                     value=lambda item: getattr(app_state.transcriber, "streaming_window", None),
+                     type=float, help="Streaming window (s) [EXPERIMENTAL]",
+                     visible=app_state._is_batch_backend),
         SetValueItem("f", app_state.cb_set_output_file,
                      value=lambda item: getattr(app_state.o, "output_file", None) or "",
                      type=str, help="Output file"),

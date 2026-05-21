@@ -104,33 +104,44 @@ def _prompt_model_for_backend(backend, language, prompt):
     raise ValueError(f"Unknown backend: {backend}")
 
 
-def _build_backend_kwargs(backend, model, language, samplerate, duration, silence, silence_db,
-                          restart_after_silence, api_key, download_folder_vosk, download_folder_whisper,
-                          realtime_delay):
+def _build_backend_kwargs(backend, model, language, samplerate, duration,
+                          silence_db, silence_duration, api_key,
+                          download_folder_vosk, download_folder_whisper,
+                          realtime_delay, realtime_gate,
+                          pseudo_streaming, streaming_window):
     if backend == "vosk":
         return dict(model_name=model, language=language, samplerate=samplerate,
                     timeout=None, silence_duration=None,
                     model_kwargs={"download_root": download_folder_vosk})
     if backend == "whisper":
         return dict(model_name=model, language=language, samplerate=samplerate,
-                    timeout=duration, silence_duration=silence, silence_thresh=silence_db,
-                    restart_after_silence=restart_after_silence,
+                    timeout=duration, silence_duration=silence_duration, silence_thresh=silence_db,
+                    pseudo_streaming=pseudo_streaming, streaming_window=streaming_window,
                     model_kwargs={"download_root": download_folder_whisper})
     if backend in ("openai", "groq"):
         from scribe.backends.openai_api import REALTIME_MODELS
         kwargs = dict(model_name=model, samplerate=samplerate,
-                      timeout=duration, silence_duration=silence, silence_thresh=silence_db,
-                      restart_after_silence=restart_after_silence, api_key=api_key)
+                      timeout=duration, silence_duration=silence_duration, silence_thresh=silence_db,
+                      pseudo_streaming=pseudo_streaming, streaming_window=streaming_window,
+                      api_key=api_key)
         if backend == "openai" and model in REALTIME_MODELS:
             kwargs["realtime_delay"] = realtime_delay
+            kwargs["realtime_gate"] = realtime_gate
+            # Pseudo-streaming is for batch backends; the realtime backend
+            # already streams natively. Strip these so its __init__ doesn't
+            # see options it doesn't act on.
+            kwargs.pop("pseudo_streaming", None)
+            kwargs.pop("streaming_window", None)
         return kwargs
     raise ValueError(f"Unknown backend: {backend}")
 
 
 def get_transcriber(model=None, backend=None, dummy=False, prompt=True, language=None,
-                    samplerate=None, duration=None, silence=None, silence_db=None, restart_after_silence=None,
+                    samplerate=None, duration=None,
+                    silence_db=-40.0, silence_duration=0.6,
                     api_key=None, download_folder_vosk=None, download_folder_whisper=None,
-                    realtime_delay="medium", **kwargs):
+                    realtime_delay="medium", realtime_gate=True,
+                    pseudo_streaming=False, streaming_window=30.0, **kwargs):
     if dummy:
         return DummyTranscriber("whisper", "dummy")
     if model and not backend:
@@ -150,10 +161,11 @@ def get_transcriber(model=None, backend=None, dummy=False, prompt=True, language
     else:
         model = _prompt_model_for_backend(backend, language, prompt)
     print(f"Selected model: {model}")
-    backend_kwargs = _build_backend_kwargs(backend, model, language, samplerate, duration, silence,
-                                          silence_db, restart_after_silence, api_key,
+    backend_kwargs = _build_backend_kwargs(backend, model, language, samplerate, duration,
+                                          silence_db, silence_duration, api_key,
                                           download_folder_vosk, download_folder_whisper,
-                                          realtime_delay)
+                                          realtime_delay, realtime_gate,
+                                          pseudo_streaming, streaming_window)
     try:
         return _build_transcriber(backend, **backend_kwargs)
     except Exception as error:
@@ -199,6 +211,22 @@ def get_parser():
     group.add_argument("-o", "--output-file",
                        help="Also append the transcription to this file.")
 
+    group = parser.add_argument_group("Silence detection (shared)")
+    group.add_argument("--duration", default=120, type=float,
+                       help="Max recording duration in seconds (default: %(default)s).")
+    group.add_argument("--silence-db", default=-40.0, type=float,
+                       help="dBFS volume floor for 'this frame is silent' "
+                            "(default: %(default)s). Used by every silence-driven "
+                            "behavior (realtime gate, realtime auto-commit, "
+                            "pseudo-streaming chunking).")
+    group.add_argument("--silence-duration", default=0.6, type=float,
+                       help="Seconds of silence required before triggering a "
+                            "backend's silence behavior (default: %(default)s). "
+                            "For the realtime backend: time before a mid-session "
+                            "commit flushes trailing words. For pseudo-streaming "
+                            "batch backends: candidate cut point within the "
+                            "streaming window.")
+
     group = parser.add_argument_group("Realtime (gpt-realtime-whisper)")
     group.add_argument("--realtime-delay",
                        choices=("minimal", "low", "medium", "high", "xhigh"),
@@ -206,16 +234,26 @@ def get_parser():
                        help="Trade off latency vs accuracy on gpt-realtime-whisper "
                             "(default: %(default)s; lower = faster partials but more "
                             "paste churn in the focused window).")
+    group.add_argument("--realtime-gate", action=argparse.BooleanOptionalAction,
+                       default=True,
+                       help="Drop silent frames (per --silence-db) before sending "
+                            "them over the WebSocket so silent audio isn't billed "
+                            "as input tokens (default: on; pass --no-realtime-gate "
+                            "to disable).")
 
-    group = parser.add_argument_group("Silence detection (whisper, openai, groq)")
-    group.add_argument("--duration", default=120, type=float,
-                       help="Max recording duration in seconds (default: %(default)s).")
-    group.add_argument("--silence", default=120, type=float,
-                       help="Silence duration in seconds that triggers a cut (default: %(default)s, effectively disabled).")
-    group.add_argument("--silence-db", default=-200, type=float,
-                       help="Silence threshold in dB (default: %(default)s, effectively disabled).")
-    group.add_argument("-a", "--restart-after-silence", action="store_true",
-                       help="Resume recording after a silence-triggered transcription.")
+    group = parser.add_argument_group("Pseudo-streaming (experimental)")
+    group.add_argument("--pseudo-streaming", action="store_true",
+                       help="[EXPERIMENTAL] Force a batch backend (whisper, groq, "
+                            "openai non-realtime) into chunked pseudo-streaming "
+                            "using --streaming-window and --silence-duration. "
+                            "Off by default — the batch backend transcribes the "
+                            "whole recording on stop.")
+    group.add_argument("--streaming-window", default=30.0, type=float,
+                       help="[EXPERIMENTAL] Target streaming window in seconds for "
+                            "--pseudo-streaming (default: %(default)s). After this "
+                            "many seconds of buffered audio, cut at the first "
+                            "silence (>= --silence-duration); if no silence "
+                            "arrives by 2x the window, force-cut.")
 
     group = parser.add_argument_group("Frontend")
     group.add_argument("--frontend", choices=["tray", "terminal"], default="tray",
@@ -412,7 +450,7 @@ def _print_main_status(state, o):
         print(f"Also writing to file: {colored(o.output_file, 'light_blue')}")
     if o.frontend == "tray":
         print(colored("App mode (tray) enabled", "light_green"))
-    extras = [opt for opt in ("restart_after_silence",) if getattr(o, opt, False)]
+    extras = [opt for opt in ("pseudo_streaming",) if getattr(o, opt, False)]
     if extras:
         print(f"Options: {' | '.join(colored(e, 'light_blue') for e in extras)}")
 

@@ -28,7 +28,8 @@ class AbstractTranscriber(STTBackend):
     backend = None
     _frozen_options = frozenset()
     def __init__(self, model, model_name=None, language=None, samplerate=16000, timeout=None, model_kwargs={},
-                 silence_thresh=-40, silence_duration=2, restart_after_silence=False):
+                 silence_thresh=-40, silence_duration=0.6,
+                 pseudo_streaming=False, streaming_window=30.0):
         self.model_name = model_name
         self.language = language
         self.model = model
@@ -37,7 +38,12 @@ class AbstractTranscriber(STTBackend):
         self.timeout = timeout
         self.silence_thresh = silence_thresh
         self.silence_duration = silence_duration
-        self.restart_after_silence = restart_after_silence
+        # Pseudo-streaming (experimental): when on, transcribe_realtime_audio
+        # cuts the running buffer into chunks driven by silence + a target
+        # window. When off, transcribe_realtime_audio just accumulates and
+        # finalize() transcribes the whole recording.
+        self.pseudo_streaming = pseudo_streaming
+        self.streaming_window = streaming_window
         # Set by RecordingSession.__init__; backend reads/writes session.audio_buffer
         # etc. inside transcribe_realtime_audio / finalize.
         self.session = None
@@ -58,34 +64,57 @@ class AbstractTranscriber(STTBackend):
             print(f"[{text}]")
 
     def transcribe_realtime_audio(self, audio_bytes=b""):
-        """This method is generic and assumes the underlying model does not handle real-time audio.
-        The Vosk model handles real-time audio, so this method is overridden in the VoskTranscriber class.
+        """Generic adapter for batch backends. Two modes:
+
+        - Default (pseudo_streaming=False): accumulate the whole recording
+          into session.audio_buffer; finalize() runs one transcription.
+        - Pseudo-streaming (pseudo_streaming=True, experimental): cut the
+          running buffer into chunks. First-fit silence cut once the buffer
+          has accumulated >= streaming_window seconds; force-cut at
+          2 * streaming_window. Cuts raise SilenceDetected; the session
+          loop catches that, calls finalize(), and resumes.
+
+        Streaming backends (Vosk, OpenAI realtime) override this — they
+        feed audio incrementally to their own engines and never hit this
+        path.
         """
         session = self.session
 
-        # Vérifier si le segment est un silence
+        if not self.pseudo_streaming:
+            session.audio_buffer += audio_bytes
+            return {"partial": f"{len(session.audio_buffer)} bytes received "
+                               f"(duration: {session.get_elapsed():.2f} seconds)"}
+
+        elapsed = time.time() - session.start_time
+
         if is_silent(audio_bytes, self.silence_thresh):
             session.silence_buffer += audio_bytes
-            silence_duration = time.time() - session.last_sound_time
-            session.waiting = self.silence_duration is not None and silence_duration >= self.silence_duration
+            sil_dur = time.time() - session.last_sound_time
+            session.waiting = sil_dur >= self.silence_duration
 
-            if session.waiting and len(session.audio_buffer) > 0:
-                if self.restart_after_silence:
-                    raise SilenceDetected("Silence detected: {:.2f} seconds".format(silence_duration))
-                else:
-                    raise StopRecording("Silence detected: {:.2f} seconds".format(silence_duration))
-
+            if (elapsed >= self.streaming_window
+                    and session.waiting
+                    and len(session.audio_buffer) > 0):
+                raise SilenceDetected(
+                    f"Cut at silence after {elapsed:.2f}s "
+                    f"(silent {sil_dur:.2f}s)"
+                )
         else:
             session.last_sound_time = time.time()
             session.waiting = False
             silence_buffer_data = np.frombuffer(session.silence_buffer, dtype=np.int16)
-            # add 0.5 seconds worth of silent data back to the audio buffer
-            half_a_second = 0.5
-            length_of_half_a_second = int(half_a_second * self.samplerate)
+            # Add 0.5s of trailing silence back so word boundaries aren't clipped.
+            length_of_half_a_second = int(0.5 * self.samplerate)
             session.audio_buffer += silence_buffer_data[-length_of_half_a_second:].tobytes() + audio_bytes
             session.silence_buffer = b''
 
-        return {"partial": f"{len(session.audio_buffer)} bytes received (duration: {session.get_elapsed()} seconds)"}
+        if elapsed >= 2 * self.streaming_window and len(session.audio_buffer) > 0:
+            raise SilenceDetected(
+                f"Force-cut at 2x streaming window ({elapsed:.2f}s)"
+            )
+
+        return {"partial": f"{len(session.audio_buffer)} bytes received "
+                           f"(duration: {elapsed:.2f} seconds)"}
 
     def transcribe_audio(self, audio_data):
         raise NotImplementedError()

@@ -107,16 +107,22 @@ recording continues for up to 2 minutes until you stop it manually
 (Stop in the tray, Ctrl+C in the terminal) — the transcription happens
 once when you stop.
 
-You can also auto-cut on silence:
+Streaming models (Vosk, `gpt-realtime-whisper`) emit partials as you
+speak and stop on the same Stop / Ctrl+C action.
+
+## Pseudo-streaming (experimental)
+
+`--pseudo-streaming` makes a batch backend behave streaming-like by
+cutting the running buffer into chunks driven by silence:
 
 ```bash
-scribe --silence-db -40 --silence 2
+scribe --pseudo-streaming --streaming-window 15
 ```
 
-cuts the recording when a silence below −40 dB lasts more than 2
-seconds. The defaults (`--silence-db -200`, `--silence 120`) effectively
-disable this and keep full manual control.
+After `--streaming-window` seconds of buffered audio, scribe cuts at
+the first silence of at least `--silence-duration` and transcribes the
+chunk; if no silence arrives by `2 × --streaming-window`, it
+force-cuts. The session continues until you stop it.
 
-Streaming models (Vosk, `gpt-realtime-whisper`) emit partials as you
-speak and stop on the same Stop / Ctrl+C action — there is no silence
-threshold to tune.
+This is experimental and off by default. The tray menu surfaces the
+same toggle under Options ▶ Advanced ▶ Pseudo-streaming.
