@@ -167,3 +167,34 @@ If `eitype` is unavailable, two older workarounds also work:
 Roadmap for native libei integration (eventual Python bindings,
 expanded compositor support) is tracked in
 [docs/roadmap-libei.md](roadmap-libei.md).
+
+## Realtime backend: delta coalescing
+
+The `gpt-realtime-whisper` backend emits one transcription delta per
+word/subword at ~30–80 ms intervals — much faster than the
+`pyperclip.copy()` + Ctrl+V cycle can settle on Wayland (≥100 ms,
+because `wl-copy` is asynchronous). Pasting every delta led to
+clipboard races where successive copies overwrote each other before
+Ctrl+V landed, manifesting as dropped and duplicated words
+(*"fait fait le mot mot time time…"*).
+
+In **paste mode** (default keystroke output) scribe therefore
+coalesces deltas: incoming tokens accumulate into a small buffer and
+are flushed only when *either* ~400 ms have elapsed since the last
+flush, *or* the buffer ends on sentence-final punctuation
+(`. ! ? \n`). A 200 ms floor between any two flushes prevents
+back-to-back punctuation flushes from racing each other through the
+clipboard.
+
+With **`--type-direct`** the coalescing is bypassed entirely — each
+delta goes through the chosen typer as a raw keystroke synchronously
+(uinput / xtest / portal libei), no clipboard involved, no race to
+defeat. The UX is also snappier: tokens appear one at a time rather
+than in ~400 ms-cadenced bursts.
+
+macOS and Windows clipboards are synchronous, so the race that
+motivates coalescing is essentially a Wayland artefact; scribe still
+coalesces in paste mode there for consistency, but it's harmless.
+This whole behaviour is realtime-specific — Vosk's per-phrase commits
+already arrive at a sane cadence, and the pseudo-streaming backends
+emit one chunk per silence cut (already coarse enough).

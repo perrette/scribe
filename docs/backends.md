@@ -149,9 +149,10 @@ differently:
 | Backend                              | `--prompt`                    | `--words`                                              |
 |--------------------------------------|-------------------------------|--------------------------------------------------------|
 | `whisper` (faster-whisper, local)    | passed as `initial_prompt=`   | passed as `hotwords=` — a **dedicated biasing channel** separate from the prompt |
+| `whisper-futo` (pywhispercpp, local) | passed as `initial_prompt=`   | joined onto the prompt string (no separate hotwords channel here) |
 | `openai` batch (`gpt-4o*-transcribe`) | passed as `prompt=`           | joined onto the prompt string                          |
 | `groq` (`whisper-large-v3-turbo`)     | passed as `prompt=`           | joined onto the prompt string                          |
-| `openai` realtime (`gpt-realtime-whisper`) | included in the session config as `transcription.prompt` | joined onto the prompt string |
+| `openai` realtime (`gpt-realtime-whisper`) | *silently ignored* — the model rejects the prompt parameter server-side (HTTP 400 *"The 'prompt' parameter is not supported for this model."*). The kwarg stays accepted for plumbing compatibility but never reaches the API. | same — joined into the (ignored) prompt |
 | `vosk`                               | *ignored* (no soft prompt)    | *ignored* (Vosk only supports a hard `grammar` allowlist; not yet exposed) |
 
 The whisper-family APIs cap the prompt around ~224 tokens; longer
@@ -202,3 +203,36 @@ more than latency.
 
 This is experimental and off by default. The tray menu surfaces the
 same toggle under Options ▶ Advanced ▶ Pseudo-streaming.
+
+### Cross-chunk prompt context
+
+In pseudo-streaming mode scribe automatically augments each chunk's
+prompt with the trailing ~200 characters of the *previous* chunk's
+transcription. This rolling tail is concatenated onto whatever static
+`--prompt` / `--words` you configured and reaches the backend through
+the same channel as the static prompt (the vocabulary biasing table
+above). The motivation is cross-chunk continuity:
+
+- **Capitalization drift** — without context, a chunk that starts
+  right after a period might come back lowercased.
+- **Article gender (FR/IT/ES/…)** — `"la nouveau"` → `"le nouveau"`
+  once the prior chunk has established the noun.
+- **Language lock** — `whisper.cpp` auto-detects language per call;
+  feeding the previous chunk's tokens keeps the language stable
+  across cuts.
+
+Whisper's prompt window is capped at ~224 tokens; 200 chars of French
+sits well under that and leaves room for your static prompt + words
+list.
+
+The rolling tail is **dropped** whenever the pause that triggered the
+chunk cut exceeded 1.5 seconds — a long pause is treated as a new
+sentence/idea boundary, where carrying a possibly-bad prior chunk
+forward biases the next one more than it helps. This mirrors
+`whisper.cpp`'s `--keep-context off` default: prior-text conditioning
+can self-reinforce errors (hallucinations, decoder repetition loops)
+more readily than it provides useful continuity, so we cap it at
+natural sentence boundaries.
+
+Short pauses (mid-sentence punctuation) keep the context; the cut at
+the start of every new recording also clears it.
