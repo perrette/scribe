@@ -224,7 +224,7 @@ def _build_backend_kwargs(backend, model, language, samplerate, duration,
 
 def get_transcriber(model=None, backend=None, dummy=False, interactive=True, language=None,
                     samplerate=None, duration=None,
-                    silence_db=-40.0, silence_duration=0.6,
+                    silence_db=None, silence_duration=0.6,
                     download_folder_vosk=None, download_folder_whisper=None,
                     download_folder_whisper_futo=None,
                     realtime_delay="medium", realtime_gate=True,
@@ -254,6 +254,11 @@ def get_transcriber(model=None, backend=None, dummy=False, interactive=True, lan
     else:
         model = _prompt_model_for_backend(backend, language, interactive)
     print(f"Selected model: {model}")
+    # Streaming/pseudo-streaming modes cut on quieter ambient noise (keyboard,
+    # breathing) and produce tiny hallucination-prone chunks. Raise the floor
+    # there unless the user pinned --silence-db explicitly.
+    if silence_db is None:
+        silence_db = -35.0 if pseudo_streaming else -40.0
     prompt_text, word_list = _resolve_prompt_and_words(prompt, prompt_file, words, words_file)
     backend_kwargs = _build_backend_kwargs(backend, model, language, samplerate, duration,
                                           silence_db, silence_duration,
@@ -323,11 +328,14 @@ def get_parser():
     group = parser.add_argument_group("Silence detection (shared)")
     group.add_argument("--duration", default=120, type=float,
                        help="Max recording duration in seconds (default: %(default)s).")
-    group.add_argument("--silence-db", default=-40.0, type=float,
+    group.add_argument("--silence-db", default=None, type=float,
                        help="dBFS volume floor for 'this frame is silent' "
-                            "(default: %(default)s). Used by every silence-driven "
-                            "behavior (realtime gate, realtime auto-commit, "
-                            "pseudo-streaming chunking).")
+                            "(default: -40 batch, -35 streaming/pseudo-streaming — "
+                            "streaming triggers cuts on quieter ambient noise so "
+                            "a stricter floor avoids hallucination-prone tiny "
+                            "chunks). Used by every silence-driven behavior "
+                            "(realtime gate, realtime auto-commit, pseudo-streaming "
+                            "chunking).")
     group.add_argument("--silence-duration", default=0.6, type=float,
                        help="Seconds of silence required before triggering a "
                             "backend's silence behavior (default: %(default)s). "

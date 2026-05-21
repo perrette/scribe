@@ -28,12 +28,14 @@ class AbstractTranscriber(STTBackend):
     backend = None
     _frozen_options = frozenset()
 
-    # Pseudo-streaming: don't cut a chunk smaller than this. Remote
-    # whisper batch endpoints reject ultra-short audio (OpenAI realtime
-    # commit's lower bound is 100ms; OpenAI/Groq batch tolerate more but
-    # transcribing a 50ms burst is wasted bandwidth / noise). Sub-threshold
-    # accumulations stay in the buffer until more audio arrives.
-    _CHUNK_MIN_MS = 100.0
+    # Pseudo-streaming: don't cut a chunk smaller than this. Whisper-family
+    # models hallucinate on very short clips ("Not to know.", "Thanks for
+    # watching!", etc. on near-silence), so the floor exists for quality,
+    # not just to avoid API rejection. 1.5 s gives Whisper enough context
+    # to anchor on real content and emit no_speech_prob > threshold on
+    # silence. Sub-threshold accumulations stay in the buffer until more
+    # audio arrives.
+    _CHUNK_MIN_MS = 1500.0
 
     def __init__(self, model, model_name=None, language=None, samplerate=16000, timeout=None, model_kwargs={},
                  silence_thresh=-40, silence_duration=0.6,
