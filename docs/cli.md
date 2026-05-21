@@ -20,6 +20,23 @@ The flags are grouped to mirror the source-of-truth in
 | `--download-folder-whisper DIR` | Folder to store Whisper models.                                         |
 | `--download-folder-vosk DIR`    | Folder to store Vosk models.                                            |
 
+## Prompting & vocabulary biasing
+
+Bias the model toward particular names, jargon, or topics. Two
+complementary knobs:
+
+| Flag                     | Purpose                                                                                          |
+|--------------------------|--------------------------------------------------------------------------------------------------|
+| `--prompt TEXT`          | Free-text style / context hint shown to the model.                                               |
+| `--prompt-file PATH`     | Reads the prompt from a file; appended to `--prompt` if both are given.                          |
+| `--words W [W ...]`      | List of words to emphasise. Joined onto the prompt for cloud Whisper; routed to faster-whisper's dedicated `hotwords` channel locally. |
+| `--words-file PATH`      | Whitespace-separated words from a file; merged with `--words`.                                   |
+
+The whisper-family APIs cap the prompt around ~224 tokens; longer hints
+are silently truncated. Vosk has no soft prompt and ignores both flags.
+See [backends.md › Vocabulary biasing](backends.md#vocabulary-biasing)
+for the per-backend wiring.
+
 ## Audio
 
 | Flag                  | Purpose                                                  |
@@ -58,7 +75,7 @@ silence-chunking knobs; they have their own end-of-utterance signal.
 | Flag                        | Purpose                                                              |
 |-----------------------------|----------------------------------------------------------------------|
 | `--frontend {tray,terminal}` | UI to launch (default `tray`).                                       |
-| `--no-prompt`               | In terminal mode, skip the interactive menu and record immediately.  |
+| `--no-interactive`          | In terminal mode, skip the interactive menu and record immediately. (`--no-prompt` is kept as a deprecated alias.) |
 | `--vosk-models M [M ...]`   | Vosk models offered in the tray menu.                                |
 | `--whisper-models M [M ...]` | Whisper models offered in the tray menu.                             |
 
@@ -89,5 +106,19 @@ Run scribe headlessly into a file without touching the clipboard or
 focused window:
 
 ```bash
-scribe --frontend terminal --no-prompt --mode terminal -o session.txt
+scribe --frontend terminal --no-interactive --mode terminal -o session.txt
+```
+
+Bias the recogniser toward domain jargon (medical terms, proper names):
+
+```bash
+scribe --prompt "Patient notes from a cardiology consult." \
+       --words tachycardia bradycardia echocardiogram metoprolol
+```
+
+Or store the lists in files for reuse across sessions:
+
+```bash
+scribe --prompt-file ~/.config/scribe/prompt.txt \
+       --words-file  ~/.config/scribe/glossary.txt
 ```

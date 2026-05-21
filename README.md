@@ -59,15 +59,21 @@ scribe --backend openai --model gpt-4o-mini-transcribe # OpenAI sweet spot
 scribe --backend openai --model gpt-realtime-whisper   # OpenAI streaming
 scribe --backend whisper --model small                 # local, no API key
 scribe --frontend terminal                             # interactive TUI menu
-scribe --frontend terminal --no-prompt                 # record immediately, no menu
+scribe --frontend terminal --no-interactive            # record immediately, no menu
 scribe --mode clipboard                                # copy to clipboard, no keystroke
 scribe --mode terminal                                 # only print to stdout
 scribe -o transcript.txt                               # also append to a file
 ```
 
-With `--no-prompt` (terminal frontend only), scribe skips the interactive
-menu and starts recording right away — handy for scripted, one-shot
-transcriptions.
+With `--no-interactive` (terminal frontend only), scribe skips the
+interactive menu and starts recording right away — handy for scripted,
+one-shot transcriptions. `--no-prompt` is kept as a deprecated alias.
+
+Bias the recogniser toward names, jargon, or a domain glossary with
+`--prompt "free text hint"` and `--words word1 word2 ...` (each also
+accepts a `--prompt-file` / `--words-file` companion). See
+[docs/backends.md › Vocabulary biasing](docs/backends.md#vocabulary-biasing)
+for what each backend does with them.
 
 
 ## Backends at a glance

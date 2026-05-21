@@ -110,6 +110,41 @@ once when you stop.
 Streaming models (Vosk, `gpt-realtime-whisper`) emit partials as you
 speak and stop on the same Stop / Ctrl+C action.
 
+## Vocabulary biasing
+
+`--prompt TEXT` and `--words W [W ...]` (plus the `--prompt-file` /
+`--words-file` companions) bias the recogniser toward a particular
+style, domain, or word list. The concept is generic across the
+whisper-family backends but each backend exposes it slightly
+differently:
+
+| Backend                              | `--prompt`                    | `--words`                                              |
+|--------------------------------------|-------------------------------|--------------------------------------------------------|
+| `whisper` (faster-whisper, local)    | passed as `initial_prompt=`   | passed as `hotwords=` — a **dedicated biasing channel** separate from the prompt |
+| `openai` batch (`gpt-4o*-transcribe`) | passed as `prompt=`           | joined onto the prompt string                          |
+| `groq` (`whisper-large-v3-turbo`)     | passed as `prompt=`           | joined onto the prompt string                          |
+| `openai` realtime (`gpt-realtime-whisper`) | included in the session config as `transcription.prompt` | joined onto the prompt string |
+| `vosk`                               | *ignored* (no soft prompt)    | *ignored* (Vosk only supports a hard `grammar` allowlist; not yet exposed) |
+
+The whisper-family APIs cap the prompt around ~224 tokens; longer
+hints are silently truncated. Faster-whisper's `hotwords` channel is
+the one place a separate "dictionary" really exists — everywhere else
+`--words` is just a convenience to keep your word list out of the
+prompt string in the CLI.
+
+Both flags read from the corresponding `*-file` argument when present.
+Inline + file inputs are combined.
+
+```bash
+# Inline
+scribe --prompt "ML systems infra: K8s, etcd, Envoy." \
+       --words kubectl envoyproxy etcdctl
+
+# From files (handy for long-lived glossaries)
+scribe --prompt-file ~/.config/scribe/prompt.txt \
+       --words-file  ~/.config/scribe/glossary.txt
+```
+
 ## Pseudo-streaming (experimental)
 
 `--pseudo-streaming` makes a batch backend behave streaming-like by
