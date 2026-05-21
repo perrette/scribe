@@ -38,7 +38,7 @@ class AbstractTranscriber(STTBackend):
     _CHUNK_MIN_MS = 1500.0
 
     def __init__(self, model, model_name=None, language=None, samplerate=16000, timeout=None, model_kwargs={},
-                 silence_thresh=-40, silence_duration=0.6,
+                 silence_thresh=-40, silence_thresh_onset=-25, silence_duration=0.6,
                  pseudo_streaming=False, streaming_window=5.0):
         self.model_name = model_name
         self.language = language
@@ -46,7 +46,17 @@ class AbstractTranscriber(STTBackend):
         self.model_kwargs = model_kwargs
         self.samplerate = samplerate
         self.timeout = timeout
+        # Two thresholds with hysteresis (pseudo-streaming only):
+        #   silence_thresh        — used while we're already inside an
+        #     utterance. LOW (more negative) so soft trailing syllables
+        #     don't get classified as silence and cut the phrase.
+        #   silence_thresh_onset  — used when we haven't started capturing
+        #     speech yet (audio_buffer empty). HIGH (less negative) so
+        #     ambient noise (keyboard, breathing) doesn't kick off a chunk
+        #     full of hallucinations.
+        # Batch mode ignores silence_thresh_onset.
         self.silence_thresh = silence_thresh
+        self.silence_thresh_onset = silence_thresh_onset
         self.silence_duration = silence_duration
         # Pseudo-streaming (experimental): when on, transcribe_realtime_audio
         # cuts the running buffer into chunks driven by silence + a target
@@ -98,7 +108,14 @@ class AbstractTranscriber(STTBackend):
         elapsed = time.time() - session.start_time
         buffer_ms = (len(session.audio_buffer) / 2) / self.samplerate * 1000.0
 
-        if is_silent(audio_bytes, self.silence_thresh):
+        # Hysteresis: pick the threshold by speech state. Onset (HIGH) when
+        # the buffer is empty — only clearly-louder-than-ambient counts as
+        # speech-starting. Pause (LOW) once we've captured speech, so soft
+        # trailing syllables don't cut the phrase.
+        active_thresh = (self.silence_thresh
+                         if session.audio_buffer
+                         else self.silence_thresh_onset)
+        if is_silent(audio_bytes, active_thresh):
             session.silence_buffer += audio_bytes
             # Cap to max(5s, silence_duration) of trailing silence as a
             # defensive floor — the only consumer (the pre-roll path below)
