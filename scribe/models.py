@@ -44,6 +44,16 @@ class AbstractTranscriber(STTBackend):
     # leaves room for the user's static prompt + words list.
     _STREAMING_CONTEXT_MAX_CHARS = 200
 
+    # Pseudo-streaming: drop the rolling chunk-tail context when the
+    # silence between two utterances exceeds this. Rationale: a long
+    # pause = new sentence / new idea, and carrying a possibly-bad prior
+    # chunk forward biases the next one (hallucinations like "fin de la
+    # vidéo" and decoder repetition loops self-reinforce through the
+    # prompt). Short pauses (mid-sentence punctuation) keep context for
+    # grammatical cohesion. Whisper.cpp's `--keep-context off` default
+    # is the more extreme version of this same trade-off.
+    _CONTEXT_RESET_SILENCE_S = 1.5
+
     def __init__(self, model, model_name=None, language=None, samplerate=16000, timeout=None, model_kwargs={},
                  silence_thresh=-40, silence_thresh_onset=-25, silence_duration=0.6,
                  pseudo_streaming=False, streaming_window=5.0):
@@ -156,6 +166,17 @@ class AbstractTranscriber(STTBackend):
                     f"(silent {sil_dur:.2f}s)"
                 )
         else:
+            # Speech resumes. If this is the first sound after a cut
+            # (audio_buffer empty) and the gap was long, drop the rolling
+            # prompt context — a new utterance is more likely to be
+            # poisoned by stale context than helped by it. Mid-chunk
+            # sound continuation (audio_buffer non-empty) never resets.
+            sil_dur = time.time() - session.last_sound_time
+            if (not session.audio_buffer
+                    and sil_dur >= self._CONTEXT_RESET_SILENCE_S
+                    and self._streaming_context):
+                self.log(f"Clearing chunk context after {sil_dur:.2f}s pause")
+                self.clear_streaming_context()
             session.last_sound_time = time.time()
             session.waiting = False
             silence_buffer_data = np.frombuffer(session.silence_buffer, dtype=np.int16)
