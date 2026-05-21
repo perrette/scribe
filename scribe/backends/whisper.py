@@ -11,12 +11,15 @@ class WhisperTranscriber(AbstractTranscriber):
     default_model: str | None = "small"
     is_local: ClassVar[bool] = True
 
-    def __init__(self, model_name, language=None, model=None, model_kwargs={}, **kwargs):
+    def __init__(self, model_name, language=None, model=None, model_kwargs={},
+                 prompt=None, hotwords=None, **kwargs):
         if model is None:
             from faster_whisper import WhisperModel
             kw = {"compute_type": "int8", **model_kwargs}
             model = WhisperModel(model_name, **kw)
         super().__init__(model, model_name, language, model_kwargs=model_kwargs, **kwargs)
+        self._prompt = prompt
+        self._hotwords = hotwords
 
     def transcribe_audio(self, audio_bytes):
         self.log("\nTranscribing")
@@ -26,6 +29,8 @@ class WhisperTranscriber(AbstractTranscriber):
             language=self.language,
             vad_filter=True,
             beam_size=1,
+            initial_prompt=self._prompt,
+            hotwords=self._hotwords,
         )
         text = "".join(segment.text for segment in segments)
         return {"text": text}

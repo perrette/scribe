@@ -64,7 +64,7 @@ whisperapi_models = ["gpt-4o-transcribe", "gpt-4o-mini-transcribe", "gpt-realtim
 vosk_models = [language_config["vosk"][lang]["model"] for lang in language_config["vosk"]]
 
 
-def _prompt_model_for_backend(backend, language, prompt):
+def _prompt_model_for_backend(backend, language, interactive):
     if backend == "vosk":
         available_languages = list(language_config[backend])
         if language:
@@ -80,14 +80,14 @@ def _prompt_model_for_backend(backend, language, prompt):
             available_models = [language_config[backend][lang]["model"] for lang in available_languages]
             choices = list(zip(available_models, available_languages)) + [f" * [Any model from {ansi_link('https://alphacephei.com/vosk/models')}]"]
             default_model = choices[0]
-        if prompt:
+        if interactive:
             print(f"For information about vosk models see: {ansi_link('https://alphacephei.com/vosk/models')}")
             return prompt_choices(choices, default=default_model, label="model")
         return default_model[0] if isinstance(default_model, tuple) else default_model
 
     if backend == "whisper":
         default_model = "small"
-        if prompt:
+        if interactive:
             print(f"See {ansi_link('https://github.com/openai/whisper?tab=readme-ov-file#available-models-and-languages')} for available models.")
             model = prompt_choices(whisper_models, default=default_model, label="model",
                                     hidden_models=whisper_english_models)
@@ -104,12 +104,43 @@ def _prompt_model_for_backend(backend, language, prompt):
     raise ValueError(f"Unknown backend: {backend}")
 
 
+def _resolve_prompt_and_words(prompt_text, prompt_file, words, words_file):
+    """Read --prompt-file / --words-file from disk and merge with the inline
+    flags. Returns ``(prompt_str_or_None, words_list_or_empty)``.
+
+    Empty / whitespace-only inputs collapse to None / [] so backends can do a
+    simple truthy check before adding the field to their request.
+    """
+    if prompt_file:
+        with open(prompt_file) as f:
+            file_text = f.read().strip()
+        if file_text:
+            prompt_text = f"{prompt_text}\n{file_text}" if prompt_text else file_text
+    if words_file:
+        with open(words_file) as f:
+            file_words = f.read().split()
+        words = list(words or []) + file_words
+    words = [w for w in (words or []) if w]
+    return (prompt_text or None), words
+
+
 def _build_backend_kwargs(backend, model, language, samplerate, duration,
                           silence_db, silence_duration, api_key,
                           download_folder_vosk, download_folder_whisper,
                           realtime_delay, realtime_gate,
-                          pseudo_streaming, streaming_window):
+                          pseudo_streaming, streaming_window,
+                          prompt_text, words):
+    # Cloud whisper variants (OpenAI batch, Groq, OpenAI realtime) take a
+    # single `prompt` string — fold the word list into it. faster-whisper
+    # gets the word list separately via `hotwords=` (dedicated biasing
+    # channel), so we pass it through unmerged.
+    merged_prompt = prompt_text
+    if words and backend != "whisper":
+        word_blob = " ".join(words)
+        merged_prompt = f"{prompt_text} {word_blob}" if prompt_text else word_blob
+
     if backend == "vosk":
+        # Vosk has no soft prompt; only a hard grammar. Silently ignore for now.
         return dict(model_name=model, language=language, samplerate=samplerate,
                     timeout=None, silence_duration=None,
                     model_kwargs={"download_root": download_folder_vosk})
@@ -117,13 +148,16 @@ def _build_backend_kwargs(backend, model, language, samplerate, duration,
         return dict(model_name=model, language=language, samplerate=samplerate,
                     timeout=duration, silence_duration=silence_duration, silence_thresh=silence_db,
                     pseudo_streaming=pseudo_streaming, streaming_window=streaming_window,
+                    prompt=prompt_text,
+                    hotwords=(" ".join(words) if words else None),
                     model_kwargs={"download_root": download_folder_whisper})
     if backend in ("openai", "groq"):
         from scribe.backends.openai_api import REALTIME_MODELS
         kwargs = dict(model_name=model, samplerate=samplerate,
                       timeout=duration, silence_duration=silence_duration, silence_thresh=silence_db,
                       pseudo_streaming=pseudo_streaming, streaming_window=streaming_window,
-                      api_key=api_key)
+                      api_key=api_key,
+                      prompt=merged_prompt)
         if backend == "openai" and model in REALTIME_MODELS:
             kwargs["realtime_delay"] = realtime_delay
             kwargs["realtime_gate"] = realtime_gate
@@ -136,12 +170,14 @@ def _build_backend_kwargs(backend, model, language, samplerate, duration,
     raise ValueError(f"Unknown backend: {backend}")
 
 
-def get_transcriber(model=None, backend=None, dummy=False, prompt=True, language=None,
+def get_transcriber(model=None, backend=None, dummy=False, interactive=True, language=None,
                     samplerate=None, duration=None,
                     silence_db=-40.0, silence_duration=0.6,
                     api_key=None, download_folder_vosk=None, download_folder_whisper=None,
                     realtime_delay="medium", realtime_gate=True,
-                    pseudo_streaming=False, streaming_window=30.0, **kwargs):
+                    pseudo_streaming=False, streaming_window=30.0,
+                    prompt=None, prompt_file=None, words=None, words_file=None,
+                    **kwargs):
     if dummy:
         return DummyTranscriber("whisper", "dummy")
     if model and not backend:
@@ -154,18 +190,20 @@ def get_transcriber(model=None, backend=None, dummy=False, prompt=True, language
     if not backend:
         backends_list = list(BACKENDS)
         preferred = get_default_backend()
-        backend = preferred if not prompt else prompt_choices(backends_list, preferred, "backend", UNAVAILABLE_BACKENDS)
+        backend = preferred if not interactive else prompt_choices(backends_list, preferred, "backend", UNAVAILABLE_BACKENDS)
     print(f"Selected backend: {backend}")
     if model:
         model = pick_specialist_model(model, language, backend)
     else:
-        model = _prompt_model_for_backend(backend, language, prompt)
+        model = _prompt_model_for_backend(backend, language, interactive)
     print(f"Selected model: {model}")
+    prompt_text, word_list = _resolve_prompt_and_words(prompt, prompt_file, words, words_file)
     backend_kwargs = _build_backend_kwargs(backend, model, language, samplerate, duration,
                                           silence_db, silence_duration, api_key,
                                           download_folder_vosk, download_folder_whisper,
                                           realtime_delay, realtime_gate,
-                                          pseudo_streaming, streaming_window)
+                                          pseudo_streaming, streaming_window,
+                                          prompt_text, word_list)
     try:
         return _build_transcriber(backend, **backend_kwargs)
     except Exception as error:
@@ -188,6 +226,18 @@ def get_parser():
                        help="API key for cloud backends (openai, groq); falls back to OPENAI_API_KEY / GROQ_API_KEY.")
     group.add_argument("--download-folder-whisper", help="Folder to store Whisper models.")
     group.add_argument("--download-folder-vosk", help="Folder to store Vosk models.")
+    group.add_argument("--prompt",
+                       help="Free-text hint shown to the model to bias style/vocabulary "
+                            "(whisper, openai, groq, realtime). Capped around ~224 tokens "
+                            "by the whisper API; longer hints are silently truncated.")
+    group.add_argument("--prompt-file",
+                       help="Path to a text file whose contents are appended to --prompt.")
+    group.add_argument("--words", nargs="*",
+                       help="Words to bias the model toward. On faster-whisper they go to "
+                            "the dedicated `hotwords` channel; on openai/groq/realtime they "
+                            "are joined and appended to --prompt. Ignored by vosk.")
+    group.add_argument("--words-file",
+                       help="Path to a file with whitespace-separated words; merged with --words.")
 
     group = parser.add_argument_group("Audio")
     group.add_argument("--input-device", dest="input_device", type=int,
@@ -258,8 +308,9 @@ def get_parser():
     group = parser.add_argument_group("Frontend")
     group.add_argument("--frontend", choices=["tray", "terminal"], default="tray",
                        help="UI to launch: tray (system tray icon) or terminal (default: %(default)s).")
-    group.add_argument("--no-prompt", action="store_false", dest="prompt",
-                       help="In terminal mode, skip the interactive menu and record immediately.")
+    group.add_argument("--no-interactive", "--no-prompt", action="store_false", dest="interactive",
+                       help="In terminal mode, skip the interactive menu and record immediately. "
+                            "(--no-prompt is a deprecated alias kept for backward compatibility.)")
     group.add_argument("--vosk-models", nargs="*", default=vosk_models,
                        help="Vosk models offered in the tray menu.")
     group.add_argument("--whisper-models", nargs="*", default=whisper_models,
@@ -489,7 +540,7 @@ def main(args=None):
             # backend/model prompts and let get_transcriber pick sensible defaults.
             transcriber_kwargs = vars(o).copy()
             if o.frontend == "tray":
-                transcriber_kwargs["prompt"] = False
+                transcriber_kwargs["interactive"] = False
             state.transcriber = get_transcriber(**transcriber_kwargs)
             state.session = None
         if state.session is None and not isinstance(state.transcriber, DummyTranscriber):
@@ -497,7 +548,7 @@ def main(args=None):
 
         _print_main_status(state, o)
 
-        if o.frontend == "terminal" and o.prompt:
+        if o.frontend == "terminal" and o.interactive:
             build_menu(state)(state, None)
             if state.transcriber is None:
                 continue
@@ -514,7 +565,7 @@ def main(args=None):
                             type_direct=getattr(o, "type_direct", False),
                             **greetings)
 
-        o.prompt = True
+        o.interactive = True
         o.backend = None
         o.model = None
         o.language = None

@@ -25,7 +25,8 @@ class OpenaiAPITranscriber(WhisperTranscriber):
                 return OpenaiRealtimeTranscriber(*args, **kwargs)
         return super().__new__(cls)
 
-    def __init__(self, model_name="gpt-4o-mini-transcribe", language=None, model_kwargs={}, model=None, api_key=None, **kwargs):
+    def __init__(self, model_name="gpt-4o-mini-transcribe", language=None, model_kwargs={}, model=None, api_key=None,
+                 prompt=None, **kwargs):
         if model is None:
             import openai
             model = openai.OpenAI(
@@ -34,6 +35,7 @@ class OpenaiAPITranscriber(WhisperTranscriber):
                 timeout=20.0,
             )
         AbstractTranscriber.__init__(self, model, model_name, language, model_kwargs=model_kwargs, **kwargs)
+        self._prompt = prompt
 
     def transcribe_audio(self, audio_bytes):
         self.log("\nTranscribing")
@@ -46,10 +48,12 @@ class OpenaiAPITranscriber(WhisperTranscriber):
         sf.write(buffer, audio_data, self.samplerate, format='WAV')
         buffer.seek(0)
         buffer.name = "audio.wav"  # Set a filename with a valid extension
+        extra = {"prompt": self._prompt} if self._prompt else {}
         try:
             transcription = self.model.audio.transcriptions.create(
                 model=self.model_name,
                 file=buffer,
+                **extra,
             )
         except openai.OpenAIError as e:
             title, message = format_openai_error(e)

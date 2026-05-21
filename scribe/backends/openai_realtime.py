@@ -31,10 +31,11 @@ class OpenaiRealtimeTranscriber(AbstractStreamingTranscriber):
 
     def __init__(self, model_name="gpt-realtime-whisper", language=None, model_kwargs={},
                  model=None, api_key=None, realtime_delay="medium",
-                 realtime_gate=True, **kwargs):
+                 realtime_gate=True, prompt=None, **kwargs):
         AbstractTranscriber.__init__(
             self, model, model_name, language, model_kwargs=model_kwargs, **kwargs,
         )
+        self._prompt = prompt
         # Client-side silence gate: gpt-realtime-whisper has no server VAD
         # (turn_detection is None in _session_config), so every audio frame
         # we send is billed as input audio — including silence. When
@@ -70,6 +71,8 @@ class OpenaiRealtimeTranscriber(AbstractStreamingTranscriber):
         transcription: dict = {"model": self.model_name, "delay": self._realtime_delay}
         if self.language:
             transcription["language"] = self.language
+        if self._prompt:
+            transcription["prompt"] = self._prompt
         audio_input: dict = {
             "format": {"type": "audio/pcm", "rate": self._GA_SAMPLE_RATE},
             "transcription": transcription,

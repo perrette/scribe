@@ -294,7 +294,7 @@ class AppState(AbstractFrontendApp):
             icon._session.interrupt = True
         self._tray_join_recording_threads()
 
-        new_kwargs = {**vars(self.o), "backend": backend_name, "model": model_id, "prompt": False}
+        new_kwargs = {**vars(self.o), "backend": backend_name, "model": model_id, "interactive": False}
 
         # Construction can block on model-weight downloads (faster-whisper)
         # or other I/O. Run on a background thread so the tray stays

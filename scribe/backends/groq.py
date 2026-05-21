@@ -9,7 +9,8 @@ class GroqTranscriber(OpenaiAPITranscriber):
     backend = "groq"
     default_model: str | None = "whisper-large-v3-turbo"
 
-    def __init__(self, model_name="whisper-large-v3-turbo", language=None, model_kwargs={}, model=None, api_key=None, **kwargs):
+    def __init__(self, model_name="whisper-large-v3-turbo", language=None, model_kwargs={}, model=None, api_key=None,
+                 prompt=None, **kwargs):
         if model is None:
             import openai
             model = openai.OpenAI(
@@ -18,6 +19,7 @@ class GroqTranscriber(OpenaiAPITranscriber):
                 timeout=20.0,
             )
         AbstractTranscriber.__init__(self, model, model_name, language, model_kwargs=model_kwargs, **kwargs)
+        self._prompt = prompt
 
 
 def _probe_groq() -> tuple[bool, str | None]:
