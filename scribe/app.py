@@ -564,14 +564,24 @@ def create_app(micro, app_state):
     image = Image.open(Path(scribe_data.__file__).parent / "share" / "icon.png")
     image_recording = Image.open(Path(scribe_data.__file__).parent / "share" / "icon_recording.png")
     image_writing = Image.open(Path(scribe_data.__file__).parent / "share" / "icon_writing.png")
+    # Composite (red + writing 'a'): shown while recording AND the silence
+    # gate says speech is active. Gives the user a visual confirmation that
+    # the audio is actually being captured/sent — not just sitting in
+    # detected silence. Plain red = recording but waiting for speech.
+    image_recording_active = Image.alpha_composite(
+        image_recording.convert("RGBA"), image_writing.convert("RGBA"),
+    )
 
     if transcriber.backend == "vosk":
-        # Recording and writing happen at the same time in this backend.
-        image_recording = Image.alpha_composite(image_recording.convert("RGBA"), image_writing.convert("RGBA"))
+        # vosk transcribes while recording — both recording sub-states show
+        # the composite (no meaningful "waiting" since vosk streams
+        # continuously).
+        image_recording = image_recording_active
 
     state_images = {
         None: image,
         "recording": image_recording,
+        "recording_active": image_recording_active,
         "busy": image_writing,
     }
 
@@ -590,7 +600,12 @@ def create_app(micro, app_state):
             return "busy"
         s = icon._session
         if s.recording:
-            return "recording"
+            # session.waiting flips True after silence_duration of detected
+            # silence, False on the first non-silent chunk. The composite
+            # ("recording_active") tells the user audio is actually being
+            # sent to the backend — solves the "is it hearing me?" question
+            # without printing partial transcripts to the tray.
+            return "recording" if s.waiting else "recording_active"
         if s.busy:
             return "busy"
         return None

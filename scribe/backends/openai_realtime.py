@@ -280,10 +280,14 @@ class OpenaiRealtimeTranscriber(AbstractStreamingTranscriber):
 
             # Silence tracking for the mid-session auto-commit; driven by
             # silence regardless of whether the gate dropped the frame.
+            # Also drives session.waiting (the tray-icon "actively sending
+            # speech" signal). False on the first non-silent chunk for
+            # instant icon response; True after sustained silence so the
+            # icon doesn't flicker between syllables.
+            commit_samples = int(self.silence_duration * self.samplerate)
             if chunk_is_silent:
                 if self._has_uncommitted_audio:
                     self._silent_samples += len(chunk) // 2  # int16 → 2 bytes
-                    commit_samples = int(self.silence_duration * self.samplerate)
                     if commit_samples > 0 and self._silent_samples >= commit_samples:
                         # Server rejects commits below _SERVER_COMMIT_MIN_MS;
                         # leave a sub-threshold burst in the buffer for the
@@ -296,8 +300,10 @@ class OpenaiRealtimeTranscriber(AbstractStreamingTranscriber):
                             self._has_uncommitted_audio = False
                             self._uncommitted_ms = 0.0
                         self._silent_samples = 0
+                        self.session.waiting = True
             else:
                 self._silent_samples = 0
+                self.session.waiting = False
 
         # Drain queue. Errors surface immediately in both modes. Text
         # deltas either get buffered for coalesced flush (paste mode)
