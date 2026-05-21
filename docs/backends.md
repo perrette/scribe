@@ -1,6 +1,6 @@
 # Backends in detail
 
-Scribe ships four speech-to-text backends. They are all picked through
+Scribe ships five speech-to-text backends. They are all picked through
 the same `--backend` / `--model` CLI flags (or the **Model** submenu in
 the tray / terminal frontend). Whether a transcription is *streaming*
 (text appears live as you speak) or *batch* (text arrives at end of
@@ -8,16 +8,44 @@ recording) depends on the **model** chosen — not the backend.
 
 ## At a glance
 
-| Backend         | `--backend` | Default model              | Streaming model(s)        | Requires                            |
-|-----------------|-------------|----------------------------|---------------------------|-------------------------------------|
-| Groq (cloud)    | `groq`      | `whisper-large-v3-turbo`   | —                         | `GROQ_API_KEY`                      |
-| OpenAI (cloud)  | `openai`    | `gpt-4o-mini-transcribe`   | `gpt-realtime-whisper`    | `OPENAI_API_KEY`                    |
-| Whisper (local) | `whisper`   | `small`                    | —                         | `pip install scribe-cli[whisper]`   |
-| Vosk (local)    | `vosk`      | language-dependent         | all Vosk models           | `pip install scribe-cli[vosk]`      |
+| Backend                | `--backend`     | Default model              | Streaming model(s)        | Requires                                |
+|------------------------|-----------------|----------------------------|---------------------------|-----------------------------------------|
+| Groq (cloud)           | `groq`          | `whisper-large-v3-turbo`   | —                         | `GROQ_API_KEY`                          |
+| OpenAI (cloud)         | `openai`        | `gpt-4o-mini-transcribe`   | `gpt-realtime-whisper`    | `OPENAI_API_KEY`                        |
+| Whisper FUTO (local)   | `whisper-futo`  | `small`                    | —                         | `pip install scribe-cli[whisper-futo]`  |
+| Whisper (local)        | `whisper`       | `small`                    | —                         | `pip install scribe-cli[whisper]`       |
+| Vosk (local)           | `vosk`          | language-dependent         | all Vosk models           | `pip install scribe-cli[vosk]`          |
 
 Run `scribe` without arguments and it picks the first backend whose
-dependency / API key is present, preferring cloud over local:
-`groq → openai → whisper → vosk`.
+dependency / API key is present, preferring cloud over local and the
+faster local option first:
+`groq → openai → whisper-futo → whisper → vosk`.
+
+## `whisper-futo` (local, fast on short dictations)
+
+Runs locally via [whisper.cpp](https://github.com/ggml-org/whisper.cpp)
+(through [`pywhispercpp`](https://github.com/absadiki/pywhispercpp))
+using [FUTO's ACFT-finetuned models](https://github.com/futo-org/whisper-acft).
+ACFT (Audio Context Fine-Tuning) lets the encoder run on the actual
+audio length instead of always padding to 30 s — a meaningful speedup
+on short dictations, which is the typical scribe workload.
+
+The available models offered in the tray menu are
+`tiny / base / small`. FUTO has not released ACFT weights for
+`medium / large / turbo`; for those sizes use the `whisper` backend.
+
+With `--language en` (or `-l en`) scribe auto-substitutes the
+English-only variant (e.g. `small` → `small.en`) when it exists.
+
+Models are auto-downloaded on first use from `voiceinput.futo.org`
+to `$XDG_CACHE_HOME/whisper-futo/` (override with
+`--download-folder-whisper-futo`).
+
+For audio ≥ 30 s the ACFT speedup tapers off and the encoder window
+collapses to the standard 30 s; quality and speed in that regime are
+similar to the `whisper` backend. Pick `whisper-futo` if most of your
+dictations are short, the `whisper` backend if you regularly do
+multi-minute recordings or need `medium` / `large` / `turbo`.
 
 ## `whisper` (local)
 

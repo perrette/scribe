@@ -13,6 +13,7 @@ _VENDOR_PREFIX = {
     "openai": "OpenAI",
     "groq": "Groq",
     "whisper": "Whisper",
+    "whisper-futo": "Whisper (FUTO)",
     "vosk": "Vosk",
 }
 
@@ -75,6 +76,7 @@ _DEFAULT_MODELS: dict[str, list[str]] = {
     "openai": ["gpt-4o-transcribe", "gpt-4o-mini-transcribe", "gpt-realtime-whisper"],
     "groq": ["whisper-large-v3-turbo"],
     "whisper": ["tiny", "base", "small", "medium", "large-v3", "large-v3-turbo"],
+    "whisper-futo": ["tiny", "base", "small"],
     "vosk": [],
 }
 
@@ -91,6 +93,9 @@ def _models_for_backend(backend_name: str, app_state) -> list[str]:
     if backend_name == "whisper":
         models = getattr(o, "whisper_models", None) if o is not None else None
         return list(models) if models else list(_DEFAULT_MODELS["whisper"])
+    if backend_name == "whisper-futo":
+        models = getattr(o, "whisper_futo_models", None) if o is not None else None
+        return list(models) if models else list(_DEFAULT_MODELS["whisper-futo"])
     if backend_name == "vosk":
         models = getattr(o, "vosk_models", None) if o is not None else None
         if models:
@@ -199,6 +204,26 @@ class AppState(AbstractFrontendApp):
             return False
         return _cb
 
+    def cb_set_language(self, language: str | None) -> Callable:
+        """Factory: return a callback that switches the recognition language.
+
+        For backends where the language picks the model (vosk) or substitutes a
+        specialist variant (whisper / whisper-futo with .en) this triggers the
+        same background model-swap as cb_set_model. For backends that take
+        language as a per-call parameter (openai, groq, multilingual whisper)
+        the live transcriber's `language` attribute is updated in place.
+        """
+        def _cb(view, item):
+            if self.icon is not None:
+                return self._tray_set_language(language)
+            self.o.language = language
+            # In terminal mode the model is re-derived on the next loop pass
+            # via pick_specialist_model in get_transcriber, so force a rebuild.
+            self.transcriber = None
+            self.session = None
+            return False
+        return _cb
+
     # ── Tray-mode helpers ──────────────────────────────────────────
     def _tray_join_recording_threads(self) -> None:
         icon = self.icon
@@ -274,6 +299,52 @@ class AppState(AbstractFrontendApp):
         self._tray_join_recording_threads()
         remove_pidfile("scribe")
         icon.stop()
+        return None
+
+    def _tray_set_language(self, language: str | None):
+        """Tray-mode language switch. Mirrors _tray_set_model's reload path
+        when the model name changes (vosk per-language model, or whisper /
+        whisper-futo .en substitution); otherwise patches the live
+        transcriber and refreshes the menu."""
+        current = self.transcriber
+        if current is None:
+            self.o.language = language
+            self._refresh_tray_menu()
+            return None
+        backend = current.backend
+        current_model = current.model_name
+        new_model = current_model
+
+        if backend == "vosk":
+            if language is None:
+                return None  # vosk has no auto-detect
+            toml_path = Path(__file__).parent / "models.toml"
+            with open(toml_path, "rb") as f:
+                cfg = tomllib.load(f)
+            entry = cfg.get("vosk", {}).get(language)
+            if not entry or "model" not in entry:
+                self.notify_error("Language unavailable",
+                                  f"No vosk model mapped for {language!r}")
+                return None
+            new_model = entry["model"]
+        else:
+            from scribe.app import pick_specialist_model
+            # Strip any `.en` suffix first so switching English → French
+            # collapses `small.en` back to the multilingual `small`.
+            base_model = current_model[:-3] if current_model.endswith(".en") else current_model
+            new_model = pick_specialist_model(base_model, language, backend)
+
+        self.o.language = language
+
+        if new_model != current_model:
+            return self._tray_set_model(backend, new_model)
+
+        # Same model — just patch the language on the live transcriber.
+        try:
+            self.transcriber.language = language
+        except AttributeError:
+            pass
+        self._refresh_tray_menu()
         return None
 
     def _tray_set_model(self, backend_name: str, model_id: str):
@@ -454,7 +525,53 @@ class AppState(AbstractFrontendApp):
 
 _RECOMMENDED_MODELS = {
     "whisper": "small",
+    "whisper-futo": "small",
 }
+
+
+# Curated languages surfaced in the Language submenu. The set matches the
+# vosk-pre-mapped languages in models.toml so the same labels work for every
+# backend; display names come from `_meta.<lang>.language` when present.
+_CURATED_LANGUAGES = ["en", "fr", "de", "it"]
+
+_LANGUAGE_DISPLAY_FALLBACK = {
+    "en": "English",
+    "fr": "French",
+    "de": "German",
+    "it": "Italian",
+}
+
+
+def _language_display(lang_code: str | None) -> str:
+    if lang_code is None:
+        return "Auto"
+    toml_path = Path(__file__).parent / "models.toml"
+    try:
+        with open(toml_path, "rb") as f:
+            cfg = tomllib.load(f)
+        name = cfg.get("_meta", {}).get(lang_code, {}).get("language")
+        if name:
+            return name
+    except Exception:
+        pass
+    return _LANGUAGE_DISPLAY_FALLBACK.get(lang_code, lang_code)
+
+
+def _languages_for_backend(backend_name: str) -> list[str | None]:
+    """Curated language list, filtered by what the active backend can handle.
+
+    Vosk requires a per-language model (no auto-detect) and only the languages
+    pre-mapped in models.toml are exposed. Everything else accepts Auto + the
+    full curated set."""
+    if backend_name == "vosk":
+        toml_path = Path(__file__).parent / "models.toml"
+        try:
+            with open(toml_path, "rb") as f:
+                cfg = tomllib.load(f)
+            return [lang for lang in _CURATED_LANGUAGES if lang in cfg.get("vosk", {})]
+        except Exception:
+            return list(_CURATED_LANGUAGES)
+    return [None] + list(_CURATED_LANGUAGES)
 
 
 def _backend_models_menu(app_state, backend_name: str) -> Menu:
@@ -486,6 +603,39 @@ def _is_terminal_frontend(app_state):
     return _predicate
 
 
+def _active_backend_name(app_state) -> str | None:
+    t = app_state.transcriber
+    if t is not None and getattr(t, "backend", None):
+        return t.backend
+    return getattr(getattr(app_state, "o", None), "backend", None)
+
+
+def _language_menu(app_state) -> Menu:
+    """Radio submenu of curated languages. Items not supported by the current
+    backend (e.g. Auto on vosk) hide themselves via the visible predicate, so
+    one Menu object covers every backend without rebuilding on switch."""
+    items: list[Item] = []
+    # Build entries for the union of all curated languages + Auto; per-item
+    # visibility predicates filter at render time based on the active backend.
+    for lang in [None] + list(_CURATED_LANGUAGES):
+        label = _language_display(lang)
+
+        def _is_current(_item, _l=lang):
+            return getattr(app_state.o, "language", None) == _l
+
+        def _is_visible(_item, _l=lang):
+            backend = _active_backend_name(app_state)
+            if backend is None:
+                return True
+            return _l in _languages_for_backend(backend)
+
+        item = Item(label, app_state.cb_set_language(lang),
+                    checked=_is_current, visible=_is_visible)
+        item.radio = True
+        items.append(item)
+    return Menu(items, name="Language")
+
+
 def _vendor_label_fn(app_state, backend_name: str, base_label: str):
     """Return a label callable that prefixes ✓ when this vendor is active."""
     def _label():
@@ -495,7 +645,7 @@ def _vendor_label_fn(app_state, backend_name: str, base_label: str):
     return _label
 
 
-_MENU_BACKEND_ORDER = ("whisper", "vosk", "openai", "groq")
+_MENU_BACKEND_ORDER = ("whisper-futo", "whisper", "vosk", "openai", "groq")
 
 
 def _choose_model_menu(app_state) -> Menu:
@@ -698,11 +848,19 @@ def build_menu(app_state) -> Menu:
         vendor = _VENDOR_PREFIX.get(t.backend, t.backend.capitalize())
         return f"{vendor} {t.model_name}"
     model_item.label_fn = _model_label
+
+    language_item = Item("Language", _language_menu(app_state))
+    def _language_label():
+        lang = getattr(app_state.o, "language", None)
+        return f"Language: {_language_display(lang)}"
+    language_item.label_fn = _language_label
+
     items = [
         Item("Record", app_state.cb_record, visible=app_state.is_not_recording),
         Item("Stop", app_state.cb_stop, visible=app_state.is_recording),
         Item("Cancel", app_state.cb_cancel, visible=app_state.is_recording),
         model_item,
+        language_item,
         Item("Options", _toggle_options_menu(app_state)),
         Item("Quit", app_state.cb_quit),
     ]

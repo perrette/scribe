@@ -31,6 +31,10 @@ class WhisperTranscriber(AbstractTranscriber):
             beam_size=1,
             initial_prompt=self._prompt,
             hotwords=self._hotwords,
+            no_speech_threshold=0.6,
+            log_prob_threshold=-1.0,
+            compression_ratio_threshold=2.4,
+            temperature=(0.0, 0.2, 0.4, 0.6, 0.8, 1.0),
         )
         text = "".join(segment.text for segment in segments)
         return {"text": text}

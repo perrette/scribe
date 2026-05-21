@@ -62,11 +62,12 @@ keywords = [
 [project.optional-dependencies]
 keyboard = ["pynput"]
 whisper = ["faster-whisper"]
+whisper-futo = ["pywhispercpp"]
 vosk = ["vosk"]
 app = ["pystray", "PyGObject"]
 openai = ["openai>=2.37.0,<3", "soundfile"]
 groq = ["openai>=2.37.0,<3", "soundfile"]
-all = ["pynput", "faster-whisper", "openai>=2.37.0,<3", "soundfile", "vosk", "pystray"]
+all = ["pynput", "faster-whisper", "pywhispercpp", "openai>=2.37.0,<3", "soundfile", "vosk", "pystray"]
 
 
 [tool.setuptools]

@@ -19,7 +19,7 @@ language_config = language_config_default.copy()
 
 
 def get_default_backend():
-    for name in ("groq", "openai", "whisper", "vosk"):
+    for name in ("groq", "openai", "whisper-futo", "whisper", "vosk"):
         ok, _ = probe_backend(name)
         if ok:
             return name
@@ -34,11 +34,15 @@ UNAVAILABLE_BACKENDS = []
 
 
 def pick_specialist_model(model, language, backend):
-    """ choose a specialist version of a model if language is specified (whisper)"""
+    """ choose a specialist version of a model if language is specified (whisper, whisper-futo)"""
 
     if backend == "whisper" and language and language.lower() in ["en", "english"]:
         available_models_en = ["tiny.en", "base.en", "small.en", "medium.en", "large", "turbo"]
         if model + ".en" in available_models_en:
+            model += ".en"
+
+    if backend == "whisper-futo" and language and language.lower() in ["en", "english"]:
+        if model + ".en" in whisper_futo_english_models:
             model += ".en"
 
     return model
@@ -62,6 +66,9 @@ class DummyTranscriber:
 
 whisper_models = ["tiny", "base", "small", "medium", "large-v3", "large-v3-turbo"]
 whisper_english_models = ["tiny.en", "base.en", "small.en", "medium.en"]
+# FUTO ACFT publishes only tiny/base/small (+ .en variants); no medium/large/turbo.
+whisper_futo_models = ["tiny", "base", "small"]
+whisper_futo_english_models = ["tiny.en", "base.en", "small.en"]
 whisperapi_models = ["gpt-4o-transcribe", "gpt-4o-mini-transcribe", "gpt-realtime-whisper"]
 vosk_models = [language_config["vosk"][lang]["model"] for lang in language_config["vosk"]]
 
@@ -93,6 +100,16 @@ def _prompt_model_for_backend(backend, language, interactive):
             print(f"See {ansi_link('https://github.com/openai/whisper?tab=readme-ov-file#available-models-and-languages')} for available models.")
             model = prompt_choices(whisper_models, default=default_model, label="model",
                                     hidden_models=whisper_english_models)
+        else:
+            model = default_model
+        return pick_specialist_model(model, language, backend)
+
+    if backend == "whisper-futo":
+        default_model = "small"
+        if interactive:
+            print(f"FUTO ACFT models — fast on short dictations. See {ansi_link('https://github.com/futo-org/whisper-acft')}.")
+            model = prompt_choices(whisper_futo_models, default=default_model, label="model",
+                                    hidden_models=whisper_futo_english_models)
         else:
             model = default_model
         return pick_specialist_model(model, language, backend)
@@ -153,6 +170,7 @@ def _resolve_prompt_and_words(prompt_text, prompt_file, words, words_file):
 def _build_backend_kwargs(backend, model, language, samplerate, duration,
                           silence_db, silence_duration, api_key,
                           download_folder_vosk, download_folder_whisper,
+                          download_folder_whisper_futo,
                           realtime_delay, realtime_gate,
                           pseudo_streaming, streaming_window,
                           prompt_text, words):
@@ -177,6 +195,14 @@ def _build_backend_kwargs(backend, model, language, samplerate, duration,
                     prompt=prompt_text,
                     hotwords=(" ".join(words) if words else None),
                     model_kwargs={"download_root": download_folder_whisper})
+    if backend == "whisper-futo":
+        # whisper.cpp via pywhispercpp doesn't take prompt/hotwords through the
+        # same surface; drop them for now. Audio_ctx is computed per-call inside
+        # the backend from actual audio length (the ACFT speedup).
+        return dict(model_name=model, language=language, samplerate=samplerate,
+                    timeout=duration, silence_duration=silence_duration, silence_thresh=silence_db,
+                    pseudo_streaming=pseudo_streaming, streaming_window=streaming_window,
+                    download_folder=download_folder_whisper_futo)
     if backend in ("openai", "groq"):
         from scribe.backends.openai_api import REALTIME_MODELS
         kwargs = dict(model_name=model, samplerate=samplerate,
@@ -200,6 +226,7 @@ def get_transcriber(model=None, backend=None, dummy=False, interactive=True, lan
                     samplerate=None, duration=None,
                     silence_db=-40.0, silence_duration=0.6,
                     api_key=None, download_folder_vosk=None, download_folder_whisper=None,
+                    download_folder_whisper_futo=None,
                     realtime_delay="medium", realtime_gate=True,
                     pseudo_streaming=False, streaming_window=5.0,
                     prompt=None, prompt_file=None, words=None, words_file=None,
@@ -209,6 +236,10 @@ def get_transcriber(model=None, backend=None, dummy=False, interactive=True, lan
     if model and not backend:
         if model.startswith("vosk-"):
             backend = "vosk"
+        # whisper-futo and whisper share model names (tiny/small/etc.) — model
+        # alone can't disambiguate, so unqualified short names default to the
+        # existing `whisper` backend. Use --backend whisper-futo (or pick from
+        # the menu) to opt into the FUTO path.
         elif model in whisper_models + whisper_english_models:
             backend = "whisper"
         elif model in whisperapi_models:
@@ -227,6 +258,7 @@ def get_transcriber(model=None, backend=None, dummy=False, interactive=True, lan
     backend_kwargs = _build_backend_kwargs(backend, model, language, samplerate, duration,
                                           silence_db, silence_duration, api_key,
                                           download_folder_vosk, download_folder_whisper,
+                                          download_folder_whisper_futo,
                                           realtime_delay, realtime_gate,
                                           pseudo_streaming, streaming_window,
                                           prompt_text, word_list)
@@ -251,6 +283,9 @@ def get_parser():
     group.add_argument("--api-key",
                        help="API key for cloud backends (openai, groq); falls back to OPENAI_API_KEY / GROQ_API_KEY.")
     group.add_argument("--download-folder-whisper", help="Folder to store Whisper models.")
+    group.add_argument("--download-folder-whisper-futo",
+                       help="Folder to store FUTO ACFT ggml models "
+                            "(default: $XDG_CACHE_HOME/whisper-futo).")
     group.add_argument("--download-folder-vosk", help="Folder to store Vosk models.")
     group.add_argument("--prompt",
                        help="Free-text hint shown to the model to bias style/vocabulary "
@@ -341,6 +376,8 @@ def get_parser():
                        help="Vosk models offered in the tray menu.")
     group.add_argument("--whisper-models", nargs="*", default=whisper_models,
                        help="Whisper models offered in the tray menu.")
+    group.add_argument("--whisper-futo-models", nargs="*", default=whisper_futo_models,
+                       help="FUTO ACFT Whisper models offered in the tray menu.")
 
     return parser
 
