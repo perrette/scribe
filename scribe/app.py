@@ -172,6 +172,7 @@ def _resolve_prompt_and_words(prompt_text, prompt_file, words, words_file):
 
 def _build_backend_kwargs(backend, model, language, samplerate, duration,
                           silence_db, silence_onset_db, silence_duration,
+                          vad_mode, vad_threshold, vad_min_silence_ms,
                           download_folder_vosk, download_folder_whisper,
                           download_folder_whisper_futo,
                           realtime_delay, realtime_gate,
@@ -186,6 +187,8 @@ def _build_backend_kwargs(backend, model, language, samplerate, duration,
         word_blob = " ".join(words)
         merged_prompt = f"{prompt_text} {word_blob}" if prompt_text else word_blob
 
+    vad_kwargs = dict(vad_mode=vad_mode, vad_threshold=vad_threshold,
+                      vad_min_silence_ms=vad_min_silence_ms)
     if backend == "vosk":
         # Vosk has no soft prompt; only a hard grammar. Silently ignore for now.
         return dict(model_name=model, language=language, samplerate=samplerate,
@@ -198,7 +201,8 @@ def _build_backend_kwargs(backend, model, language, samplerate, duration,
                     pseudo_streaming=pseudo_streaming, streaming_window=streaming_window,
                     prompt=prompt_text,
                     hotwords=(" ".join(words) if words else None),
-                    model_kwargs={"download_root": download_folder_whisper})
+                    model_kwargs={"download_root": download_folder_whisper},
+                    **vad_kwargs)
     if backend == "whisper-futo":
         # pywhispercpp 1.4.1 exposes `initial_prompt`; the backend folds
         # words+prompt into it (and adds a rolling chunk-tail in
@@ -209,14 +213,16 @@ def _build_backend_kwargs(backend, model, language, samplerate, duration,
                     silence_thresh=silence_db, silence_thresh_onset=silence_onset_db,
                     pseudo_streaming=pseudo_streaming, streaming_window=streaming_window,
                     prompt=merged_prompt,
-                    download_folder=download_folder_whisper_futo)
+                    download_folder=download_folder_whisper_futo,
+                    **vad_kwargs)
     if backend in ("openai", "groq"):
         from scribe.backends.openai_api import REALTIME_MODELS
         kwargs = dict(model_name=model, samplerate=samplerate,
                       timeout=duration, silence_duration=silence_duration,
                       silence_thresh=silence_db, silence_thresh_onset=silence_onset_db,
                       pseudo_streaming=pseudo_streaming, streaming_window=streaming_window,
-                      prompt=merged_prompt)
+                      prompt=merged_prompt,
+                      **vad_kwargs)
         if backend == "openai" and model in REALTIME_MODELS:
             kwargs["realtime_delay"] = realtime_delay
             kwargs["realtime_gate"] = realtime_gate
@@ -232,6 +238,7 @@ def _build_backend_kwargs(backend, model, language, samplerate, duration,
 def get_transcriber(model=None, backend=None, dummy=False, interactive=True, language=None,
                     samplerate=None, duration=None,
                     silence_db=None, silence_onset_db=None, silence_duration=0.6,
+                    vad_mode="db", vad_threshold=0.5, vad_min_silence_ms=300,
                     download_folder_vosk=None, download_folder_whisper=None,
                     download_folder_whisper_futo=None,
                     realtime_delay="medium", realtime_gate=True,
@@ -272,6 +279,7 @@ def get_transcriber(model=None, backend=None, dummy=False, interactive=True, lan
     prompt_text, word_list = _resolve_prompt_and_words(prompt, prompt_file, words, words_file)
     backend_kwargs = _build_backend_kwargs(backend, model, language, samplerate, duration,
                                           silence_db, silence_onset_db, silence_duration,
+                                          vad_mode, vad_threshold, vad_min_silence_ms,
                                           download_folder_vosk, download_folder_whisper,
                                           download_folder_whisper_futo,
                                           realtime_delay, realtime_gate,
@@ -357,6 +365,24 @@ def get_parser():
                             "commit flushes trailing words. For pseudo-streaming "
                             "batch backends: candidate cut point within the "
                             "streaming window.")
+
+    group = parser.add_argument_group("Voice activity detection")
+    group.add_argument("--vad-mode", choices=("db", "silero"), default="db",
+                       help="Silence-detection backend (default: %(default)s). "
+                            "'db' uses volume thresholds (--silence-db / "
+                            "--silence-onset-db); 'silero' uses silero-vad — much "
+                            "more robust to ambient noise (ticks, fan, traffic) "
+                            "but requires `pip install scribe-cli[vad]`. The dB "
+                            "and silero parameter groups are independent.")
+    group.add_argument("--vad-threshold", default=0.5, type=float,
+                       help="Silero only: speech-probability threshold in [0,1] "
+                            "(default: %(default)s). Lower = more permissive (catches "
+                            "quiet speech but also more noise); higher = stricter.")
+    group.add_argument("--vad-min-silence-ms", default=300, type=int,
+                       help="Silero only: minimum sustained low-probability span before "
+                            "speech-end is emitted, in ms (default: %(default)s). "
+                            "Acts as silero's onset/offset smoothing window — the "
+                            "silero counterpart of the dB hysteresis.")
 
     group = parser.add_argument_group("Realtime (gpt-realtime-whisper)")
     group.add_argument("--realtime-delay",

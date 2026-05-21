@@ -4,7 +4,7 @@ from pathlib import Path
 import numpy as np
 from desktop_ai_core.providers import STTBackend, StreamingSTTBackend
 from scribe.util import download_model
-from scribe.audio import calculate_decibels
+from scribe.audio import calculate_decibels, make_silence_gate
 
 def is_silent(data, silence_thresh=-40):
     """
@@ -56,6 +56,8 @@ class AbstractTranscriber(STTBackend):
 
     def __init__(self, model, model_name=None, language=None, samplerate=16000, timeout=None, model_kwargs={},
                  silence_thresh=-40, silence_thresh_onset=-25, silence_duration=0.6,
+                 vad_mode="db", vad_threshold=0.5, vad_min_silence_ms=300,
+                 vad_speech_pad_ms=30,
                  pseudo_streaming=False, streaming_window=5.0):
         self.model_name = model_name
         self.language = language
@@ -63,7 +65,7 @@ class AbstractTranscriber(STTBackend):
         self.model_kwargs = model_kwargs
         self.samplerate = samplerate
         self.timeout = timeout
-        # Two thresholds with hysteresis (pseudo-streaming only):
+        # Two thresholds with hysteresis (dB mode, pseudo-streaming only):
         #   silence_thresh        — used while we're already inside an
         #     utterance. LOW (more negative) so soft trailing syllables
         #     don't get classified as silence and cut the phrase.
@@ -71,10 +73,21 @@ class AbstractTranscriber(STTBackend):
         #     speech yet (audio_buffer empty). HIGH (less negative) so
         #     ambient noise (keyboard, breathing) doesn't kick off a chunk
         #     full of hallucinations.
-        # Batch mode ignores silence_thresh_onset.
+        # Batch mode ignores silence_thresh_onset. The silero VAD path
+        # bypasses both — its own onset/offset smoothing does this better.
         self.silence_thresh = silence_thresh
         self.silence_thresh_onset = silence_thresh_onset
         self.silence_duration = silence_duration
+        # VAD configuration. `vad_mode` picks the SilenceGate implementation
+        # in scribe/audio.py: "db" (volume-only, current behaviour) or
+        # "silero" (silero-vad — robust to ambient noise, requires the
+        # scribe-cli[vad] extra). The vad_* knobs are passed through to
+        # silero's VADIterator and ignored in dB mode.
+        self.vad_mode = vad_mode
+        self.vad_threshold = vad_threshold
+        self.vad_min_silence_ms = vad_min_silence_ms
+        self.vad_speech_pad_ms = vad_speech_pad_ms
+        self._silence_gate = None
         # Pseudo-streaming (experimental): when on, transcribe_realtime_audio
         # cuts the running buffer into chunks driven by silence + a target
         # window. When off, transcribe_realtime_audio just accumulates and
@@ -90,6 +103,32 @@ class AbstractTranscriber(STTBackend):
         # recording; NOT cleared on per-chunk session.reset() (that would
         # defeat the purpose).
         self._streaming_context = ""
+
+    @property
+    def silence_gate(self):
+        """Lazily construct the SilenceGate from current vad_* settings.
+        Lazy because the silero gate loads an ONNX model on first use (~80
+        ms) and we want that cost only when something actually needs it
+        — e.g. batch backends with pseudo_streaming=False never touch it.
+        Invalidated on `_invalidate_silence_gate()` so menu/settings changes
+        take effect on the next use."""
+        if self._silence_gate is None:
+            self._silence_gate = make_silence_gate(
+                mode=self.vad_mode,
+                samplerate=self.samplerate,
+                silence_thresh=self.silence_thresh,
+                silence_thresh_onset=self.silence_thresh_onset,
+                vad_threshold=self.vad_threshold,
+                vad_min_silence_ms=self.vad_min_silence_ms,
+                vad_speech_pad_ms=self.vad_speech_pad_ms,
+            )
+        return self._silence_gate
+
+    def _invalidate_silence_gate(self):
+        """Drop the cached gate so the next access rebuilds from current
+        settings. Call after changing vad_mode or any vad_* knob from
+        the menu / API."""
+        self._silence_gate = None
 
     def notify_error(self, title, message):
         if self.session is not None:
@@ -131,14 +170,12 @@ class AbstractTranscriber(STTBackend):
         elapsed = time.time() - session.start_time
         buffer_ms = (len(session.audio_buffer) / 2) / self.samplerate * 1000.0
 
-        # Hysteresis: pick the threshold by speech state. Onset (HIGH) when
-        # the buffer is empty — only clearly-louder-than-ambient counts as
-        # speech-starting. Pause (LOW) once we've captured speech, so soft
-        # trailing syllables don't cut the phrase.
-        active_thresh = (self.silence_thresh
-                         if session.audio_buffer
-                         else self.silence_thresh_onset)
-        if is_silent(audio_bytes, active_thresh):
+        # Silence decision delegated to the configured SilenceGate. In dB
+        # mode `in_utterance` picks LOW vs HIGH threshold (hysteresis); in
+        # silero mode it's ignored (silero handles onset/offset smoothing
+        # via min_silence_duration_ms internally).
+        in_utterance = bool(session.audio_buffer)
+        if self.silence_gate.is_silent(audio_bytes, in_utterance=in_utterance):
             session.silence_buffer += audio_bytes
             # Cap to max(5s, silence_duration) of trailing silence as a
             # defensive floor — the only consumer (the pre-roll path below)

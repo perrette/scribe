@@ -8,7 +8,7 @@ from typing import ClassVar
 import numpy as np
 
 from desktop_ai_core.providers.errors import format_openai_error
-from scribe.models import AbstractStreamingTranscriber, AbstractTranscriber, is_silent
+from scribe.models import AbstractStreamingTranscriber, AbstractTranscriber
 
 
 log = logging.getLogger(__name__)
@@ -255,7 +255,14 @@ class OpenaiRealtimeTranscriber(AbstractStreamingTranscriber):
     def feed_audio(self, chunk=b""):
         self.session.audio_buffer += chunk
         if chunk and self._connection is not None and not self._closed:
-            chunk_is_silent = is_silent(chunk, self.silence_thresh)
+            # `in_utterance` is True once we've sent uncommitted audio in
+            # this turn. Lets the dB gate use its LOW (sustain) threshold
+            # mid-utterance and the HIGH (onset) threshold before the
+            # first word goes out — same hysteresis as pseudo-streaming.
+            # Silero ignores the hint.
+            chunk_is_silent = self.silence_gate.is_silent(
+                chunk, in_utterance=self._has_uncommitted_audio,
+            )
 
             # Send unless the gate is on and the chunk is silent.
             if not (chunk_is_silent and self._gate_enabled):

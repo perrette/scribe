@@ -478,6 +478,47 @@ class AppState(AbstractFrontendApp):
             self.o.silence_db = val
             if self.transcriber is not None:
                 self.transcriber.silence_thresh = val
+                self.transcriber._invalidate_silence_gate()
+        return True
+
+    def cb_toggle_vad_mode(self, view, item):
+        # Two-state toggle between "db" and "silero". Tries to instantiate
+        # the new gate immediately so the user sees the import error here,
+        # not at first audio frame; reverts on failure.
+        cur = getattr(self.transcriber, "vad_mode", "db") if self.transcriber else self.o.vad_mode
+        new = "silero" if cur == "db" else "db"
+        if self.transcriber is not None:
+            old = self.transcriber.vad_mode
+            self.transcriber.vad_mode = new
+            self.transcriber._invalidate_silence_gate()
+            try:
+                self.transcriber.silence_gate  # forces construction
+            except ImportError as exc:
+                self.transcriber.vad_mode = old
+                self.transcriber._invalidate_silence_gate()
+                print(f"[VAD] Cannot switch to silero: {exc}")
+                return True
+        self.o.vad_mode = new
+        self._refresh_tray_menu()
+        return True
+
+    def cb_set_vad_threshold(self, view, item):
+        val = self._coerce_float(item.value(item), "threshold")
+        if val is not None:
+            self.o.vad_threshold = val
+            if self.transcriber is not None:
+                self.transcriber.vad_threshold = val
+                self.transcriber._invalidate_silence_gate()
+        return True
+
+    def cb_set_vad_min_silence_ms(self, view, item):
+        # Reuse the float coercer then snap to int — VADIterator wants int ms.
+        val = self._coerce_float(item.value(item), "duration (ms)")
+        if val is not None:
+            self.o.vad_min_silence_ms = int(val)
+            if self.transcriber is not None:
+                self.transcriber.vad_min_silence_ms = int(val)
+                self.transcriber._invalidate_silence_gate()
         return True
 
     def cb_set_streaming_window(self, view, item):
@@ -789,6 +830,12 @@ def _advanced_options_menu(app_state) -> Menu:
     panel so it stays uncluttered for common use. Items retain their
     ``visible=`` predicates so vosk users still don't see whisper-only
     fields."""
+    # The dB and silero parameter groups are intentionally separate (no
+    # shared API yet — see SilenceGate docstring in scribe/audio.py).
+    # `visible` on each group hides the inactive set so the user only sees
+    # knobs that actually matter for the current vad_mode.
+    is_db_mode = lambda: getattr(app_state.transcriber, "vad_mode", "db") == "db"
+    is_silero_mode = lambda: getattr(app_state.transcriber, "vad_mode", "db") == "silero"
     items = [
         SetValueItem("t", app_state.cb_set_duration,
                      value=lambda item: getattr(app_state.transcriber, "timeout", None),
@@ -796,9 +843,21 @@ def _advanced_options_menu(app_state) -> Menu:
         SetValueItem("b", app_state.cb_set_silence_duration,
                      value=lambda item: getattr(app_state.transcriber, "silence_duration", None),
                      type=float, help="Silence duration (s)"),
+        Item("vad", app_state.cb_toggle_vad_mode,
+             help="VAD: silero (noise-robust) instead of dB volume",
+             checked=lambda item: is_silero_mode()),
         SetValueItem("db", app_state.cb_set_silence_db,
                      value=lambda item: getattr(app_state.transcriber, "silence_thresh", None),
-                     type=float, help="Silence threshold (dB)"),
+                     type=float, help="[dB] Silence threshold (dB)",
+                     visible=lambda *_: is_db_mode()),
+        SetValueItem("vth", app_state.cb_set_vad_threshold,
+                     value=lambda item: getattr(app_state.transcriber, "vad_threshold", None),
+                     type=float, help="[silero] Speech-probability threshold (0..1)",
+                     visible=lambda *_: is_silero_mode()),
+        SetValueItem("vms", app_state.cb_set_vad_min_silence_ms,
+                     value=lambda item: getattr(app_state.transcriber, "vad_min_silence_ms", None),
+                     type=int, help="[silero] Min silence duration (ms)",
+                     visible=lambda *_: is_silero_mode()),
         Item("g", app_state.cb_toggle_realtime_gate,
              help="Realtime: drop silent frames (gate)",
              checked=lambda item: bool(getattr(app_state.transcriber, "_gate_enabled", True)),
