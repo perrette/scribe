@@ -216,14 +216,17 @@ class AbstractTranscriber(STTBackend):
                     f"(silent {sil_dur:.2f}s)"
                 )
         else:
-            # Speech resumes. If this is the first sound after a cut
-            # (audio_buffer empty) and the gap was long, drop the rolling
-            # prompt context — a new utterance is more likely to be
-            # poisoned by stale context than helped by it. Mid-chunk
-            # sound continuation (audio_buffer non-empty) never resets.
+            # Speech resumes. If the gap since the last sound was long,
+            # drop the rolling prompt context — a new utterance is more
+            # likely to be poisoned by stale context than helped by it.
+            # The previous version also required audio_buffer to be empty
+            # to protect mid-utterance pauses, but a single noise spike
+            # during the pause was enough to fill audio_buffer with
+            # ~550 ms of preroll+spike and block the reset, letting the
+            # stale prompt bias every subsequent chunk. The mid-utterance
+            # case is mild; the contamination case was severe.
             sil_dur = time.time() - session.last_sound_time
-            if (not session.audio_buffer
-                    and sil_dur >= self._CONTEXT_RESET_SILENCE_S
+            if (sil_dur >= self._CONTEXT_RESET_SILENCE_S
                     and self._streaming_context):
                 self.log(f"Clearing chunk context after {sil_dur:.2f}s pause")
                 self.clear_streaming_context()

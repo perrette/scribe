@@ -40,7 +40,7 @@ class FakeBackend(AbstractTranscriber):
 
 
 def make_session(*, audio_buffer=b'', silence_buffer=b'',
-                 start_time=None, last_sound_time=None):
+                 start_time=None, last_sound_time=None, log_sink=None):
     now = time.time()
     sess = SimpleNamespace(
         audio_buffer=audio_buffer,
@@ -51,6 +51,12 @@ def make_session(*, audio_buffer=b'', silence_buffer=b'',
     )
     # RecordingSession exposes this; the non-pseudo branch calls it.
     sess.get_elapsed = lambda: time.time() - sess.start_time
+    # Context-reset branch logs via AbstractTranscriber.log → session.log;
+    # accept an optional list sink so tests can assert on emitted messages.
+    if log_sink is None:
+        log_sink = []
+    sess.log_sink = log_sink
+    sess.log = lambda msg: log_sink.append(msg)
     return sess
 
 
@@ -261,3 +267,147 @@ def test_is_streaming_gate_includes_pseudo_streaming():
         or bool(getattr(t_off, "pseudo_streaming", False))
     )
     assert is_streaming_off is False
+
+
+# Rolling chunk-tail prompt context: reset on long inter-utterance pauses ----
+
+def _make_pseudo_backend(**overrides):
+    kwargs = dict(model=None, samplerate=SR, pseudo_streaming=True,
+                  silence_duration=0.6, streaming_window=5.0)
+    kwargs.update(overrides)
+    return FakeBackend(**kwargs)
+
+
+def test_context_reset_short_pause_preserves_context():
+    """A pause shorter than _CONTEXT_RESET_SILENCE_S (1.5s) keeps the
+    rolling prompt — short intra-sentence punctuation breaks should still
+    benefit from cross-chunk grammar continuity."""
+    backend = _make_pseudo_backend()
+    backend.session = make_session(last_sound_time=time.time() - 0.5)
+    backend._streaming_context = "previous sentence."
+
+    backend.transcribe_realtime_audio(loud_chunk())
+
+    assert backend._streaming_context == "previous sentence."
+
+
+def test_context_reset_long_pause_clears_context():
+    """A pause >= _CONTEXT_RESET_SILENCE_S between two utterances drops the
+    rolling prompt — protects the new utterance from being biased toward
+    the old one."""
+    backend = _make_pseudo_backend()
+    backend.session = make_session(last_sound_time=time.time() - 2.0)
+    backend._streaming_context = "write a test"
+
+    backend.transcribe_realtime_audio(loud_chunk())
+
+    assert backend._streaming_context == ""
+    assert any("Clearing chunk context" in m
+               for m in backend.session.log_sink)
+
+
+def test_context_reset_at_exact_threshold_clears():
+    """Boundary: sil_dur == _CONTEXT_RESET_SILENCE_S clears (>= check)."""
+    backend = _make_pseudo_backend()
+    threshold = backend._CONTEXT_RESET_SILENCE_S
+    # Subtract a tiny epsilon FROM the past so by the time
+    # transcribe_realtime_audio computes time.time() - last_sound_time the
+    # gap is just above threshold. Avoids flakiness from clock granularity.
+    backend.session = make_session(last_sound_time=time.time() - (threshold + 0.05))
+    backend._streaming_context = "stale"
+
+    backend.transcribe_realtime_audio(loud_chunk())
+
+    assert backend._streaming_context == ""
+
+
+def test_context_reset_mid_chunk_with_long_pause_also_clears():
+    """Mid-utterance long pauses (audio_buffer non-empty AND sil_dur >= 1.5s)
+    also clear context. We dropped the `not session.audio_buffer` guard
+    because a single noise spike during an inter-utterance pause was
+    enough to fill audio_buffer below the commit floor and block the
+    reset (see test_context_reset_survives_noise_spike_during_pause).
+    Sacrificing the rare genuine mid-utterance case is the accepted
+    trade-off: a ≥1.5s break inside one sentence is unusual, and even
+    then losing one sentence of cross-chunk priming is mild compared to
+    the self-reinforcing contamination loop the guard was enabling."""
+    backend = _make_pseudo_backend()
+    backend.session = make_session(
+        audio_buffer=loud_chunk(),
+        last_sound_time=time.time() - 3.0,
+    )
+    backend._streaming_context = "drop me"
+
+    backend.transcribe_realtime_audio(loud_chunk())
+
+    assert backend._streaming_context == ""
+
+
+def test_context_reset_empty_context_no_log_no_change():
+    """No streaming_context to clear → branch must be a no-op (no log spam,
+    no state change). Protects against the empty-string case being treated
+    as needing a reset every time speech resumes after a pause."""
+    backend = _make_pseudo_backend()
+    backend.session = make_session(last_sound_time=time.time() - 5.0)
+    assert backend._streaming_context == ""
+
+    backend.transcribe_realtime_audio(loud_chunk())
+
+    assert backend._streaming_context == ""
+    assert not any("Clearing chunk context" in m
+                   for m in backend.session.log_sink)
+
+
+def test_context_preserved_when_no_pause_yet():
+    """Speech resumes immediately after an in-progress phrase (sil_dur ~ 0):
+    context must be preserved so chunk-to-chunk grammar carries."""
+    backend = _make_pseudo_backend()
+    backend.session = make_session(last_sound_time=time.time())  # just spoke
+    backend._streaming_context = "in-flight phrase"
+
+    backend.transcribe_realtime_audio(loud_chunk())
+
+    assert backend._streaming_context == "in-flight phrase"
+
+
+# Regression: pause poisoned by a single noise spike still resets context ---
+
+def test_context_reset_survives_noise_spike_during_pause():
+    """Regression for the reported bug:
+
+      1. User finishes a phrase → commit fires → context = "write a test".
+      2. During the pause, a single brief noise spike crosses the silence
+         threshold (keyboard click, fan, breath).
+      3. The user pauses for several seconds (well over 1.5s).
+      4. The user resumes a new phrase.
+
+    Before the fix the reset was gated on `not session.audio_buffer`; the
+    spike at (2) filled the buffer (~550 ms of preroll+spike) below the
+    1500 ms commit floor, so the buffer never emptied and the reset at
+    (4) was skipped. Symptom: the stale prompt biased every subsequent
+    chunk, causing self-reinforcing "write a test, write a test, ..."
+    transcriptions.
+    """
+    backend = _make_pseudo_backend()
+    backend.session = make_session(last_sound_time=time.time())
+    backend._streaming_context = "write a test"
+
+    # (2) brief noise spike during pause
+    backend.transcribe_realtime_audio(loud_chunk(samples=int(SR * 0.05)))
+    assert backend.session.audio_buffer, "spike should have landed in buffer"
+
+    # (3) long silent pause (well over the 1.5s context-reset threshold).
+    # We don't have a way to advance time without sleeping; nudge
+    # last_sound_time backwards instead.
+    backend.session.last_sound_time = time.time() - 3.0
+    # Feed silence chunks during the pause — they should not commit
+    # (buffer < 1500ms after the 50ms spike + 500ms preroll = ~550ms).
+    for _ in range(5):
+        backend.transcribe_realtime_audio(silent_chunk())
+
+    # (4) real speech resumes after the long pause. THIS is the moment
+    # the context reset should fire — but it won't, because audio_buffer
+    # is non-empty from the spike.
+    backend.transcribe_realtime_audio(loud_chunk())
+
+    assert backend._streaming_context == ""
