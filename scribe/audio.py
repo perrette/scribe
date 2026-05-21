@@ -96,27 +96,23 @@ class SilenceGate:
 
 
 class DbSilenceGate(SilenceGate):
-    """Volume-only silence detection with two-threshold hysteresis.
+    """Single-threshold volume-based silence detection.
 
-    `in_utterance=True`  → silence_thresh        (LOW, permissive — soft
-                                                  trailing syllables stay
-                                                  classified as speech).
-    `in_utterance=False` → silence_thresh_onset  (HIGH, strict — ambient
-                                                  noise doesn't kick off a
-                                                  chunk).
+    Kept as a no-dependency fallback for installs without onnxruntime —
+    silero is the recommended path. dB has fundamental limits (any
+    sub-threshold speech reads as silence) that no amount of threshold
+    tuning fixes, so we don't expose more knobs than the bare minimum.
 
-    When the two thresholds are equal the hysteresis collapses to a single
-    floor (the existing batch-mode behaviour).
+    `in_utterance` is accepted for API parity with SileroSilenceGate and
+    ignored — the old onset/sustain hysteresis was a hack to compensate
+    for dB's noise-rejection limits; silero replaces it properly.
     """
 
-    def __init__(self, silence_thresh: float = -40.0,
-                 silence_thresh_onset: float = -25.0):
+    def __init__(self, silence_thresh: float = -40.0):
         self.silence_thresh = silence_thresh
-        self.silence_thresh_onset = silence_thresh_onset
 
     def is_silent(self, audio_bytes, *, in_utterance):
-        thresh = self.silence_thresh if in_utterance else self.silence_thresh_onset
-        return calculate_decibels(audio_bytes) < thresh
+        return calculate_decibels(audio_bytes) < self.silence_thresh
 
 
 def _bundled_silero_onnx_path():
@@ -318,15 +314,13 @@ def make_silence_gate(
     *,
     samplerate: int = 16000,
     silence_thresh: float = -40.0,
-    silence_thresh_onset: float = -25.0,
     vad_threshold: float = 0.5,
     vad_min_silence_ms: int = 300,
     vad_speech_pad_ms: int = 30,
 ) -> SilenceGate:
     """Build a SilenceGate from config. `mode` is "db" or "silero"."""
     if mode == "db":
-        return DbSilenceGate(silence_thresh=silence_thresh,
-                             silence_thresh_onset=silence_thresh_onset)
+        return DbSilenceGate(silence_thresh=silence_thresh)
     if mode == "silero":
         return SileroSilenceGate(
             sampling_rate=samplerate,

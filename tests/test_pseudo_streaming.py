@@ -181,38 +181,6 @@ def test_pseudo_on_force_cut_at_double_window():
         backend.transcribe_realtime_audio(loud_chunk())
 
 
-# Hysteresis: silence_thresh_onset (HIGH) vs silence_thresh (LOW) -----------
-
-def test_hysteresis_medium_chunk_treated_as_silent_when_idle():
-    """audio_buffer empty -> use onset threshold (HIGH -25). A medium
-    ~-30 dB frame is below -25 -> classified as silent, stays in
-    silence_buffer."""
-    backend = FakeBackend(model=None, samplerate=SR, pseudo_streaming=True,
-                          silence_thresh=-40, silence_thresh_onset=-25,
-                          silence_duration=0.6, streaming_window=5.0)
-    backend.session = make_session()  # audio_buffer empty
-    chunk = medium_chunk()
-    backend.transcribe_realtime_audio(chunk)
-    # Routed to silence_buffer because the onset threshold rejects it.
-    assert backend.session.audio_buffer == b''
-    assert backend.session.silence_buffer == chunk
-
-
-def test_hysteresis_medium_chunk_treated_as_speech_when_in_phrase():
-    """audio_buffer already has speech -> use pause threshold (LOW -40).
-    Same -30 dB frame is above -40 -> classified as loud, extends the
-    audio buffer."""
-    backend = FakeBackend(model=None, samplerate=SR, pseudo_streaming=True,
-                          silence_thresh=-40, silence_thresh_onset=-25,
-                          silence_duration=0.6, streaming_window=5.0)
-    backend.session = make_session(audio_buffer=loud_chunk())
-    initial_len = len(backend.session.audio_buffer)
-    backend.transcribe_realtime_audio(medium_chunk())
-    # Speech path: appended (with 0s preroll since silence_buffer empty).
-    assert len(backend.session.audio_buffer) > initial_len
-    assert backend.session.silence_buffer == b''
-
-
 # Pre-roll prepends last 0.5s of silence_buffer when speech resumes ---------
 
 def test_speech_resumption_uses_last_half_second_preroll():

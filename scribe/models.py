@@ -55,7 +55,7 @@ class AbstractTranscriber(STTBackend):
     _CONTEXT_RESET_SILENCE_S = 1.5
 
     def __init__(self, model, model_name=None, language=None, samplerate=16000, timeout=None, model_kwargs={},
-                 silence_thresh=-40, silence_thresh_onset=-25, silence_duration=0.6,
+                 silence_thresh=-40, silence_duration=0.6,
                  vad_mode="auto", vad_threshold=0.5, vad_min_silence_ms=300,
                  vad_speech_pad_ms=30,
                  pseudo_streaming=False, streaming_window=5.0):
@@ -65,18 +65,11 @@ class AbstractTranscriber(STTBackend):
         self.model_kwargs = model_kwargs
         self.samplerate = samplerate
         self.timeout = timeout
-        # Two thresholds with hysteresis (dB mode, pseudo-streaming only):
-        #   silence_thresh        — used while we're already inside an
-        #     utterance. LOW (more negative) so soft trailing syllables
-        #     don't get classified as silence and cut the phrase.
-        #   silence_thresh_onset  — used when we haven't started capturing
-        #     speech yet (audio_buffer empty). HIGH (less negative) so
-        #     ambient noise (keyboard, breathing) doesn't kick off a chunk
-        #     full of hallucinations.
-        # Batch mode ignores silence_thresh_onset. The silero VAD path
-        # bypasses both — its own onset/offset smoothing does this better.
+        # silence_thresh (dB mode only) — single volume floor used as a
+        # no-dependency fallback. The old onset/sustain hysteresis was a
+        # hack to make volume-only detection survive ambient noise; silero
+        # does that properly. dB stays simple by design.
         self.silence_thresh = silence_thresh
-        self.silence_thresh_onset = silence_thresh_onset
         self.silence_duration = silence_duration
         # VAD configuration. `vad_mode` picks the SilenceGate implementation
         # in scribe/audio.py:
@@ -138,7 +131,6 @@ class AbstractTranscriber(STTBackend):
                 mode=self.vad_mode,
                 samplerate=self.samplerate,
                 silence_thresh=self.silence_thresh,
-                silence_thresh_onset=self.silence_thresh_onset,
                 vad_threshold=self.vad_threshold,
                 vad_min_silence_ms=self.vad_min_silence_ms,
                 vad_speech_pad_ms=self.vad_speech_pad_ms,

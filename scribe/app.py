@@ -171,7 +171,7 @@ def _resolve_prompt_and_words(prompt_text, prompt_file, words, words_file):
 
 
 def _build_backend_kwargs(backend, model, language, samplerate, duration,
-                          silence_db, silence_onset_db, silence_duration,
+                          silence_db, silence_duration,
                           vad_mode, vad_threshold, vad_min_silence_ms,
                           download_folder_vosk, download_folder_whisper,
                           download_folder_whisper_futo,
@@ -197,7 +197,7 @@ def _build_backend_kwargs(backend, model, language, samplerate, duration,
     if backend == "whisper":
         return dict(model_name=model, language=language, samplerate=samplerate,
                     timeout=duration, silence_duration=silence_duration,
-                    silence_thresh=silence_db, silence_thresh_onset=silence_onset_db,
+                    silence_thresh=silence_db,
                     pseudo_streaming=pseudo_streaming, streaming_window=streaming_window,
                     prompt=prompt_text,
                     hotwords=(" ".join(words) if words else None),
@@ -210,7 +210,7 @@ def _build_backend_kwargs(backend, model, language, samplerate, duration,
         # everything into the prompt like the cloud backends do.
         return dict(model_name=model, language=language, samplerate=samplerate,
                     timeout=duration, silence_duration=silence_duration,
-                    silence_thresh=silence_db, silence_thresh_onset=silence_onset_db,
+                    silence_thresh=silence_db,
                     pseudo_streaming=pseudo_streaming, streaming_window=streaming_window,
                     prompt=merged_prompt,
                     download_folder=download_folder_whisper_futo,
@@ -219,7 +219,7 @@ def _build_backend_kwargs(backend, model, language, samplerate, duration,
         from scribe.backends.openai_api import REALTIME_MODELS
         kwargs = dict(model_name=model, samplerate=samplerate,
                       timeout=duration, silence_duration=silence_duration,
-                      silence_thresh=silence_db, silence_thresh_onset=silence_onset_db,
+                      silence_thresh=silence_db,
                       pseudo_streaming=pseudo_streaming, streaming_window=streaming_window,
                       prompt=merged_prompt,
                       **vad_kwargs)
@@ -237,7 +237,7 @@ def _build_backend_kwargs(backend, model, language, samplerate, duration,
 
 def get_transcriber(model=None, backend=None, dummy=False, interactive=True, language=None,
                     samplerate=None, duration=None,
-                    silence_db=None, silence_onset_db=None, silence_duration=0.6,
+                    silence_db=None, silence_duration=0.6,
                     vad_mode="auto", vad_threshold=0.5, vad_min_silence_ms=300,
                     download_folder_vosk=None, download_folder_whisper=None,
                     download_folder_whisper_futo=None,
@@ -268,17 +268,13 @@ def get_transcriber(model=None, backend=None, dummy=False, interactive=True, lan
     else:
         model = _prompt_model_for_backend(backend, language, interactive)
     print(f"Selected model: {model}")
-    # silence_db is the LOW threshold (in-speech pause detection) — default
-    # -40 in all modes. silence_onset_db is the HIGH threshold (speech-start
-    # gate) used only in pseudo-streaming via hysteresis; -25 keeps ambient
-    # noise (keyboard, breathing) from triggering a chunk.
+    # silence_db is the single volume floor used by the dB fallback. Silero
+    # mode ignores it. Default -40 dBFS — keeps the gate simple by design.
     if silence_db is None:
         silence_db = -40.0
-    if silence_onset_db is None:
-        silence_onset_db = -25.0 if pseudo_streaming else silence_db
     prompt_text, word_list = _resolve_prompt_and_words(prompt, prompt_file, words, words_file)
     backend_kwargs = _build_backend_kwargs(backend, model, language, samplerate, duration,
-                                          silence_db, silence_onset_db, silence_duration,
+                                          silence_db, silence_duration,
                                           vad_mode, vad_threshold, vad_min_silence_ms,
                                           download_folder_vosk, download_folder_whisper,
                                           download_folder_whisper_futo,
@@ -347,17 +343,8 @@ def get_parser():
     group.add_argument("--duration", default=120, type=float,
                        help="Max recording duration in seconds (default: %(default)s).")
     group.add_argument("--silence-db", default=None, type=float,
-                       help="LOW silence floor in dBFS — applied while we're "
-                            "already inside an utterance, so soft trailing "
-                            "syllables aren't cut. Default: -40. Used by every "
-                            "silence-driven behavior (pseudo-streaming pause "
-                            "detection, realtime gate, realtime auto-commit).")
-    group.add_argument("--silence-onset-db", default=None, type=float,
-                       help="HIGH silence floor in dBFS — applied before we've "
-                            "started capturing speech (audio buffer empty). "
-                            "Stricter so ambient noise (keyboard, breathing) "
-                            "doesn't trigger a chunk. Default: -25 in "
-                            "pseudo-streaming, same as --silence-db otherwise.")
+                       help="Silence floor in dBFS for the dB-mode fallback "
+                            "(default: -40). Ignored when --vad-mode=silero.")
     group.add_argument("--silence-duration", default=0.6, type=float,
                        help="Seconds of silence required before triggering a "
                             "backend's silence behavior (default: %(default)s). "
@@ -370,11 +357,11 @@ def get_parser():
     group.add_argument("--vad-mode", choices=("auto", "db", "silero"), default="auto",
                        help="Silence-detection backend (default: %(default)s). "
                             "'auto' picks silero if installed, dB otherwise. "
-                            "'db' uses volume thresholds (--silence-db / "
-                            "--silence-onset-db); 'silero' uses silero-vad — much "
-                            "more robust to ambient noise (ticks, fan, traffic) "
-                            "AND to soft speech (the dB gate drops sub-threshold "
-                            "syllables; silero recognises speech spectrally). "
+                            "'db' uses a volume threshold (--silence-db); "
+                            "'silero' uses silero-vad — much more robust to "
+                            "ambient noise (ticks, fan, traffic) AND to soft "
+                            "speech (the dB gate drops sub-threshold syllables; "
+                            "silero recognises speech spectrally). "
                             "Requires `pip install scribe-cli[vad]` for silero. "
                             "The dB and silero parameter groups are independent.")
     group.add_argument("--vad-threshold", default=0.5, type=float,
