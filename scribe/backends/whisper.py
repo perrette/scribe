@@ -29,7 +29,7 @@ class WhisperTranscriber(AbstractTranscriber):
             language=self.language,
             vad_filter=True,
             beam_size=1,
-            initial_prompt=self._prompt,
+            initial_prompt=self.compose_prompt(self._prompt),
             hotwords=self._hotwords,
             no_speech_threshold=0.6,
             log_prob_threshold=-1.0,
@@ -37,6 +37,7 @@ class WhisperTranscriber(AbstractTranscriber):
             temperature=(0.0, 0.2, 0.4, 0.6, 0.8, 1.0),
         )
         text = "".join(segment.text for segment in segments)
+        self.update_streaming_context(text)
         return {"text": text}
 
     def finalize(self):

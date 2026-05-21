@@ -69,6 +69,11 @@ class RecordingSession:
                         stop_message="Exit."):
 
         self.reset()
+        # Drop pseudo-streaming chunk-tail context from the previous
+        # recording. Must live here (not in self.reset()) because reset()
+        # also runs on every silence cut and we want the context to
+        # persist across cuts within the same recording.
+        self.backend.clear_streaming_context()
         self.interrupt = False
         self.cancelled = False
         self.recording = True

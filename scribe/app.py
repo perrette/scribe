@@ -200,13 +200,15 @@ def _build_backend_kwargs(backend, model, language, samplerate, duration,
                     hotwords=(" ".join(words) if words else None),
                     model_kwargs={"download_root": download_folder_whisper})
     if backend == "whisper-futo":
-        # whisper.cpp via pywhispercpp doesn't take prompt/hotwords through the
-        # same surface; drop them for now. Audio_ctx is computed per-call inside
-        # the backend from actual audio length (the ACFT speedup).
+        # pywhispercpp 1.4.1 exposes `initial_prompt`; the backend folds
+        # words+prompt into it (and adds a rolling chunk-tail in
+        # pseudo-streaming). No separate hotwords channel here — fold
+        # everything into the prompt like the cloud backends do.
         return dict(model_name=model, language=language, samplerate=samplerate,
                     timeout=duration, silence_duration=silence_duration,
                     silence_thresh=silence_db, silence_thresh_onset=silence_onset_db,
                     pseudo_streaming=pseudo_streaming, streaming_window=streaming_window,
+                    prompt=merged_prompt,
                     download_folder=download_folder_whisper_futo)
     if backend in ("openai", "groq"):
         from scribe.backends.openai_api import REALTIME_MODELS

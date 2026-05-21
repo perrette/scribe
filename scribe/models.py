@@ -37,6 +37,13 @@ class AbstractTranscriber(STTBackend):
     # audio arrives.
     _CHUNK_MIN_MS = 1500.0
 
+    # Pseudo-streaming: trailing chars of previous chunks fed back as
+    # `initial_prompt` so whisper has cross-chunk context (capitalization
+    # after a period, article gender, language lock). Whisper's prompt
+    # window is 224 tokens — ~200 chars of French stays well under it and
+    # leaves room for the user's static prompt + words list.
+    _STREAMING_CONTEXT_MAX_CHARS = 200
+
     def __init__(self, model, model_name=None, language=None, samplerate=16000, timeout=None, model_kwargs={},
                  silence_thresh=-40, silence_thresh_onset=-25, silence_duration=0.6,
                  pseudo_streaming=False, streaming_window=5.0):
@@ -67,6 +74,12 @@ class AbstractTranscriber(STTBackend):
         # Set by RecordingSession.__init__; backend reads/writes session.audio_buffer
         # etc. inside transcribe_realtime_audio / finalize.
         self.session = None
+        # Rolling tail of the previous chunks' transcriptions, fed to the
+        # next chunk as prompt context (pseudo-streaming only). Cleared by
+        # RecordingSession.start_recording at the start of every new
+        # recording; NOT cleared on per-chunk session.reset() (that would
+        # defeat the purpose).
+        self._streaming_context = ""
 
     def notify_error(self, title, message):
         if self.session is not None:
@@ -158,6 +171,36 @@ class AbstractTranscriber(STTBackend):
 
         return {"partial": f"{len(session.audio_buffer)} bytes received "
                            f"(duration: {elapsed:.2f} seconds)"}
+
+    def compose_prompt(self, base_prompt):
+        """Concatenate the user's static prompt with the rolling chunk-tail
+        context. Returns None when both are empty so callers can keep the
+        backend default. Tail is appended (chronological order) so the
+        model sees: [static hints] then [most recent words said].
+        """
+        tail = self._streaming_context if self.pseudo_streaming else ""
+        parts = [p for p in (base_prompt, tail) if p]
+        if not parts:
+            return None
+        return " ".join(parts)
+
+    def update_streaming_context(self, text):
+        """Append the latest chunk's text to the rolling context and trim
+        to the last `_STREAMING_CONTEXT_MAX_CHARS` characters. No-op in
+        batch mode (no chunking → nothing to carry forward).
+        """
+        if not self.pseudo_streaming:
+            return
+        text = (text or "").strip()
+        if not text:
+            return
+        combined = f"{self._streaming_context} {text}".strip() if self._streaming_context else text
+        if len(combined) > self._STREAMING_CONTEXT_MAX_CHARS:
+            combined = combined[-self._STREAMING_CONTEXT_MAX_CHARS:]
+        self._streaming_context = combined
+
+    def clear_streaming_context(self):
+        self._streaming_context = ""
 
     def transcribe_audio(self, audio_data):
         raise NotImplementedError()

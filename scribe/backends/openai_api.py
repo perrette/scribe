@@ -47,7 +47,8 @@ class OpenaiAPITranscriber(WhisperTranscriber):
         sf.write(buffer, audio_data, self.samplerate, format='WAV')
         buffer.seek(0)
         buffer.name = "audio.wav"  # Set a filename with a valid extension
-        extra = {"prompt": self._prompt} if self._prompt else {}
+        prompt = self.compose_prompt(self._prompt)
+        extra = {"prompt": prompt} if prompt else {}
         try:
             transcription = self.model.audio.transcriptions.create(
                 model=self.model_name,
@@ -58,6 +59,7 @@ class OpenaiAPITranscriber(WhisperTranscriber):
             title, message = format_openai_error(e)
             self.notify_error(title, message)
             return {"text": ""}
+        self.update_streaming_context(transcription.text)
         return {"text": transcription.text}
 
 

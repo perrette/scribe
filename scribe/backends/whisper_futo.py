@@ -118,7 +118,7 @@ class WhisperFutoTranscriber(AbstractTranscriber):
     is_local: ClassVar[bool] = True
 
     def __init__(self, model_name, language=None, model=None, model_kwargs={},
-                 download_folder=None, **kwargs):
+                 download_folder=None, prompt=None, **kwargs):
         if model is None:
             from pywhispercpp.model import Model
             path = _model_path(model_name, download_folder)
@@ -129,6 +129,7 @@ class WhisperFutoTranscriber(AbstractTranscriber):
             init_kwargs = {k: v for k, v in model_kwargs.items() if k != "n_threads"}
             model = Model(str(path), n_threads=n_threads, **init_kwargs)
         super().__init__(model, model_name, language, model_kwargs=model_kwargs, **kwargs)
+        self._prompt = prompt
 
     def transcribe_audio(self, audio_bytes):
         self.log("\nTranscribing")
@@ -147,6 +148,9 @@ class WhisperFutoTranscriber(AbstractTranscriber):
                              max(_AUDIO_CTX_MIN,
                                  math.ceil(duration_s * _AUDIO_CTX_PER_SECOND))),
         }
+        prompt = self.compose_prompt(self._prompt)
+        if prompt:
+            kwargs["initial_prompt"] = prompt
         # Streaming-only safety nets. max_tokens caps decoder repetition
         # loops on short silence-split chunks; the non-speech filter
         # below drops "(music)"-style hallucinations from those same
@@ -172,6 +176,10 @@ class WhisperFutoTranscriber(AbstractTranscriber):
         # decode failure — drop in both modes.
         if _PHONETIC_RE.search(text):
             text = ""
+        # Carry the cleaned text forward as cross-chunk context. Done
+        # post-filter so hallucination/phonetic-garbage chunks (now "")
+        # don't poison the next chunk's prompt.
+        self.update_streaming_context(text)
         # Trailing space lets pseudo-streaming chunks concatenate cleanly
         # (vosk convention). Harmless in batch mode — downstream strips.
         if text:
