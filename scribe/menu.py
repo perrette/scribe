@@ -482,22 +482,6 @@ class AppState(AbstractFrontendApp):
             print(f"Invalid {label}. Must be a float.")
             return None
 
-    def cb_set_duration(self, view, item):
-        val = self._coerce_float(item.value(item), "duration")
-        if val is not None:
-            self.o.duration = val
-            if self.transcriber is not None:
-                self.transcriber.timeout = val
-        return True
-
-    def cb_set_silence_duration(self, view, item):
-        val = self._coerce_float(item.value(item), "duration")
-        if val is not None:
-            self.o.silence_duration = val
-            if self.transcriber is not None:
-                self.transcriber.silence_duration = val
-        return True
-
     def cb_set_silence_db(self, view, item):
         val = self._coerce_float(item.value(item), "threshold")
         if val is not None:
@@ -1065,12 +1049,6 @@ def _advanced_options_menu(app_state) -> Menu:
     is_db_mode = lambda: getattr(app_state.transcriber, "vad_mode", "db") == "db"
     is_silero_mode = lambda: getattr(app_state.transcriber, "vad_mode", "db") == "silero"
     items = [
-        SetValueItem("t", app_state.cb_set_duration,
-                     value=lambda item: getattr(app_state.transcriber, "timeout", None),
-                     type=float, help="Duration (s)", visible=app_state._is_whisper),
-        SetValueItem("b", app_state.cb_set_silence_duration,
-                     value=lambda item: getattr(app_state.transcriber, "silence_duration", None),
-                     type=float, help="Silence duration (s)"),
         Item("vad", app_state.cb_toggle_vad_mode,
              help="VAD: silero (noise-robust) instead of dB volume",
              checked=lambda item: is_silero_mode()),

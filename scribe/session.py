@@ -96,10 +96,18 @@ class RecordingSession:
         self.recording = True
         self.waiting = True
         self.busy = True
-        if self.backend.silence_duration is not None:
-            self.last_sound_time = time.time() - self.backend.silence_duration
-        else:
-            self.last_sound_time = time.time()
+        # Backdate last_sound_time so the recording starts in "waiting" state
+        # (no recent sound) regardless of which silence threshold the active
+        # backend uses. Batch backends compare against stream_chunk_silence_break;
+        # the OpenAI realtime backend against realtime_commit_silence. Both
+        # always exist on AbstractTranscriber, but either can be 0 / None
+        # (Auto / Max mode for the pseudo-streaming knob), so coalesce.
+        silence_floor = (
+            getattr(self.backend, "stream_chunk_silence_break", None)
+            or getattr(self.backend, "realtime_commit_silence", None)
+            or 0
+        )
+        self.last_sound_time = time.time() - silence_floor
 
         streaming = isinstance(self.backend, StreamingSTTBackend)
         if streaming:
