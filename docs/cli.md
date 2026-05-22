@@ -106,13 +106,13 @@ silence-chunking knobs; they have their own end-of-utterance signal.
 
 | Flag                  | Purpose                                                                                              |
 |-----------------------|------------------------------------------------------------------------------------------------------|
-| `--realtime`          | Force a batch backend (whisper, whisper-futo, openai non-realtime, groq) into pseudo-streaming — live chunks driven by `--streaming-window` and `--silence-duration`. Same as the tray's **Mode: Realtime**. |
+| `--stream`            | Force a batch backend (whisper, whisper-futo, openai non-realtime, groq) into pseudo-streaming — live chunks driven by `--streaming-window` and `--silence-duration`. Same as the tray's **Mode: Stream**. |
 | `--clip`              | Default — transcribe the whole recording at end. Same as the tray's **Mode: Clip**.                  |
-| `--streaming-window SECS` | Target chunk window in seconds for Realtime mode on batch backends (default `5`). After this many seconds, cut at the first qualifying silence; force-cut at `2x` the window. |
+| `--streaming-window SECS` | Target chunk window in seconds for Stream mode on batch backends (default `5`). After this many seconds, cut at the first qualifying silence; force-cut at `2x` the window. |
 
-Native streamers (vosk, `gpt-realtime-whisper`) are always Realtime
-and ignore `--clip`. `--pseudo-streaming` is kept as a hidden alias
-for `--realtime` (backward compat).
+Native streamers (vosk, `gpt-realtime-whisper`) are always streaming
+and ignore `--clip`. `--realtime` and `--pseudo-streaming` are kept as
+hidden aliases for `--stream` (backward compat).
 
 ## Frontend
 

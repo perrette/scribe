@@ -391,24 +391,26 @@ def get_parser():
 
     group = parser.add_argument_group("Listening mode")
     mode_group = group.add_mutually_exclusive_group()
-    mode_group.add_argument("--realtime", dest="listen_mode", action="store_const",
-                            const="realtime",
+    mode_group.add_argument("--stream", dest="listen_mode", action="store_const",
+                            const="stream",
                             help="Force a batch backend (whisper, whisper-futo, "
                                  "openai non-realtime, groq) into chunked "
                                  "pseudo-streaming using --streaming-window and "
                                  "--silence-duration. Equivalent to the tray's "
-                                 "'Mode: Realtime'. Native streamers (vosk, "
-                                 "gpt-realtime-whisper) are always realtime.")
+                                 "'Mode: Stream'. Native streamers (vosk, "
+                                 "gpt-realtime-whisper) are always streaming.")
     mode_group.add_argument("--clip", dest="listen_mode", action="store_const",
                             const="clip",
                             help="Transcribe the whole recording at end (default). "
                                  "Equivalent to the tray's 'Mode: Clip'.")
-    # Hidden backward-compat alias for --realtime. Same semantics.
+    # Hidden backward-compat aliases for --stream.
+    mode_group.add_argument("--realtime", dest="listen_mode", action="store_const",
+                            const="stream", help=argparse.SUPPRESS)
     group.add_argument("--pseudo-streaming", action="store_true",
                        help=argparse.SUPPRESS)
     group.add_argument("--streaming-window", default=5.0, type=float,
                        help="Target streaming window in seconds for "
-                            "--realtime mode on batch backends "
+                            "--stream mode on batch backends "
                             "(default: %(default)s). After this many seconds "
                             "of buffered audio, cut at the first silence "
                             "(>= --silence-duration); if no silence arrives "
@@ -654,11 +656,11 @@ def main(args=None):
     parser = get_parser()
     o = parser.parse_args(args)
 
-    # Reconcile --realtime / --clip with the legacy --pseudo-streaming flag.
-    # --realtime / --clip win when present; otherwise the existing
+    # Reconcile --stream / --clip with the legacy --pseudo-streaming flag.
+    # --stream / --clip win when present; otherwise the existing
     # --pseudo-streaming boolean drives the default.
     listen_mode = getattr(o, "listen_mode", None)
-    if listen_mode == "realtime":
+    if listen_mode == "stream":
         o.pseudo_streaming = True
     elif listen_mode == "clip":
         o.pseudo_streaming = False

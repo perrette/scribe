@@ -430,22 +430,22 @@ class AppState(AbstractFrontendApp):
         self._refresh_tray_menu()
         return True
 
-    def cb_set_mode(self, realtime: bool) -> Callable:
-        """Factory: callback for the Mode submenu's Realtime/Clip radio items.
+    def cb_set_mode(self, stream: bool) -> Callable:
+        """Factory: callback for the Mode submenu's Stream/Clip radio items.
 
-        `realtime=True` sets pseudo_streaming on; `realtime=False` sets it off.
+        `stream=True` sets pseudo_streaming on; `stream=False` sets it off.
         On native streamers (supports_streaming=True) both radios no-op —
-        those backends are always Realtime and the Clip radio is hidden
+        those backends are always Stream and the Clip radio is hidden
         anyway, so this only fires if someone clicks the (already-checked)
-        Realtime radio.
+        Stream radio.
         """
         def _cb(view, item):
             if not self._is_batch_backend():
                 return True
             if self.transcriber is not None:
-                self.transcriber.pseudo_streaming = realtime
-            self.o.pseudo_streaming = realtime
-            self.params["pseudo_streaming"] = realtime
+                self.transcriber.pseudo_streaming = stream
+            self.o.pseudo_streaming = stream
+            self.params["pseudo_streaming"] = stream
             self._refresh_tray_menu()
             return True
         return _cb
@@ -921,8 +921,8 @@ def build_menu(app_state) -> Menu:
         return f"Language: {_language_display(lang)}"
     language_item.label_fn = _language_label
 
-    def _mode_is_realtime():
-        """Realtime is active when native streaming OR pseudo-streaming is on
+    def _mode_is_stream():
+        """Stream is active when native streaming OR pseudo-streaming is on
         — matches the `is_streaming` disjunction used in start_recording."""
         t = app_state.transcriber
         if t is None:
@@ -936,24 +936,24 @@ def build_menu(app_state) -> Menu:
 
     def _mode_label():
         if _mode_is_native_streamer():
-            return "Mode: Realtime (native)"
-        return "Mode: Realtime" if _mode_is_realtime() else "Mode: Clip"
+            return "Mode: Stream (native)"
+        return "Mode: Stream" if _mode_is_stream() else "Mode: Clip"
 
-    # Mode is a radio with 2 elements (Realtime / Clip) so the top-level
+    # Mode is a radio with 2 elements (Stream / Clip) so the top-level
     # label can show the active selection dynamically — same pattern as
     # Model and Language above. The radio modeling (not checkbox) is
     # intentional: a checkbox's checkmark + a changing label would double-
     # encode the same state.
-    realtime_radio = Item("r", app_state.cb_set_mode(True),
-                          help="Realtime (live transcription as you speak)",
-                          checked=lambda _it: _mode_is_realtime())
-    realtime_radio.radio = True
+    stream_radio = Item("r", app_state.cb_set_mode(True),
+                        help="Stream (live transcription as you speak)",
+                        checked=lambda _it: _mode_is_stream())
+    stream_radio.radio = True
     clip_radio = Item("c", app_state.cb_set_mode(False),
                       help="Clip (transcribe at end of recording)",
-                      checked=lambda _it: not _mode_is_realtime(),
+                      checked=lambda _it: not _mode_is_stream(),
                       visible=app_state._is_batch_backend)
     clip_radio.radio = True
-    mode_item = Item("Mode", Menu([realtime_radio, clip_radio], name="Mode"))
+    mode_item = Item("Mode", Menu([stream_radio, clip_radio], name="Mode"))
     mode_item.label_fn = _mode_label
 
     items = [
