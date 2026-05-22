@@ -135,6 +135,14 @@ SCRIBE_CONFIG_DIR = platformdirs.user_config_dir("scribe")
 DEFAULT_PROMPT_FILE = os.path.join(SCRIBE_CONFIG_DIR, "prompt.txt")
 DEFAULT_WORDS_FILE = os.path.join(SCRIBE_CONFIG_DIR, "words.txt")
 
+# Default sink for `--mode file` when the user hasn't passed `-o`.
+# Desktop is more visible than ~/Documents — picked so a new user
+# trying File mode immediately sees the transcript file on their
+# desktop. `platformdirs.user_desktop_dir()` resolves XDG_DESKTOP_DIR
+# on Linux, ~/Desktop on macOS, %USERPROFILE%\Desktop on Windows,
+# and falls back to the home dir if Desktop is missing.
+DEFAULT_OUTPUT_FILE = os.path.join(platformdirs.user_desktop_dir(), "scribe-notes.txt")
+
 
 def _resolve_prompt_and_words(prompt_text, prompt_file, words, words_file):
     """Read --prompt-file / --words-file from disk and merge with the inline
@@ -387,7 +395,11 @@ def get_parser():
                             "non-ASCII characters fall back to their ASCII equivalents (eitype is "
                             "Unicode-correct).")
     group.add_argument("-o", "--output-file",
-                       help="Also append the transcription to this file.")
+                       default=DEFAULT_OUTPUT_FILE,
+                       help=f"Path the transcription is appended to when "
+                            f"--mode file is active. Default: {DEFAULT_OUTPUT_FILE}. "
+                            f"Ignored when --mode is something else (the four "
+                            f"output modes are mutually exclusive).")
 
     group = parser.add_argument_group("Silence detection")
     group.add_argument("--duration", type=float,

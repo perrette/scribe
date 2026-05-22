@@ -10,7 +10,7 @@ exposed in both places.
 | `keystroke` *(default)* | Transcription lands in the focused window. **Batch models** (Whisper, Groq, OpenAI `gpt-4o-*`): single Ctrl+V at end of recording. **Streaming models** (Vosk, OpenAI `gpt-realtime-whisper`): each chunk is pasted live as it arrives — "appears as you speak". |
 | `clipboard`             | Transcription copied to clipboard; you press Ctrl+V yourself.                                                                                                                                                 |
 | `terminal`              | No clipboard, no keystroke — transcription is only printed to the terminal.                                                                                                                                   |
-| `file`                  | Transcription appended exclusively to `--output-file`. Keyboard / clipboard output is suppressed. Requires `--output-file`.                                                                                   |
+| `file`                  | Transcription appended exclusively to `--output-file`. Keyboard / clipboard output is suppressed. Defaults to `<user-desktop>/scribe-notes.txt`; override with `-o PATH`.                                     |
 
 ```bash
 scribe                    # keystroke (default)
@@ -236,7 +236,8 @@ you just want to read the transcription off the terminal.
 ## `file` — write exclusively to `--output-file`
 
 ```bash
-scribe --mode file -o ~/dictation.txt
+scribe --mode file                       # defaults to <Desktop>/scribe-notes.txt
+scribe --mode file -o ~/dictation.txt    # override the path
 ```
 
 `--mode file` appends transcribed text to the file path given by
@@ -244,12 +245,18 @@ scribe --mode file -o ~/dictation.txt
 no clipboard copy, no terminal print). The four output modes are
 mutually exclusive — there is no double-write to file + keyboard.
 
-The path is required; without it, scribe raises a `ValueError` at
-recording start. Each chunk is appended verbatim (no per-chunk newline
-injection — the backend's own chunk spacing controls the file format).
+The `--output-file` flag defaults to the user's Desktop folder
+(`platformdirs.user_desktop_dir()`, which resolves to `~/Desktop` on
+Linux/macOS and `%USERPROFILE%\Desktop` on Windows; falls back to the
+home directory if Desktop is absent). The default filename is
+`scribe-notes.txt`. Override with any explicit `-o PATH`.
 
-From the tray, **Options → Output → Choose path…** opens a native
-file picker (tkinter) that sets the path and switches to File mode in
-one click. The File radio is greyed out until a path is configured.
+Each chunk is appended verbatim (no per-chunk newline injection — the
+backend's own chunk spacing controls the file format).
+
+From the tray, **Options → Output → Choose path…** opens a native file
+picker (`tkinter`) that sets the path and switches to File mode in one
+click. Picking an existing file prompts an "Append to existing file?"
+confirmation (the transcription is appended, never overwritten).
 If the chosen file already exists, an append-confirm dialog warns that
 new chunks will be appended to it before switching modes.
