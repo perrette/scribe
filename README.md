@@ -13,8 +13,9 @@ cloud-based APIs, batch and streaming workflows.
   **Vosk** (local, streaming), **Whisper** (local, batch),
   **Whisper FUTO** (local, batch — ACFT-tuned for short dictations),
   **OpenAI** (cloud, batch *or* streaming), **Groq** (cloud, batch).
-- Delivers the transcript three ways: paste into the focused window
-  (default), copy to clipboard, or print to the terminal.
+- Delivers the transcript four ways: paste into the focused window
+  (default), copy to clipboard, print to the terminal, or write to
+  a file.
 - Runs as a **system tray icon** with a single Record button, or as an
   interactive **terminal TUI** — same menu in both.
 - Hooks into your DE's keyboard shortcuts via `SIGUSR1` (toggle
@@ -63,7 +64,7 @@ scribe --frontend terminal                             # interactive TUI menu
 scribe --frontend terminal --no-interactive            # record immediately, no menu
 scribe --mode clipboard                                # copy to clipboard, no keystroke
 scribe --mode terminal                                 # only print to stdout
-scribe -o transcript.txt                               # also append to a file
+scribe --mode file -o transcript.txt                   # append to a file (no keystroke / clipboard)
 ```
 
 With `--no-interactive` (terminal frontend only), scribe skips the

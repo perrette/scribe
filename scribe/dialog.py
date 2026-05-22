@@ -19,7 +19,8 @@ def select_file_save(
     a ``finally`` so we don't leak a zombie top-level window when called
     repeatedly from the tray menu.
     """
-    from tkinter import Tk, filedialog
+    import os
+    from tkinter import Tk, filedialog, messagebox
 
     root = Tk()
     root.withdraw()
@@ -29,8 +30,27 @@ def select_file_save(
             initialdir=initial_dir,
             initialfile=initial_file,
             defaultextension=".txt",
-            filetypes=[("Text", "*.txt"), ("All files", "*.*")],
+            # "All files" first so existing files of any extension are
+            # visible by default — the picker is for "where to dump the
+            # transcript", not "type a new .txt name".
+            filetypes=[("All files", "*.*"), ("Text", "*.txt")],
+            # We APPEND to the file, never overwrite, so tk's default
+            # "Replace?" prompt would be misleading. Suppress it and
+            # ask a more accurate "Append to existing?" below.
+            confirmoverwrite=False,
         )
-        return path or None
+        if not path:
+            return None
+        # When the user picked an existing file, confirm the intent —
+        # the recording will *append*, never overwrite.
+        if os.path.exists(path):
+            basename = os.path.basename(path)
+            keep = messagebox.askyesno(
+                "Append to existing file?",
+                f"'{basename}' already exists. New chunks will be appended to it. Continue?",
+            )
+            if not keep:
+                return None
+        return path
     finally:
         root.destroy()

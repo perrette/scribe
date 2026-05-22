@@ -17,7 +17,6 @@ scribe                    # keystroke (default)
 scribe --mode clipboard   # clipboard only
 scribe --mode terminal    # terminal only
 scribe --mode file -o transcript.txt   # file only
-scribe -o transcript.txt  # also append to a file (orthogonal to --mode)
 ```
 
 The mechanism inside `keystroke` mode (Ctrl+V at end vs paste-per-chunk)
@@ -63,13 +62,22 @@ Switch your system keyboard layout to one that covers the script you're
 dictating, or stick to the paste path (plain `Ctrl+V`, or the Shift
 trick above) for lossless Unicode.
 
-## Output file
+## File output
 
-An output file can also be appended to, orthogonally to `--mode`:
+`--mode file` writes transcribed text to the file path given by
+`-o / --output-file` and suppresses every other output (no keystroke,
+no clipboard copy, no terminal print). The path is required; without
+it, scribe raises a `ValueError` at recording start. Each chunk is
+appended verbatim (no per-chunk newline injection — the backend's own
+chunk spacing controls the file format).
 
 ```bash
-scribe -o transcription.txt
+scribe --mode file -o ~/dictation.txt
 ```
+
+From the tray, **Options → Output → Choose path…** opens a native
+file picker (tkinter) that sets the path and switches to File mode
+in one click. The File radio is greyed out until a path is configured.
 
 ## Typer backends
 
