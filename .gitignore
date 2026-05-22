@@ -7,3 +7,4 @@ scribe/_version.py
 
 # Autonomous roadmap workflows (local coordination artifacts; never committed)
 workflows/
+.worktrees/

@@ -294,7 +294,7 @@ class OpenaiRealtimeTranscriber(AbstractStreamingTranscriber):
             # speech" signal). False on the first non-silent chunk for
             # instant icon response; True after sustained silence so the
             # icon doesn't flicker between syllables.
-            commit_samples = int(self.silence_duration * self.samplerate)
+            commit_samples = int(self.realtime_commit_silence * self.samplerate)
             if chunk_is_silent:
                 if self._has_uncommitted_audio:
                     self._silent_samples += len(chunk) // 2  # int16 → 2 bytes

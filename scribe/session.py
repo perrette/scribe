@@ -24,6 +24,15 @@ class RecordingSession:
         self.cancelled = False
         self.audio_buffer = b''
         self.silence_buffer = b''
+        # Pseudo-streaming Auto mode: log of (start_ms_from_chunk_start,
+        # duration_ms) for every silence pause seen since the last cut.
+        # Cleared on reset() so each chunk starts with an empty log.
+        self.silence_intervals = []
+        # Byte-offset-in-ms where the current pending silence began, or
+        # None if we're not currently inside a silence. Promoted to a
+        # closed interval (appended to silence_intervals) when speech
+        # resumes.
+        self.silence_start_ms = None
         self.start_time = time.time()
         self.last_sound_time = self.start_time
         self.error_callback = error_callback
@@ -50,6 +59,8 @@ class RecordingSession:
     def reset(self):
         self.audio_buffer = b''
         self.silence_buffer = b''
+        self.silence_intervals = []
+        self.silence_start_ms = None
         self.start_time = time.time()
         reset_model = getattr(self.backend, "reset_model", None)
         if reset_model is not None:
@@ -74,6 +85,12 @@ class RecordingSession:
         # also runs on every silence cut and we want the context to
         # persist across cuts within the same recording.
         self.backend.clear_streaming_context()
+        # Same survival pattern in reverse for Auto-mode chunk handover:
+        # _pending_chunk_audio is meant to survive ONE reset() (the one
+        # right after the cut) so the next call picks it up; but a
+        # cancelled recording can leave stale bytes here, so wipe at the
+        # start of each new recording.
+        self.backend._pending_chunk_audio = b''
         self.interrupt = False
         self.cancelled = False
         self.recording = True

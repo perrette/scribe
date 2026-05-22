@@ -184,33 +184,44 @@ invocation, pass an explicit empty value: `--prompt ""` (or
 arguments (or `--words-file ""`) suppresses the words default. Each
 side is independent.
 
-## Realtime mode (pseudo-streaming on batch backends)
+## Stream mode (pseudo-streaming on batch backends)
 
-`--realtime` makes a batch backend behave streaming-like by cutting
-the running buffer into chunks driven by silence (internally this is
-called *pseudo-streaming*):
+`--stream` makes a batch backend behave streaming-like by cutting
+the running buffer into chunks and emitting each chunk's transcription
+immediately (internally called *pseudo-streaming*):
 
 ```bash
-scribe --realtime --streaming-window 5
+scribe --stream
 ```
 
-After `--streaming-window` seconds of buffered audio, scribe cuts at
-the first silence of at least `--silence-duration` and transcribes the
-chunk; if no silence arrives by `2 × --streaming-window`, it
-force-cuts. The session continues until you stop it. Default `5` s
-trades a little Whisper context for snappier "text appears as you
-speak" UX; raise it (10–30 s) if accuracy on long sentences matters
-more than latency.
+Once the buffer has grown to at least `--stream-chunk-min` (default
+1.5 s), silence of at least `--stream-chunk-silence-break` (default
+0.6 s) triggers a chunk cut. A force-cut fires at `--stream-chunk-max`
+(default 10 s) regardless of silence, to cap latency. The session
+continues until you stop it manually.
 
-Realtime is off by default — the default `Clip` mode transcribes the
+Two special values for `--stream-chunk-silence-break` (set via the
+tray's **Silence break** picker or `--stream-chunk-silence-break 0`
+at the CLI):
+
+- **Auto** (`0`) — disables the fixed-threshold trigger. At force-cut
+  time scribe picks the *longest* silence interval within the window
+  whose start position is at least `--stream-chunk-min` into the chunk,
+  re-cutting there for a more natural word boundary. Falls back to a
+  brute force-cut if no qualifying silence is found.
+- **Max** — disables silence-based cuts entirely; only the force-cut at
+  `--stream-chunk-max` fires. Useful when you want uniform chunk sizes
+  regardless of speech patterns. (Only selectable from the tray picker.)
+
+Stream mode is off by default — the default `Clip` mode transcribes the
 whole recording at end (`--clip`). The tray menu surfaces the same
-toggle as the top-level **Mode: Realtime / Clip** item. Native
-streamers (vosk, `gpt-realtime-whisper`) are always Realtime and the
-menu shows **Mode: Realtime (native)** for them.
+toggle as the top-level **Mode: Stream / Clip** item. Native
+streamers (vosk, `gpt-realtime-whisper`) are always streaming and the
+menu shows **Mode: Stream (native)** for them.
 
 ### Cross-chunk prompt context
 
-In Realtime mode (pseudo-streaming) scribe automatically augments
+In Stream mode (pseudo-streaming) scribe automatically augments
 each chunk's prompt with the trailing ~200 characters of the
 *previous* chunk's transcription. This rolling tail is concatenated
 onto whatever static `--prompt` / `--words` you configured and
@@ -231,13 +242,12 @@ sits well under that and leaves room for your static prompt + words
 list.
 
 The rolling tail is **dropped** when the silence between two
-utterances exceeds 1.5 seconds — a long pause is treated as a new
-sentence/idea boundary, where carrying a possibly-bad prior chunk
-forward biases the next one more than it helps. This mirrors
-`whisper.cpp`'s `--keep-context off` default: prior-text conditioning
-can self-reinforce errors (hallucinations, decoder repetition loops)
-more readily than it provides useful continuity, so we cap it at
-natural sentence boundaries.
+utterances exceeds `--stream-context-reset-silence` ×
+`--stream-chunk-silence-break` (default 3 × 0.6 s = 1.8 s) — a long
+pause is treated as a new sentence/idea boundary, where carrying a
+possibly-bad prior chunk forward biases the next one more than it
+helps. Use `--stream-context-reset-silence inf` to keep context across
+arbitrarily long pauses.
 
 Short pauses (mid-sentence punctuation) keep the context; the cut at
 the start of every new recording also clears it.

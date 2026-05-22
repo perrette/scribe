@@ -171,12 +171,13 @@ def _resolve_prompt_and_words(prompt_text, prompt_file, words, words_file):
 
 
 def _build_backend_kwargs(backend, model, language, samplerate, duration,
-                          silence_db, silence_duration,
+                          silence_db, stream_chunk_silence_break, realtime_commit_silence,
                           vad_mode, vad_threshold, vad_min_silence_ms,
                           download_folder_vosk, download_folder_whisper,
                           download_folder_whisper_futo,
                           realtime_delay, realtime_gate,
-                          pseudo_streaming, streaming_window,
+                          pseudo_streaming, stream_chunk_max,
+                          stream_chunk_min, stream_context_reset_silence,
                           prompt_text, words):
     # Cloud whisper variants (OpenAI batch, Groq, OpenAI realtime) take a
     # single `prompt` string — fold the word list into it. faster-whisper
@@ -192,13 +193,17 @@ def _build_backend_kwargs(backend, model, language, samplerate, duration,
     if backend == "vosk":
         # Vosk has no soft prompt; only a hard grammar. Silently ignore for now.
         return dict(model_name=model, language=language, samplerate=samplerate,
-                    timeout=None, silence_duration=None,
+                    timeout=None,
                     model_kwargs={"download_root": download_folder_vosk})
     if backend == "whisper":
         return dict(model_name=model, language=language, samplerate=samplerate,
-                    timeout=duration, silence_duration=silence_duration,
+                    timeout=duration,
+                    stream_chunk_silence_break=stream_chunk_silence_break,
+                    realtime_commit_silence=realtime_commit_silence,
                     silence_thresh=silence_db,
-                    pseudo_streaming=pseudo_streaming, streaming_window=streaming_window,
+                    pseudo_streaming=pseudo_streaming, stream_chunk_max=stream_chunk_max,
+                    stream_chunk_min=stream_chunk_min,
+                    stream_context_reset_silence=stream_context_reset_silence,
                     prompt=prompt_text,
                     hotwords=(" ".join(words) if words else None),
                     model_kwargs={"download_root": download_folder_whisper},
@@ -209,18 +214,26 @@ def _build_backend_kwargs(backend, model, language, samplerate, duration,
         # pseudo-streaming). No separate hotwords channel here — fold
         # everything into the prompt like the cloud backends do.
         return dict(model_name=model, language=language, samplerate=samplerate,
-                    timeout=duration, silence_duration=silence_duration,
+                    timeout=duration,
+                    stream_chunk_silence_break=stream_chunk_silence_break,
+                    realtime_commit_silence=realtime_commit_silence,
                     silence_thresh=silence_db,
-                    pseudo_streaming=pseudo_streaming, streaming_window=streaming_window,
+                    pseudo_streaming=pseudo_streaming, stream_chunk_max=stream_chunk_max,
+                    stream_chunk_min=stream_chunk_min,
+                    stream_context_reset_silence=stream_context_reset_silence,
                     prompt=merged_prompt,
                     download_folder=download_folder_whisper_futo,
                     **vad_kwargs)
     if backend in ("openai", "groq"):
         from scribe.backends.openai_api import REALTIME_MODELS
         kwargs = dict(model_name=model, samplerate=samplerate,
-                      timeout=duration, silence_duration=silence_duration,
+                      timeout=duration,
+                      stream_chunk_silence_break=stream_chunk_silence_break,
+                      realtime_commit_silence=realtime_commit_silence,
                       silence_thresh=silence_db,
-                      pseudo_streaming=pseudo_streaming, streaming_window=streaming_window,
+                      pseudo_streaming=pseudo_streaming, stream_chunk_max=stream_chunk_max,
+                      stream_chunk_min=stream_chunk_min,
+                      stream_context_reset_silence=stream_context_reset_silence,
                       prompt=merged_prompt,
                       **vad_kwargs)
         if backend == "openai" and model in REALTIME_MODELS:
@@ -230,19 +243,20 @@ def _build_backend_kwargs(backend, model, language, samplerate, duration,
             # already streams natively. Strip these so its __init__ doesn't
             # see options it doesn't act on.
             kwargs.pop("pseudo_streaming", None)
-            kwargs.pop("streaming_window", None)
+            kwargs.pop("stream_chunk_max", None)
         return kwargs
     raise ValueError(f"Unknown backend: {backend}")
 
 
 def get_transcriber(model=None, backend=None, dummy=False, interactive=True, language=None,
-                    samplerate=None, duration=None,
-                    silence_db=None, silence_duration=0.6,
+                    samplerate=None, clip_timeout=120.0, realtime_timeout=None,
+                    silence_db=None, stream_chunk_silence_break=0.6, realtime_commit_silence=0.6,
                     vad_mode="auto", vad_threshold=0.5, vad_min_silence_ms=300,
                     download_folder_vosk=None, download_folder_whisper=None,
                     download_folder_whisper_futo=None,
                     realtime_delay="medium", realtime_gate=True,
-                    pseudo_streaming=False, streaming_window=5.0,
+                    pseudo_streaming=False, stream_chunk_max=10.0,
+                    stream_chunk_min=1.5, stream_context_reset_silence=3.0,
                     prompt=None, prompt_file=None, words=None, words_file=None,
                     **kwargs):
     if dummy:
@@ -272,14 +286,17 @@ def get_transcriber(model=None, backend=None, dummy=False, interactive=True, lan
     # mode ignores it. Default -40 dBFS — keeps the gate simple by design.
     if silence_db is None:
         silence_db = -40.0
+    duration = realtime_timeout if pseudo_streaming else clip_timeout
     prompt_text, word_list = _resolve_prompt_and_words(prompt, prompt_file, words, words_file)
     backend_kwargs = _build_backend_kwargs(backend, model, language, samplerate, duration,
-                                          silence_db, silence_duration,
+                                          silence_db, stream_chunk_silence_break,
+                                          realtime_commit_silence,
                                           vad_mode, vad_threshold, vad_min_silence_ms,
                                           download_folder_vosk, download_folder_whisper,
                                           download_folder_whisper_futo,
                                           realtime_delay, realtime_gate,
-                                          pseudo_streaming, streaming_window,
+                                          pseudo_streaming, stream_chunk_max,
+                                          stream_chunk_min, stream_context_reset_silence,
                                           prompt_text, word_list)
     try:
         return _build_transcriber(backend, **backend_kwargs)
@@ -287,6 +304,20 @@ def get_transcriber(model=None, backend=None, dummy=False, interactive=True, lan
         print(error)
         print(f"Failed to (down)load model {model}.")
         exit(1)
+
+class _SilenceDurationAction(argparse.Action):
+    """Hidden back-compat alias: --silence-duration N sets both
+    stream_chunk_silence_break and realtime_commit_silence to N."""
+    def __call__(self, parser, namespace, values, option_string=None):
+        setattr(namespace, "stream_chunk_silence_break", values)
+        setattr(namespace, "realtime_commit_silence", values)
+
+
+class _DurationAction(argparse.Action):
+    """Hidden back-compat alias: --duration N sets clip_timeout = N."""
+    def __call__(self, parser, namespace, values, option_string=None):
+        setattr(namespace, "clip_timeout", values)
+
 
 def get_parser():
 
@@ -340,15 +371,12 @@ def get_parser():
                        help="Also append the transcription to this file.")
 
     group = parser.add_argument_group("Silence detection")
-    group.add_argument("--duration", default=120, type=float,
-                       help="Max recording duration in seconds (default: %(default)s).")
-    group.add_argument("--silence-duration", default=0.6, type=float,
-                       help="Seconds of silence required before triggering a "
-                            "backend's silence behavior (default: %(default)s). "
-                            "For the realtime backend: time before a mid-session "
-                            "commit flushes trailing words. For pseudo-streaming "
-                            "batch backends: candidate cut point within the "
-                            "streaming window.")
+    group.add_argument("--duration", type=float,
+                       action=_DurationAction, default=argparse.SUPPRESS,
+                       help=argparse.SUPPRESS)
+    group.add_argument("--silence-duration", type=float,
+                       action=_SilenceDurationAction, default=argparse.SUPPRESS,
+                       help=argparse.SUPPRESS)
 
     group = parser.add_argument_group("Voice activity detection")
     group.add_argument("--vad-mode", choices=("auto", "db", "silero"), default="auto",
@@ -388,31 +416,58 @@ def get_parser():
                             "sending them over the WebSocket so silent audio "
                             "isn't billed as input tokens (default: on; pass "
                             "--no-realtime-gate to disable).")
+    group.add_argument("--realtime-commit-silence", default=0.6, type=float,
+                       help="Seconds of silence before a mid-session commit flushes "
+                            "trailing words to the gpt-realtime-whisper server "
+                            "(default: %(default)s). Ignored for non-realtime backends.")
 
     group = parser.add_argument_group("Listening mode")
     mode_group = group.add_mutually_exclusive_group()
-    mode_group.add_argument("--realtime", dest="listen_mode", action="store_const",
-                            const="realtime",
+    mode_group.add_argument("--stream", dest="listen_mode", action="store_const",
+                            const="stream",
                             help="Force a batch backend (whisper, whisper-futo, "
                                  "openai non-realtime, groq) into chunked "
-                                 "pseudo-streaming using --streaming-window and "
-                                 "--silence-duration. Equivalent to the tray's "
-                                 "'Mode: Realtime'. Native streamers (vosk, "
-                                 "gpt-realtime-whisper) are always realtime.")
+                                 "pseudo-streaming using --stream-chunk-max and "
+                                 "--stream-chunk-silence-break. Equivalent to the tray's "
+                                 "'Mode: Stream'. Native streamers (vosk, "
+                                 "gpt-realtime-whisper) are always streaming.")
     mode_group.add_argument("--clip", dest="listen_mode", action="store_const",
                             const="clip",
                             help="Transcribe the whole recording at end (default). "
                                  "Equivalent to the tray's 'Mode: Clip'.")
-    # Hidden backward-compat alias for --realtime. Same semantics.
+    # Hidden backward-compat aliases for --stream.
+    mode_group.add_argument("--realtime", dest="listen_mode", action="store_const",
+                            const="stream", help=argparse.SUPPRESS)
     group.add_argument("--pseudo-streaming", action="store_true",
                        help=argparse.SUPPRESS)
-    group.add_argument("--streaming-window", default=5.0, type=float,
-                       help="Target streaming window in seconds for "
-                            "--realtime mode on batch backends "
-                            "(default: %(default)s). After this many seconds "
-                            "of buffered audio, cut at the first silence "
-                            "(>= --silence-duration); if no silence arrives "
-                            "by 2x the window, force-cut.")
+    group.add_argument("--stream-chunk-max", default=10.0, type=float,
+                       dest="stream_chunk_max",
+                       help="Maximum chunk duration in seconds for --stream mode "
+                            "on batch backends (default: %(default)s). Force-cut "
+                            "fires at this threshold when no silence pause has "
+                            "triggered a commit.")
+    group.add_argument("--streaming-window", type=lambda s: 2.0 * float(s),
+                       dest="stream_chunk_max", default=argparse.SUPPRESS,
+                       help=argparse.SUPPRESS)
+    group.add_argument("--stream-chunk-min", default=1.5, type=float,
+                       help="Minimum chunk size in seconds before a silence-cut "
+                            "is allowed in --stream mode (default: %(default)s). "
+                            "Prevents very short clips that cause Whisper hallucinations.")
+    group.add_argument("--stream-chunk-silence-break", default=0.6, type=float,
+                       help="Seconds of silence that triggers a chunk cut in "
+                            "--stream mode (default: %(default)s). The cut fires once "
+                            "a pause of this duration is detected and the buffer "
+                            "exceeds --stream-chunk-min.")
+    group.add_argument("--stream-context-reset-silence", default=3.0, type=float,
+                       help="Multiplier of --stream-chunk-silence-break above which the "
+                            "rolling cross-chunk prompt context is discarded in --stream mode "
+                            "(default: %(default)s×). Use 'inf' to never reset context.")
+    group.add_argument("--clip-timeout", default=120.0, type=float,
+                       help="Auto-stop Clip recording after this many seconds "
+                            "(default: %(default)s).")
+    group.add_argument("--realtime-timeout", default=None, type=float,
+                       help="Auto-stop Stream recording after this many seconds "
+                            "(default: always on — no auto-stop).")
 
     group = parser.add_argument_group("Frontend")
     group.add_argument("--frontend", choices=["tray", "terminal"], default="tray",
@@ -654,11 +709,11 @@ def main(args=None):
     parser = get_parser()
     o = parser.parse_args(args)
 
-    # Reconcile --realtime / --clip with the legacy --pseudo-streaming flag.
-    # --realtime / --clip win when present; otherwise the existing
+    # Reconcile --stream / --clip with the legacy --pseudo-streaming flag.
+    # --stream / --clip win when present; otherwise the existing
     # --pseudo-streaming boolean drives the default.
     listen_mode = getattr(o, "listen_mode", None)
-    if listen_mode == "realtime":
+    if listen_mode == "stream":
         o.pseudo_streaming = True
     elif listen_mode == "clip":
         o.pseudo_streaming = False
