@@ -1,3 +1,4 @@
+import math
 from pathlib import Path
 import re
 import sys
@@ -158,6 +159,20 @@ class AppState(AbstractFrontendApp):
     def _is_realtime(self, item=None) -> bool:
         """True for the OpenAI realtime backend (has the silence gate)."""
         return self.transcriber is not None and hasattr(self.transcriber, "_gate_enabled")
+
+    def _is_mode_stream(self, item=None) -> bool:
+        """Mode=Stream: native streaming backend OR pseudo-streaming is on."""
+        t = self.transcriber
+        if t is None:
+            return bool(getattr(self.o, "pseudo_streaming", False))
+        return (bool(getattr(type(t), "supports_streaming", False))
+                or bool(getattr(t, "pseudo_streaming", False)))
+
+    def _is_mode_clip(self, item=None) -> bool:
+        return not self._is_mode_stream()
+
+    def _is_stream_batch(self, item=None) -> bool:
+        return self._is_mode_stream() and self._is_batch_backend()
 
     # ── Top-level callbacks ────────────────────────────────────────
     def cb_record(self, view, item):
@@ -532,13 +547,58 @@ class AppState(AbstractFrontendApp):
                 self.transcriber._invalidate_silence_gate()
         return True
 
-    def cb_set_stream_chunk_max(self, view, item):
-        val = self._coerce_float(item.value(item), "chunk max")
-        if val is not None:
-            self.o.stream_chunk_max = val
-            if self.transcriber is not None:
-                self.transcriber.stream_chunk_max = val
-        return True
+    def _set_stream_attr(self, attr: str, value) -> None:
+        setattr(self.o, attr, value)
+        self.params[attr] = value
+        if self.transcriber is not None:
+            setattr(self.transcriber, attr, value)
+        self._refresh_tray_menu()
+
+    def cb_set_stream_chunk_min(self, value) -> Callable:
+        def _cb(view, item):
+            self._set_stream_attr("stream_chunk_min", value)
+            return True
+        return _cb
+
+    def cb_set_stream_chunk_max(self, value) -> Callable:
+        def _cb(view, item):
+            self._set_stream_attr("stream_chunk_max", value)
+            return True
+        return _cb
+
+    def cb_set_stream_chunk_silence_break(self, value) -> Callable:
+        def _cb(view, item):
+            self._set_stream_attr("stream_chunk_silence_break", value)
+            return True
+        return _cb
+
+    def cb_set_stream_context_reset_silence(self, value) -> Callable:
+        def _cb(view, item):
+            self._set_stream_attr("stream_context_reset_silence", value)
+            return True
+        return _cb
+
+    def cb_set_realtime_timeout(self, value) -> Callable:
+        """Mode=Stream auto-stop timeout. Writes to o.realtime_timeout and, if
+        a Stream-mode session is currently armed, updates the live timeout."""
+        def _cb(view, item):
+            self.o.realtime_timeout = value
+            self.params["realtime_timeout"] = value
+            if self.transcriber is not None and self._is_mode_stream():
+                self.transcriber.timeout = value
+            self._refresh_tray_menu()
+            return True
+        return _cb
+
+    def cb_set_clip_timeout(self, value) -> Callable:
+        def _cb(view, item):
+            self.o.clip_timeout = value
+            self.params["clip_timeout"] = value
+            if self.transcriber is not None and self._is_mode_clip():
+                self.transcriber.timeout = value
+            self._refresh_tray_menu()
+            return True
+        return _cb
 
     def cb_set_output_file(self, view, item):
         ans = item.value(item)
@@ -836,6 +896,136 @@ def _typer_menu(app_state) -> Menu:
     return Menu(items, name="Keyboard backend")
 
 
+def _format_seconds(value) -> str:
+    """Compact seconds label: '1.5s', '2 min', '1 h'."""
+    if value >= 3600 and value % 3600 == 0:
+        hours = int(value // 3600)
+        return f"{hours} h"
+    if value >= 60 and value % 60 == 0:
+        return f"{int(value // 60)} min"
+    return f"{value:g}s"
+
+
+def _chunk_min_label(v) -> str:
+    return f"{v:g}s"
+
+
+def _chunk_max_label(v) -> str:
+    return "Unlimited" if v is None else f"{v:g}s"
+
+
+def _silence_break_label(v) -> str:
+    if v is None:
+        return "Max"
+    if v == 0:
+        return "Auto"
+    return f"{v:g}s"
+
+
+def _context_reset_label(v) -> str:
+    if isinstance(v, float) and math.isinf(v):
+        return "Never"
+    return f"{v:g}× silence"
+
+
+def _timeout_label(v) -> str:
+    if v is None:
+        return "Always On"
+    return _format_seconds(v)
+
+
+def _picker_submenu(name: str, choices: list, getter, value_to_label, cb_factory) -> Menu:
+    """Radio submenu over a fixed value list.
+
+    Each child Item is `radio=True`, marked `checked` when `getter() == choice`.
+    Selecting an item runs `cb_factory(choice)` to commit the new value. The
+    parent Item's label (set by the caller) shows the active selection."""
+    items = []
+    for v in choices:
+        def _is_current(_it, _v=v):
+            return getter() == _v
+        item = Item(value_to_label(v), cb_factory(v), checked=_is_current)
+        item.radio = True
+        items.append(item)
+    return Menu(items, name=name)
+
+
+def _stream_advanced_submenu(app_state) -> Menu:
+    """The `Stream (advanced)` submenu — visible iff Mode=Stream.
+
+    Holds pickers for the four pseudo-streaming chunk knobs (batch backend
+    only) and the Stream-mode auto-stop timeout. The OpenAI-realtime-specific
+    `Stream: Live / Offline after X` picker is added by Item 9."""
+    def _get_attr(name: str, default=None):
+        t = app_state.transcriber
+        if t is not None:
+            return getattr(t, name, default)
+        return getattr(app_state.o, name, default)
+
+    def get_chunk_min(): return _get_attr("stream_chunk_min")
+    def get_chunk_max(): return _get_attr("stream_chunk_max")
+    def get_silence_break(): return _get_attr("stream_chunk_silence_break")
+    def get_context_reset(): return _get_attr("stream_context_reset_silence")
+    def get_realtime_timeout(): return getattr(app_state.o, "realtime_timeout", None)
+
+    chunk_min_item = Item("min",
+                          _picker_submenu("Chunk min",
+                                          [0.1, 1.5, 3.0, 5.0, 10.0],
+                                          get_chunk_min, _chunk_min_label,
+                                          app_state.cb_set_stream_chunk_min),
+                          visible=app_state._is_batch_backend)
+    chunk_min_item.label_fn = lambda: f"Chunk min: {_chunk_min_label(get_chunk_min())}"
+
+    chunk_max_item = Item("max",
+                          _picker_submenu("Chunk max",
+                                          [3.0, 5.0, 10.0, 20.0, None],
+                                          get_chunk_max, _chunk_max_label,
+                                          app_state.cb_set_stream_chunk_max),
+                          visible=app_state._is_batch_backend)
+    chunk_max_item.label_fn = lambda: f"Chunk max: {_chunk_max_label(get_chunk_max())}"
+
+    silence_break_item = Item("silence",
+                              _picker_submenu("Silence break",
+                                              [0.0, 0.3, 0.6, 1.2, 2.4, None],
+                                              get_silence_break, _silence_break_label,
+                                              app_state.cb_set_stream_chunk_silence_break),
+                              visible=app_state._is_batch_backend)
+    silence_break_item.label_fn = lambda: f"Silence break: {_silence_break_label(get_silence_break())}"
+
+    def _context_reset_parent_label():
+        sb = get_silence_break()
+        factor = get_context_reset()
+        if sb in (None, 0):
+            return "Context reset: (unavailable — silence-break is Auto/Max)"
+        if isinstance(factor, float) and math.isinf(factor):
+            return "Context reset: Never"
+        return f"Context reset: {factor:g}× silence (= {factor * sb:g}s)"
+
+    context_reset_item = Item("reset",
+                              _picker_submenu("Context reset",
+                                              [1.0, 1.5, 2.0, 3.0, math.inf],
+                                              get_context_reset, _context_reset_label,
+                                              app_state.cb_set_stream_context_reset_silence),
+                              visible=app_state._is_batch_backend)
+    context_reset_item.label_fn = _context_reset_parent_label
+
+    realtime_timeout_item = Item("rt",
+                                 _picker_submenu("Realtime timeout",
+                                                 [120, 300, 600, 3600, None],
+                                                 get_realtime_timeout, _timeout_label,
+                                                 app_state.cb_set_realtime_timeout))
+    realtime_timeout_item.label_fn = lambda: f"Realtime timeout: {_timeout_label(get_realtime_timeout())}"
+
+    items = [
+        chunk_min_item,
+        chunk_max_item,
+        silence_break_item,
+        context_reset_item,
+        realtime_timeout_item,
+    ]
+    return Menu(items, name="Stream (advanced)")
+
+
 def _advanced_options_menu(app_state) -> Menu:
     """Backend-specific knobs + numerical tuning — kept off the main Options
     panel so it stays uncluttered for common use. Items retain their
@@ -873,10 +1063,6 @@ def _advanced_options_menu(app_state) -> Menu:
              help="Realtime: drop silent frames (gate)",
              checked=lambda item: bool(getattr(app_state.transcriber, "_gate_enabled", True)),
              visible=app_state._is_realtime),
-        SetValueItem("w", app_state.cb_set_stream_chunk_max,
-                     value=lambda item: getattr(app_state.transcriber, "stream_chunk_max", None),
-                     type=float, help="Stream chunk max (s)",
-                     visible=app_state._is_batch_backend),
         SetValueItem("f", app_state.cb_set_output_file,
                      value=lambda item: getattr(app_state.o, "output_file", None) or "",
                      type=str, help="Output file"),
@@ -886,7 +1072,25 @@ def _advanced_options_menu(app_state) -> Menu:
 
 def _toggle_options_menu(app_state) -> Menu:
     is_terminal = _is_terminal_frontend(app_state)
+
+    stream_advanced_item = Item("stream", _stream_advanced_submenu(app_state),
+                                help="Stream (advanced)",
+                                visible=app_state._is_mode_stream)
+
+    def get_clip_timeout():
+        return getattr(app_state.o, "clip_timeout", None)
+
+    clip_timeout_item = Item("clip",
+                             _picker_submenu("Clip timeout",
+                                             [30, 60, 120, 300, 600],
+                                             get_clip_timeout, _timeout_label,
+                                             app_state.cb_set_clip_timeout),
+                             visible=app_state._is_mode_clip)
+    clip_timeout_item.label_fn = lambda: f"Clip timeout: {_timeout_label(get_clip_timeout())}"
+
     items = [
+        stream_advanced_item,
+        clip_timeout_item,
         Item("mode", _output_mode_submenu(app_state), help="Keyboard mode"),
         Item("x", app_state.cb_toggle_frontend, help="Toggle tray app mode",
              checked=lambda item: getattr(app_state.o, "frontend", None) == "tray",
