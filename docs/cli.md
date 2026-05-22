@@ -167,12 +167,30 @@ environment) — you'll pay for silent audio while the session is open:
 scribe --model gpt-realtime-whisper --no-realtime-gate
 ```
 
-Run scribe headlessly into a file without touching the clipboard or
-focused window:
+**Batched / scripted use** — record one dictation headlessly, write
+it where you want, exit. No tray, no menu, no clipboard:
 
 ```bash
-scribe --frontend terminal --no-interactive --mode terminal -o session.txt
+# Append to a file (default <Desktop>/scribe-notes.txt — override with -o)
+scribe --record --frontend terminal --mode file
+
+# Same with a custom path
+scribe --record --frontend terminal --mode file -o /tmp/notes.txt
+
+# Pipe-friendly: transcript on stdout
+scribe --record --frontend terminal --mode terminal
+
+# Streamed: chunks appended live (as you speak) instead of all-at-once
+# at end-of-recording. Useful for long dictations and tail-following:
+#   tail -f /tmp/notes.txt
+scribe --record --frontend terminal --mode file --stream -o /tmp/notes.txt
 ```
+
+`--record` starts the recording immediately, `--frontend terminal`
+skips the tray icon, `--mode file` (or `terminal`) picks where the
+transcript lands, `--stream` (optional) emits chunks live instead of
+the default Clip-mode all-at-once. Combine with a hotkey or cron for
+one-shot capture.
 
 Bias the recogniser toward domain jargon (medical terms, proper names):
 

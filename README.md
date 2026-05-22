@@ -62,6 +62,8 @@ scribe --backend openai --model gpt-realtime-whisper   # OpenAI streaming
 scribe --backend whisper --model small                 # local, no API key
 scribe --frontend terminal                             # interactive TUI menu
 scribe --record                                        # start recording immediately on launch (works in tray or terminal)
+scribe --record --frontend terminal --mode file        # one-shot batched dictation → file
+scribe --record --frontend terminal --mode file --stream  # streamed: chunks appended live as you speak
 scribe --mode clipboard                                # copy to clipboard, no keystroke
 scribe --mode terminal                                 # only print to stdout
 scribe --mode file -o transcript.txt                   # append to a file (no keystroke / clipboard)
