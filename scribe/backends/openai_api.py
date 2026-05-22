@@ -26,18 +26,26 @@ class OpenaiAPITranscriber(WhisperTranscriber):
         return super().__new__(cls)
 
     def __init__(self, model_name="gpt-4o-mini-transcribe", language=None, model_kwargs={}, model=None,
-                 prompt=None, **kwargs):
-        if model is None:
+                 prompt=None, dry_run=False, **kwargs):
+        if model is None and not dry_run:
             import openai
             model = openai.OpenAI(
                 # 20 seconds (default is 10 minutes)
                 timeout=20.0,
             )
-        AbstractTranscriber.__init__(self, model, model_name, language, model_kwargs=model_kwargs, **kwargs)
+        AbstractTranscriber.__init__(self, model, model_name, language, model_kwargs=model_kwargs,
+                                     dry_run=dry_run, **kwargs)
         self._prompt = prompt
 
     def transcribe_audio(self, audio_bytes):
         self.log("\nTranscribing")
+        if self.dry_run:
+            # Short-circuit before the openai SDK call (groq subclass routes
+            # through the same path with a different base_url).
+            self.dry_run_hits += 1
+            text = "[dry-run transcript]"
+            self.update_streaming_context(text)
+            return {"text": text}
         import io
         import openai
         import soundfile as sf

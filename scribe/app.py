@@ -178,7 +178,7 @@ def _build_backend_kwargs(backend, model, language, samplerate, duration,
                           realtime_delay, realtime_gate,
                           pseudo_streaming, stream_chunk_max,
                           stream_chunk_min, stream_context_reset_silence,
-                          prompt_text, words):
+                          prompt_text, words, dry_run=False):
     # Cloud whisper variants (OpenAI batch, Groq, OpenAI realtime) take a
     # single `prompt` string — fold the word list into it. faster-whisper
     # gets the word list separately via `hotwords=` (dedicated biasing
@@ -194,7 +194,8 @@ def _build_backend_kwargs(backend, model, language, samplerate, duration,
         # Vosk has no soft prompt; only a hard grammar. Silently ignore for now.
         return dict(model_name=model, language=language, samplerate=samplerate,
                     timeout=None,
-                    model_kwargs={"download_root": download_folder_vosk})
+                    model_kwargs={"download_root": download_folder_vosk},
+                    dry_run=dry_run)
     if backend == "whisper":
         return dict(model_name=model, language=language, samplerate=samplerate,
                     timeout=duration,
@@ -207,6 +208,7 @@ def _build_backend_kwargs(backend, model, language, samplerate, duration,
                     prompt=prompt_text,
                     hotwords=(" ".join(words) if words else None),
                     model_kwargs={"download_root": download_folder_whisper},
+                    dry_run=dry_run,
                     **vad_kwargs)
     if backend == "whisper-futo":
         # pywhispercpp 1.4.1 exposes `initial_prompt`; the backend folds
@@ -223,6 +225,7 @@ def _build_backend_kwargs(backend, model, language, samplerate, duration,
                     stream_context_reset_silence=stream_context_reset_silence,
                     prompt=merged_prompt,
                     download_folder=download_folder_whisper_futo,
+                    dry_run=dry_run,
                     **vad_kwargs)
     if backend in ("openai", "groq"):
         from scribe.backends.openai_api import REALTIME_MODELS
@@ -235,6 +238,7 @@ def _build_backend_kwargs(backend, model, language, samplerate, duration,
                       stream_chunk_min=stream_chunk_min,
                       stream_context_reset_silence=stream_context_reset_silence,
                       prompt=merged_prompt,
+                      dry_run=dry_run,
                       **vad_kwargs)
         if backend == "openai" and model in REALTIME_MODELS:
             kwargs["realtime_delay"] = realtime_delay
@@ -258,7 +262,7 @@ def get_transcriber(model=None, backend=None, dummy=False, interactive=True, lan
                     pseudo_streaming=False, stream_chunk_max=10.0,
                     stream_chunk_min=1.5, stream_context_reset_silence=3.0,
                     prompt=None, prompt_file=None, words=None, words_file=None,
-                    **kwargs):
+                    dry_run=False, **kwargs):
     if dummy:
         return DummyTranscriber("whisper", "dummy")
     if model and not backend:
@@ -297,7 +301,7 @@ def get_transcriber(model=None, backend=None, dummy=False, interactive=True, lan
                                           realtime_delay, realtime_gate,
                                           pseudo_streaming, stream_chunk_max,
                                           stream_chunk_min, stream_context_reset_silence,
-                                          prompt_text, word_list)
+                                          prompt_text, word_list, dry_run=dry_run)
     try:
         return _build_transcriber(backend, **backend_kwargs)
     except Exception as error:
@@ -353,6 +357,13 @@ def get_parser():
                        help="Microphone device index (see `python -m sounddevice`).")
     group.add_argument("--samplerate", default=16000, type=int, help=argparse.SUPPRESS)
     group.add_argument("--dummy", action="store_true", help=argparse.SUPPRESS)
+    group.add_argument("--dry-run", action="store_true", dest="dry_run",
+                       help="Short-circuit the STT request boundary in every "
+                            "backend: model load is skipped and the network/SDK "
+                            "call is replaced with a canned '[dry-run transcript]'. "
+                            "Used by tests/test_backend_matrix.py to exercise the "
+                            "recording pipeline without network access or every "
+                            "model on disk.")
 
     group = parser.add_argument_group("Output")
     group.add_argument("-m", "--mode",

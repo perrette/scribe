@@ -12,17 +12,26 @@ class WhisperTranscriber(AbstractTranscriber):
     is_local: ClassVar[bool] = True
 
     def __init__(self, model_name, language=None, model=None, model_kwargs={},
-                 prompt=None, hotwords=None, **kwargs):
-        if model is None:
+                 prompt=None, hotwords=None, dry_run=False, **kwargs):
+        if model is None and not dry_run:
             from faster_whisper import WhisperModel
             kw = {"compute_type": "int8", **model_kwargs}
             model = WhisperModel(model_name, **kw)
-        super().__init__(model, model_name, language, model_kwargs=model_kwargs, **kwargs)
+        super().__init__(model, model_name, language, model_kwargs=model_kwargs,
+                         dry_run=dry_run, **kwargs)
         self._prompt = prompt
         self._hotwords = hotwords
 
     def transcribe_audio(self, audio_bytes):
         self.log("\nTranscribing")
+        if self.dry_run:
+            # Short-circuit before any faster-whisper call. Still update the
+            # rolling chunk-tail context so pseudo-streaming behaves
+            # identically to the real path.
+            self.dry_run_hits += 1
+            text = "[dry-run transcript]"
+            self.update_streaming_context(text)
+            return {"text": text}
         audio_array = np.frombuffer(audio_bytes, dtype=np.int16).flatten().astype(np.float32) / 32768.0
         segments, _info = self.model.transcribe(
             audio_array,

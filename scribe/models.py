@@ -40,13 +40,28 @@ class AbstractTranscriber(STTBackend):
                  silence_thresh=-40, stream_chunk_silence_break=0.6, realtime_commit_silence=0.6,
                  vad_mode="auto", vad_threshold=0.5, vad_min_silence_ms=300,
                  pseudo_streaming=False, stream_chunk_max=10.0,
-                 stream_chunk_min=1.5, stream_context_reset_silence=3.0):
+                 stream_chunk_min=1.5, stream_context_reset_silence=3.0,
+                 dry_run=False):
         self.model_name = model_name
         self.language = language
         self.model = model
         self.model_kwargs = model_kwargs
         self.samplerate = samplerate
         self.timeout = timeout
+        # When True, every backend short-circuits the network/model request
+        # right before the boundary (SDK / WS / whisper.cpp / vosk decode)
+        # and returns a canned transcript instead. The recording session,
+        # silence-cut logic, chunk emission, and keystroke/clipboard output
+        # all run normally — only the actual STT call is stubbed. Used by
+        # tests/test_backend_matrix.py to verify the recording pipeline
+        # across every (backend, mode) cell without needing network access
+        # or every model on disk.
+        self.dry_run = dry_run
+        # Counter incremented every time a backend's dry-run branch
+        # short-circuits the request boundary. Test harnesses use this
+        # to confirm the boundary was reached (cf. _intercept_fired in
+        # tests/test_backend_matrix.py). Stays 0 in normal operation.
+        self.dry_run_hits = 0
         # silence_thresh (dB mode only) — single volume floor used as a
         # no-dependency fallback. The old onset/sustain hysteresis was a
         # hack to make volume-only detection survive ambient noise; silero

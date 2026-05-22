@@ -118,8 +118,8 @@ class WhisperFutoTranscriber(AbstractTranscriber):
     is_local: ClassVar[bool] = True
 
     def __init__(self, model_name, language=None, model=None, model_kwargs={},
-                 download_folder=None, prompt=None, **kwargs):
-        if model is None:
+                 download_folder=None, prompt=None, dry_run=False, **kwargs):
+        if model is None and not dry_run:
             from pywhispercpp.model import Model
             path = _model_path(model_name, download_folder)
             _ensure_model(model_name, path)
@@ -128,11 +128,18 @@ class WhisperFutoTranscriber(AbstractTranscriber):
             n_threads = model_kwargs.get("n_threads") or os.cpu_count() or 4
             init_kwargs = {k: v for k, v in model_kwargs.items() if k != "n_threads"}
             model = Model(str(path), n_threads=n_threads, **init_kwargs)
-        super().__init__(model, model_name, language, model_kwargs=model_kwargs, **kwargs)
+        super().__init__(model, model_name, language, model_kwargs=model_kwargs,
+                         dry_run=dry_run, **kwargs)
         self._prompt = prompt
 
     def transcribe_audio(self, audio_bytes):
         self.log("\nTranscribing")
+        if self.dry_run:
+            # Short-circuit before the pywhispercpp call.
+            self.dry_run_hits += 1
+            text = "[dry-run transcript]"
+            self.update_streaming_context(text)
+            return {"text": (text + " ") if self.pseudo_streaming else text}
         audio = np.frombuffer(audio_bytes, dtype=np.int16).astype(np.float32) / 32768.0
         duration_s = len(audio) / self.samplerate
 

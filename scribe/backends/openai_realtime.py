@@ -60,9 +60,10 @@ class OpenaiRealtimeTranscriber(AbstractStreamingTranscriber):
 
     def __init__(self, model_name="gpt-realtime-whisper", language=None, model_kwargs={},
                  model=None, realtime_delay="medium",
-                 realtime_gate=True, prompt=None, **kwargs):
+                 realtime_gate=True, prompt=None, dry_run=False, **kwargs):
         AbstractTranscriber.__init__(
-            self, model, model_name, language, model_kwargs=model_kwargs, **kwargs,
+            self, model, model_name, language, model_kwargs=model_kwargs,
+            dry_run=dry_run, **kwargs,
         )
         self._prompt = prompt
         # Client-side silence gate: gpt-realtime-whisper has no server VAD
@@ -100,6 +101,9 @@ class OpenaiRealtimeTranscriber(AbstractStreamingTranscriber):
         self._coalesce_deltas = True
         self._delta_buffer = ""
         self._last_delta_flush = 0.0
+        # Set True by finalize() when in dry-run mode; lets test
+        # harnesses confirm the request boundary was reached.
+        self._dry_run_finalized = False
 
     def _session_config(self) -> dict:
         # gpt-realtime-whisper does NOT support server VAD (rejected as
@@ -129,8 +133,6 @@ class OpenaiRealtimeTranscriber(AbstractStreamingTranscriber):
         }
 
     def open_session(self, session):
-        import openai
-
         self._closed = False
         self._stop_event.clear()
         self._completed_event.clear()
@@ -147,6 +149,19 @@ class OpenaiRealtimeTranscriber(AbstractStreamingTranscriber):
         # prior session (silero `_in_speech=True`, stale pre-roll buffer)
         # doesn't leak into the new turn.
         self.silence_gate.reset()
+
+        if self.dry_run:
+            # Short-circuit before the WS connect. Leave self._connection
+            # None — feed_audio + finalize check this and skip their
+            # network paths. close_session is also None-safe.
+            self._connection = None
+            self._connection_manager = None
+            self._recv_thread = None
+            self._dry_run_finalized = False
+            self.dry_run_hits += 1
+            return
+
+        import openai
 
         self._client = openai.OpenAI()
 
@@ -259,6 +274,26 @@ class OpenaiRealtimeTranscriber(AbstractStreamingTranscriber):
 
     def feed_audio(self, chunk=b""):
         self.session.audio_buffer += chunk
+        if self.dry_run and chunk:
+            # Pretend an audio frame was committed: drives the same
+            # session.waiting / silence accounting that the real path
+            # relies on, without touching the WebSocket.
+            chunk_is_silent = self.silence_gate.is_silent(
+                chunk, in_utterance=self._has_uncommitted_audio,
+            )
+            if not chunk_is_silent:
+                self._has_uncommitted_audio = True
+                self._silent_samples = 0
+                self.session.waiting = False
+                # Emit one synthetic delta per non-silent frame so the
+                # app's live-paste / coalescing path is exercised end-
+                # to-end. _coalesce_deltas decides whether it shows up
+                # here or gets buffered for the interval/punct flush.
+                self._event_queue.put({"text": "[dry-run delta] "})
+            else:
+                self._silent_samples += len(chunk) // 2
+                if self._silent_samples >= int(self.realtime_commit_silence * self.samplerate):
+                    self.session.waiting = True
         if chunk and self._connection is not None and not self._closed:
             # `in_utterance` is True once we've sent uncommitted audio in
             # this turn. Lets the dB gate use its LOW (sustain) threshold
@@ -354,6 +389,25 @@ class OpenaiRealtimeTranscriber(AbstractStreamingTranscriber):
                 self._last_delta_flush = now
 
     def finalize(self):
+        if self.dry_run:
+            # No commit, no .completed wait — just drain the buffered
+            # deltas the synthetic feed_audio path enqueued so they
+            # land in the final transcript like real tail tokens.
+            self._dry_run_finalized = True
+            self.dry_run_hits += 1
+            tail_parts: list[str] = []
+            if self._delta_buffer:
+                tail_parts.append(self._delta_buffer)
+                self._delta_buffer = ""
+            while True:
+                try:
+                    item = self._event_queue.get_nowait()
+                except queue.Empty:
+                    break
+                text = item.get("text") if isinstance(item, dict) else None
+                if text:
+                    tail_parts.append(text)
+            return {"text": "".join(tail_parts) or "[dry-run transcript]"}
         if self._connection is None or self._closed:
             return {"text": ""}
 
