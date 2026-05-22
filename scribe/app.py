@@ -367,9 +367,11 @@ def get_parser():
 
     group = parser.add_argument_group("Output")
     group.add_argument("-m", "--mode",
-                       choices=("keystroke", "clipboard", "terminal"),
+                       choices=("keystroke", "clipboard", "terminal", "file"),
                        default="keystroke",
-                       help="Where transcribed text goes: keystroke (focused window), clipboard, or terminal (default: %(default)s).")
+                       help="Where transcribed text goes: keystroke (focused window), "
+                            "clipboard, terminal, or file (requires --output-file; "
+                            "default: %(default)s).")
     group.add_argument("--typer", default="auto", type=str,
                        help="Keystroke-injection backend: auto, eitype, pynput, wtype, ydotool (default: %(default)s).")
     group.add_argument("--type-direct", action="store_true",
@@ -500,7 +502,7 @@ def get_parser():
 def start_recording(micro, session, mode="keystroke", typer="auto",
                     output_file=None, callback=None, type_direct=False, **greetings):
     """Drive a recording, dispatching the transcript to the destination implied
-    by ``mode`` (the same three-way choice the tray exposes as Keyboard mode):
+    by ``mode`` (the four-way Output radio in the tray):
 
       - 'keystroke': land in the focused window. For streaming backends (vosk)
         each chunk is pasted live as it arrives; for batch backends the full
@@ -509,9 +511,18 @@ def start_recording(micro, session, mode="keystroke", typer="auto",
         clipboard — useful for terminals where Ctrl+V is the ^V control char.
       - 'clipboard': copy to clipboard, user pastes manually.
       - 'terminal':  no clipboard, no keystroke — text only printed.
+      - 'file':      append to ``output_file`` only — keyboard/clipboard
+                     output is suppressed. Requires ``output_file``.
     """
-    if mode not in ("keystroke", "clipboard", "terminal"):
-        raise ValueError(f"Unknown mode {mode!r} (expected keystroke|clipboard|terminal)")
+    if mode not in ("keystroke", "clipboard", "terminal", "file"):
+        raise ValueError(
+            f"Unknown mode {mode!r} (expected keystroke|clipboard|terminal|file)"
+        )
+    if mode == "file" and not output_file:
+        raise ValueError(
+            "mode='file' requires --output-file (or set o.output_file before "
+            "switching the Output radio)."
+        )
 
     # Query the live transcriber instance — the registered class may dispatch
     # to a streaming sibling for specific models (e.g. openai →
@@ -529,11 +540,13 @@ def start_recording(micro, session, mode="keystroke", typer="auto",
     # Clipboard is written in clipboard mode (the user pastes manually) and in
     # paste-based keystroke mode (the paste source). type_direct keystroke
     # mode bypasses the clipboard entirely — we type the chunks/text raw.
+    # File mode is mutually exclusive: no clipboard, no keystroke.
     do_clipboard = mode == "clipboard" or (mode == "keystroke" and not type_direct)
     do_live_paste = (mode == "keystroke") and is_streaming and not type_direct
     do_paste_at_end = (mode == "keystroke") and not is_streaming and not type_direct
     do_live_type = (mode == "keystroke") and is_streaming and type_direct
     do_type_at_end = (mode == "keystroke") and not is_streaming and type_direct
+    do_file = mode == "file"
 
     if do_live_type or do_type_at_end:
         from scribe.typers import pick_typer
@@ -576,7 +589,13 @@ def start_recording(micro, session, mode="keystroke", typer="auto",
             chunk_text = result['text']
             fulltext += chunk_text
 
-            if output_file:
+            if do_file:
+                # File mode: the transcript only goes to disk; keyboard/
+                # clipboard output is suppressed below. Pre-restructure
+                # the file-write was additive (you could keystroke AND
+                # also tee to a file). The new contract makes File a
+                # destination, not a side-channel — set --output-file
+                # without `--mode file` and the file is not written.
                 with open(output_file, "a") as f:
                     f.write(result['text'] + "\n")
 

@@ -5,10 +5,25 @@ import sys
 import tomllib
 from typing import Callable
 
-from desktop_ai_core.frontends import AbstractFrontendApp
+from desktop_ai_core.frontends import AbstractFrontendApp, flag_for
 from desktop_ai_core.frontends.terminal import Menu, Item, SetValueItem
 
 from scribe.backends import BACKENDS, probe_backend
+
+
+def autoselect_language(backend: str) -> str | None:
+    """Resolve `o.language=None` (Auto) to a concrete language for backends
+    that lack auto-detection.
+
+    Multilingual backends (whisper, whisper-futo, openai, groq) return
+    None — they handle auto-detect themselves. Vosk returns "en" as a
+    sensible default since it has no auto-detect path. Callers MUST NOT
+    persist the resolved value back into `o.language`; the original None
+    stays in the option object so switching back to a multilingual
+    backend doesn't silently stick on English."""
+    if backend == "vosk":
+        return "en"
+    return None
 
 _VENDOR_PREFIX = {
     "openai": "OpenAI",
@@ -35,42 +50,68 @@ def _model_supports_streaming(backend_name: str, model_id: str) -> bool:
 
 
 _vosk_model_to_lang: dict[str, str] | None = None
+_vosk_lang_to_model: dict[str, str] | None = None
+
+
+def _load_vosk_maps() -> None:
+    """Populate both vosk forward + reverse maps from models.toml in one pass.
+
+    Forward: lang_code ('en') → vosk model_id ('vosk-model-...').
+    Reverse: vosk model_id → lang_code ('en'). Used by the model-label
+    formatter to show the short code rather than the long model name."""
+    global _vosk_model_to_lang, _vosk_lang_to_model
+    if _vosk_model_to_lang is not None and _vosk_lang_to_model is not None:
+        return
+    toml_path = Path(__file__).parent / "models.toml"
+    with open(toml_path, "rb") as f:
+        config = tomllib.load(f)
+    _vosk_model_to_lang = {}
+    _vosk_lang_to_model = {}
+    for lang_code, entry in config.get("vosk", {}).items():
+        mid = entry.get("model")
+        if mid:
+            _vosk_model_to_lang[mid] = lang_code
+            _vosk_lang_to_model[lang_code] = mid
 
 
 def _vosk_language_for_model(model_id: str) -> str | None:
-    global _vosk_model_to_lang
-    if _vosk_model_to_lang is None:
-        toml_path = Path(__file__).parent / "models.toml"
-        with open(toml_path, "rb") as f:
-            config = tomllib.load(f)
-        _vosk_model_to_lang = {}
-        for lang_code, entry in config.get("vosk", {}).items():
-            mid = entry.get("model")
-            if mid:
-                lang_name = config.get("_meta", {}).get(lang_code, {}).get("language", lang_code)
-                _vosk_model_to_lang[mid] = lang_name
+    _load_vosk_maps()
     return _vosk_model_to_lang.get(model_id)
+
+
+def _vosk_model_for_language(lang_code: str) -> str | None:
+    _load_vosk_maps()
+    return _vosk_lang_to_model.get(lang_code)
+
+
+def _local_remote_prefix(backend_name: str) -> str:
+    """● for local backends, ○ for remote. Used as a leading symbol on
+    vendor and model labels so the user can distinguish on-device vs
+    cloud at a glance, without burning an extra (local) qualifier."""
+    backend_cls = BACKENDS.get(backend_name)
+    is_local = bool(getattr(backend_cls, "is_local", False)) if backend_cls else False
+    return "● " if is_local else "○ "
 
 
 def format_model_label(backend_name: str, model_id: str, include_vendor: bool = True) -> str:
     vendor = _VENDOR_PREFIX.get(backend_name, backend_name.capitalize())
-    backend_cls = BACKENDS.get(backend_name)
-    is_local = backend_cls.is_local if backend_cls is not None else False
     supports_streaming = _model_supports_streaming(backend_name, model_id)
+    streaming_suffix = " (stream)" if supports_streaming else ""
+    prefix = _local_remote_prefix(backend_name) if include_vendor else ""
 
     if backend_name == "vosk":
         lang = _vosk_language_for_model(model_id)
-        display = lang if lang is not None else model_id
+        if lang is not None:
+            display = f"{flag_for(lang)} {lang}"
+        else:
+            display = model_id
         if include_vendor:
-            return f"{vendor} {display} (local) (stream)"
+            return f"{prefix}{vendor} {display}{streaming_suffix}"
         return display
 
-    streaming_suffix = " (stream)" if supports_streaming else ""
-    qualifier = " (local)" if (is_local and include_vendor) else ""
-
     if include_vendor:
-        return f"{vendor} {model_id}{qualifier}{streaming_suffix}"
-    return f"{model_id}{qualifier}{streaming_suffix}"
+        return f"{prefix}{vendor} {model_id}{streaming_suffix}"
+    return f"{model_id}{streaming_suffix}"
 
 
 _DEFAULT_MODELS: dict[str, list[str]] = {
@@ -332,7 +373,14 @@ class AppState(AbstractFrontendApp):
 
         if backend == "vosk":
             if language is None:
-                return None  # vosk has no auto-detect
+                # Auto on vosk: keep `o.language = None` so switching back to a
+                # multilingual backend stays Auto. The Vosk leaf in the Model
+                # menu (cb_select_vosk_for_current_language) resolves the
+                # concrete vosk model from autoselect_language('vosk') at
+                # next backend switch; the live transcriber's model stays put.
+                self.o.language = None
+                self._refresh_tray_menu()
+                return None
             toml_path = Path(__file__).parent / "models.toml"
             with open(toml_path, "rb") as f:
                 cfg = tomllib.load(f)
@@ -423,20 +471,69 @@ class AppState(AbstractFrontendApp):
 
     # ── Option callbacks ────────────────────────────────────────────
     def cb_set_output_mode(self, mode: str) -> Callable:
-        """Factory: callback that sets the single 'Keyboard mode' radio.
+        """Factory: callback that sets the Output radio.
 
-        ``mode`` ∈ {'keystroke', 'clipboard', 'terminal'} — mirrors the
-        ``--mode`` CLI flag. ``start_recording`` derives the actual
+        ``mode`` ∈ {'keystroke', 'clipboard', 'terminal', 'file'} — mirrors
+        the ``--mode`` CLI flag. ``start_recording`` derives the actual
         mechanism (paste-per-chunk on streaming backends vs single Ctrl+V
         on batch backends) from this and the active backend at recording
         time, so switching backends via the Model menu re-evaluates
         correctly without us having to refresh stored state.
+
+        ``'file'`` routes the transcript to ``o.output_file`` and disables
+        all keyboard/clipboard output. The File radio greys out when no
+        output file is configured.
         """
         def _cb(view, item):
             self.o.mode = mode
             self.params["mode"] = mode
             self._refresh_tray_menu()
             return True
+        return _cb
+
+    def cb_set_input_mode(self, type_direct: bool) -> Callable:
+        """Factory: callback for the Keyboard → Input mode radio.
+
+        Internal storage stays as the boolean ``o.type_direct`` to keep
+        the ``--type-direct`` CLI flag stable. ``True`` ⇒ raw keystrokes
+        ('keystroke' UI label), ``False`` ⇒ Ctrl+V paste from clipboard
+        ('paste' UI label).
+        """
+        def _cb(view, item):
+            self.o.type_direct = type_direct
+            self.params["type_direct"] = type_direct
+            self._refresh_tray_menu()
+            return True
+        return _cb
+
+    def cb_select_vosk_for_current_language(self) -> Callable:
+        """Factory: callback that switches to Vosk + the model mapped for the
+        currently-selected language. Surfaced as a leaf in the Model menu so
+        the user picks 'Vosk' without drilling into a per-language submenu.
+
+        Resolution: read ``o.language``; if it's None (Auto) fall back to
+        ``autoselect_language('vosk')`` (= 'en'). The Auto value stays in
+        ``o.language`` — we don't mutate it, so switching back to a
+        multilingual backend later doesn't silently stick on English."""
+        def _cb(view, item):
+            lang = self.o.language
+            if lang is None:
+                lang = autoselect_language("vosk")
+            model_id = _vosk_model_for_language(lang) if lang else None
+            if not model_id:
+                self.notify_error(
+                    "Vosk language unavailable",
+                    f"No vosk model mapped for language {lang!r}. "
+                    f"Pre-mapped languages are listed in models.toml.",
+                )
+                return False
+            if self.icon is not None:
+                return self._tray_set_model("vosk", model_id)
+            self.transcriber = None
+            self.session = None
+            self.o.backend = "vosk"
+            self.o.model = model_id
+            return False
         return _cb
 
     def cb_toggle_frontend(self, view, item):
@@ -630,46 +727,46 @@ _RECOMMENDED_MODELS = {
 
 # Curated languages surfaced in the Language submenu. The set matches the
 # vosk-pre-mapped languages in models.toml so the same labels work for every
-# backend; display names come from `_meta.<lang>.language` when present.
+# backend.
 _CURATED_LANGUAGES = ["en", "fr", "de", "it"]
 
-_LANGUAGE_DISPLAY_FALLBACK = {
-    "en": "English",
-    "fr": "French",
-    "de": "German",
-    "it": "Italian",
-}
 
+def _language_display(lang_code: str | None, backend: str | None = None) -> str:
+    """Render a language entry for the Language submenu / top-level label.
 
-def _language_display(lang_code: str | None) -> str:
+    Concrete code → ``"<flag> <code>"`` (e.g. ``"🇫🇷 fr"``).
+
+    ``None`` (Auto) → ``"Auto"`` for multilingual backends. When the active
+    backend has a concrete autoselect (vosk), the label becomes
+    ``"Auto (<flag> <code>)"`` so the user can see what 'Auto' will resolve
+    to without ``o.language`` actually changing.
+    """
     if lang_code is None:
+        if backend is not None:
+            resolved = autoselect_language(backend)
+            if resolved is not None:
+                return f"Auto ({flag_for(resolved)} {resolved})"
         return "Auto"
-    toml_path = Path(__file__).parent / "models.toml"
-    try:
-        with open(toml_path, "rb") as f:
-            cfg = tomllib.load(f)
-        name = cfg.get("_meta", {}).get(lang_code, {}).get("language")
-        if name:
-            return name
-    except Exception:
-        pass
-    return _LANGUAGE_DISPLAY_FALLBACK.get(lang_code, lang_code)
+    return f"{flag_for(lang_code)} {lang_code}"
 
 
 def _languages_for_backend(backend_name: str) -> list[str | None]:
     """Curated language list, filtered by what the active backend can handle.
 
-    Vosk requires a per-language model (no auto-detect) and only the languages
-    pre-mapped in models.toml are exposed. Everything else accepts Auto + the
-    full curated set."""
+    Vosk requires a per-language model (no auto-detect), but Auto is still
+    surfaced and resolves to ``autoselect_language('vosk')`` at recording
+    time — see ``_language_display`` for the ``Auto (🇬🇧 en)`` label.
+    Concrete languages are restricted to the ones pre-mapped in
+    models.toml. Other backends accept Auto + the full curated set."""
     if backend_name == "vosk":
         toml_path = Path(__file__).parent / "models.toml"
         try:
             with open(toml_path, "rb") as f:
                 cfg = tomllib.load(f)
-            return [lang for lang in _CURATED_LANGUAGES if lang in cfg.get("vosk", {})]
+            mapped = [lang for lang in _CURATED_LANGUAGES if lang in cfg.get("vosk", {})]
         except Exception:
-            return list(_CURATED_LANGUAGES)
+            mapped = list(_CURATED_LANGUAGES)
+        return [None] + mapped
     return [None] + list(_CURATED_LANGUAGES)
 
 
@@ -712,7 +809,12 @@ def _active_backend_name(app_state) -> str | None:
 def _language_menu(app_state) -> Menu:
     """Radio submenu of curated languages. Items not supported by the current
     backend (e.g. Auto on vosk) hide themselves via the visible predicate, so
-    one Menu object covers every backend without rebuilding on switch."""
+    one Menu object covers every backend without rebuilding on switch.
+
+    The 'Auto' item carries a ``label_fn`` so its label tracks the active
+    backend — multilingual backends show ``"Auto"``; vosk shows
+    ``"Auto (🇬🇧 en)"`` to advertise the concrete fallback (see
+    ``autoselect_language``)."""
     items: list[Item] = []
     # Build entries for the union of all curated languages + Auto; per-item
     # visibility predicates filter at render time based on the active backend.
@@ -731,6 +833,10 @@ def _language_menu(app_state) -> Menu:
         item = Item(label, app_state.cb_set_language(lang),
                     checked=_is_current, visible=_is_visible)
         item.radio = True
+        if lang is None:
+            # Dynamic Auto label — shows the vosk fallback when on vosk.
+            item.label_fn = lambda: _language_display(
+                None, backend=_active_backend_name(app_state))
         items.append(item)
     return Menu(items, name="Language")
 
@@ -758,18 +864,27 @@ def _choose_model_menu(app_state) -> Menu:
         except Exception as exc:
             ok, msg = False, f"probe raised: {exc}"
         vendor = _VENDOR_PREFIX.get(backend_name, backend_name.capitalize())
-        is_local = bool(getattr(BACKENDS[backend_name], "is_local", False))
         if not ok:
             unavailable.append((vendor, msg or "unavailable"))
             continue
+        prefix = _local_remote_prefix(backend_name)
         if backend_name == "vosk":
-            base_label = f"{vendor} (local, streaming)"
-        elif is_local:
-            base_label = f"{vendor} (local)"
+            # Vosk's vendor entry is a leaf, not a submenu — clicking it
+            # picks the vosk model for the current `o.language` (or the
+            # autoselect fallback when language is Auto). One vendor =
+            # one model, vs the per-language submenu pre-restructure.
+            base_label = f"{prefix}{vendor} (stream)"
+            sub_item = Item(base_label, app_state.cb_select_vosk_for_current_language())
+            sub_item.label_fn = _vendor_label_fn(app_state, backend_name, base_label)
+            sub_item.radio = True
+            sub_item.checked = lambda _it, _b=backend_name: (
+                app_state.transcriber is not None
+                and getattr(app_state.transcriber, "backend", None) == _b
+            )
         else:
-            base_label = vendor
-        sub_item = Item(base_label, _backend_models_menu(app_state, backend_name))
-        sub_item.label_fn = _vendor_label_fn(app_state, backend_name, base_label)
+            base_label = f"{prefix}{vendor}"
+            sub_item = Item(base_label, _backend_models_menu(app_state, backend_name))
+            sub_item.label_fn = _vendor_label_fn(app_state, backend_name, base_label)
         items.append(sub_item)
     for vendor, msg in unavailable:
         item = Item(f"{vendor} — {msg}", _noop_callback)
@@ -783,8 +898,26 @@ def _noop_callback(view, item):
 
 
 def _output_mode(o) -> str:
-    """Return the active Keyboard-mode radio value, stored as ``o.mode``."""
+    """Return the active Output radio value, stored as ``o.mode``."""
     return getattr(o, "mode", "keystroke")
+
+
+_OUTPUT_MODE_LABEL = {
+    "keystroke": "Keyboard",
+    "clipboard": "Clipboard",
+    "terminal":  "Terminal",
+    "file":      "File",
+}
+
+
+def _output_mode_label(o) -> str:
+    mode = _output_mode(o)
+    base = _OUTPUT_MODE_LABEL.get(mode, mode)
+    if mode == "file":
+        path = getattr(o, "output_file", None)
+        if path:
+            return f"{base} ({path})"
+    return base
 
 
 def _output_mode_radio(app_state, key: str, mode: str, label: str) -> Item:
@@ -796,21 +929,55 @@ def _output_mode_radio(app_state, key: str, mode: str, label: str) -> Item:
 
 
 def _output_mode_submenu(app_state) -> Menu:
-    """Mutually-exclusive output modes, grouped as a radio submenu.
+    """Mutually-exclusive output destinations, grouped as a radio submenu.
 
-    Three modes — the underlying mechanism (paste-per-chunk live vs
+    Four destinations — the underlying mechanism (paste-per-chunk live vs
     Ctrl+V at end of recording) is picked automatically for the current
     backend, so the user sees only 'where does the text go'.
+
+    The 'File' radio is disabled unless ``o.output_file`` is configured;
+    pystray renders disabled items greyed and ignores clicks, while the
+    terminal frontend surfaces the constraint via ``start_recording``'s
+    early ValueError guard.
     """
     modes = [
-        ("c", "clipboard", "Clipboard only (press Ctrl+V yourself)"),
-        ("s", "keystroke", "Send to focused window (recommended)"),
-        ("t", "terminal",  "Terminal only"),
+        ("c", "clipboard", "Clipboard"),
+        ("s", "keystroke", "Keyboard"),
+        ("t", "terminal",  "Terminal"),
+        ("f", "file",      "File"),
     ]
     items = []
     for key, mode, label in modes:
-        items.append(_output_mode_radio(app_state, key, mode, label))
-    return Menu(items, name="Keyboard mode")
+        radio = _output_mode_radio(app_state, key, mode, label)
+        if mode == "file":
+            # Callable so pystray re-checks on update_menu() — File greys
+            # out / un-greys as soon as `o.output_file` changes (e.g. a
+            # future config dialog), no menu rebuild required.
+            radio.enabled = lambda: bool(getattr(app_state.o, "output_file", None))
+        items.append(radio)
+    return Menu(items, name="Output")
+
+
+def _input_mode_submenu(app_state) -> Menu:
+    """Radio submenu for the Keyboard input mode (only relevant when the
+    Output is Keyboard).
+
+    ``keystroke`` = raw keystrokes (``o.type_direct = True``); ``paste`` =
+    Ctrl+V from clipboard (``o.type_direct = False``). Storage stays as the
+    boolean to keep ``--type-direct`` unchanged.
+    """
+    def _is_current(_value):
+        def _check(_it, _v=_value):
+            return bool(getattr(app_state.o, "type_direct", False)) is _v
+        return _check
+
+    items = []
+    for label, value in (("keystroke", True), ("paste", False)):
+        item = Item(label, app_state.cb_set_input_mode(value),
+                    checked=_is_current(value))
+        item.radio = True
+        items.append(item)
+    return Menu(items, name="Input mode")
 
 
 _TYPER_ORDER = ("eitype", "pynput", "ydotool", "wtype")
@@ -845,9 +1012,8 @@ def _typer_menu(app_state) -> Menu:
     unset-up backends are shown disabled with a hint. 'Auto' is resolved at
     startup in scribe.app.main, so ``o.typer`` is already a concrete name.
 
-    Also exposes a ``Type directly`` checkbox: when on, keystroke mode types
-    the transcription raw instead of synthesising Ctrl+V — needed in terminals
-    where Ctrl+V is the ^V control character."""
+    The keystroke-vs-paste choice (``--type-direct``) lives in its own
+    ``Input mode`` submenu — same toggle, separate axis."""
     items = []
     for name, instance in _compatible_typers():
         try:
@@ -872,13 +1038,6 @@ def _typer_menu(app_state) -> Menu:
         item.radio = True
         item.enabled = available
         items.append(item)
-
-    items.append(Item(
-        "type-direct",
-        app_state.cb_toggle_type_direct,
-        help="Type directly (no Ctrl+V)",
-        checked=lambda item: bool(getattr(app_state.o, "type_direct", False)),
-    ))
 
     return Menu(items, name="Keyboard backend")
 
@@ -1067,6 +1226,33 @@ def _vad_options_menu(app_state) -> Menu:
     return Menu(items, name="VAD")
 
 
+def _input_mode_label(o) -> str:
+    """Render the active Input mode for the Keyboard sub-item label.
+
+    Mirrors ``_OUTPUT_MODE_LABEL`` semantics — short, one-word, matches
+    the radio label inside the submenu."""
+    return "keystroke" if bool(getattr(o, "type_direct", False)) else "paste"
+
+
+def _kbd_typer(o) -> str:
+    return getattr(o, "typer", None) or "auto"
+
+
+def _keyboard_advanced_submenu(app_state) -> Menu:
+    """Keyboard sub-menu: Input mode + Backend. Only visible when the
+    Output mode is Keyboard. Backend item is omitted entirely if no typer
+    is compatible on this OS/session (then the submenu collapses to just
+    Input mode)."""
+    input_subitem = Item("input", _input_mode_submenu(app_state), help="Input mode")
+    input_subitem.label_fn = lambda: f"Input mode: {_input_mode_label(app_state.o)}"
+    items = [input_subitem]
+    if len(_compatible_typers()) >= 1:
+        backend_subitem = Item("backend", _typer_menu(app_state), help="Backend")
+        backend_subitem.label_fn = lambda: f"Backend: {_kbd_typer(app_state.o)}"
+        items.append(backend_subitem)
+    return Menu(items, name="Keyboard (advanced)")
+
+
 def _toggle_options_menu(app_state) -> Menu:
     is_terminal = _is_terminal_frontend(app_state)
 
@@ -1085,35 +1271,26 @@ def _toggle_options_menu(app_state) -> Menu:
                              visible=app_state._is_mode_clip)
     clip_timeout_item.label_fn = lambda: f"Clip timeout: {_timeout_label(get_clip_timeout())}"
 
-    # Keyboard submenu groups Mode (where text goes) and Backend (which
-    # typer implementation) under one parent — both are keyboard-output
-    # concerns. The Backend sub-item carries the "Type directly" toggle
-    # so it stays useful even on platforms with only one compatible
-    # typer; hide only if nothing is compatible at all (unlikely).
-    # Parent + sub-item labels reflect the active selection so the user
-    # sees the current config without drilling in (same pattern as Mode,
-    # Model, Language above).
-    def _kbd_typer():
-        return getattr(app_state.o, "typer", None) or "auto"
+    # Output sub-menu: where transcribed text goes (Keyboard / Clipboard /
+    # Terminal / File). Top-level item, label shows the active selection.
+    output_item = Item("output", _output_mode_submenu(app_state), help="Output")
+    output_item.label_fn = lambda: f"Output: {_output_mode_label(app_state.o)}"
 
-    mode_subitem = Item("mode", _output_mode_submenu(app_state), help="Mode")
-    mode_subitem.label_fn = lambda: f"Mode: {_output_mode(app_state.o)}"
-
-    keyboard_items = [mode_subitem]
-    if len(_compatible_typers()) >= 1:
-        backend_subitem = Item("backend", _typer_menu(app_state), help="Backend")
-        backend_subitem.label_fn = lambda: f"Backend: {_kbd_typer()}"
-        keyboard_items.append(backend_subitem)
-    keyboard_item = Item("kbd", Menu(keyboard_items, name="Keyboard"), help="Keyboard")
+    # Keyboard sub-menu: only meaningful when Output=Keyboard. Holds the
+    # Input mode (keystroke vs paste) and the Backend typer radio.
+    keyboard_item = Item("kbd", _keyboard_advanced_submenu(app_state),
+                         help="Keyboard",
+                         visible=lambda _it: _output_mode(app_state.o) == "keystroke")
     keyboard_item.label_fn = lambda: (
-        f"Keyboard: {_output_mode(app_state.o)} ({_kbd_typer()})"
+        f"Keyboard ({_input_mode_label(app_state.o)} | {_kbd_typer(app_state.o)})"
         if len(_compatible_typers()) >= 1
-        else f"Keyboard: {_output_mode(app_state.o)}"
+        else f"Keyboard ({_input_mode_label(app_state.o)})"
     )
 
     items = [
         stream_advanced_item,
         clip_timeout_item,
+        output_item,
         keyboard_item,
         Item("x", app_state.cb_toggle_frontend, help="Toggle tray app mode",
              checked=lambda item: getattr(app_state.o, "frontend", None) == "tray",
@@ -1130,16 +1307,17 @@ def build_menu(app_state) -> Menu:
         t = app_state.transcriber
         if t is None:
             return "Model"
-        if t.backend == "vosk":
-            return t.model_name
-        vendor = _VENDOR_PREFIX.get(t.backend, t.backend.capitalize())
-        return f"{vendor} {t.model_name}"
+        # Reuse format_model_label so the title-level label matches what
+        # the vendor menu shows: ● / ○ prefix, friendly Vosk language
+        # resolution, (stream) suffix.
+        return format_model_label(t.backend, t.model_name)
     model_item.label_fn = _model_label
 
     language_item = Item("Language", _language_menu(app_state))
     def _language_label():
         lang = getattr(app_state.o, "language", None)
-        return f"Language: {_language_display(lang)}"
+        backend = _active_backend_name(app_state)
+        return f"Language: {_language_display(lang, backend=backend)}"
     language_item.label_fn = _language_label
 
     def _mode_is_stream():
@@ -1235,6 +1413,14 @@ def _item_to_pystray(item, app_state):
         )
 
     checked = _make_checked(item) if item.checkable else None
+    enabled_attr = getattr(item, "enabled", True)
+    # Callable `item.enabled` lets dynamic toggles (e.g. the Output→File
+    # radio greying out when `o.output_file is None`) refresh on
+    # update_menu() instead of being frozen at build time.
+    if callable(enabled_attr):
+        enabled = lambda _mi, _f=enabled_attr: bool(_f())
+    else:
+        enabled = bool(enabled_attr)
     return pystray.MenuItem(
         label,
         _make_action(item),
@@ -1242,7 +1428,7 @@ def _item_to_pystray(item, app_state):
         radio=getattr(item, "radio", False),
         default=(item.name == "Record"),
         visible=visible,
-        enabled=getattr(item, "enabled", True),
+        enabled=enabled,
     )
 
 
