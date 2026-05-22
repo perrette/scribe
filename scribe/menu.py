@@ -491,6 +491,33 @@ class AppState(AbstractFrontendApp):
             return True
         return _cb
 
+    def cb_pick_output_file_path(self, view, item):
+        """Open a native Save As dialog and, if confirmed, route Output to
+        File at the chosen path.
+
+        Pre-populates the picker from the current ``o.output_file`` so the
+        user can tweak just the filename without re-typing the directory.
+        Cancel → no-op. OK → sets both ``o.output_file`` (so the File radio
+        un-greys) and ``o.mode = 'file'`` (so it becomes the active radio),
+        plus mirrors both into ``self.params`` so any param-watcher sees
+        the change. Menu is refreshed at the end."""
+        from os.path import basename, dirname
+
+        from scribe.dialog import select_file_save
+
+        current = getattr(self.o, "output_file", None)
+        initial_dir = dirname(current) if current else None
+        initial_file = basename(current) if current else "scribe-transcript.txt"
+        path = select_file_save(initial_dir=initial_dir, initial_file=initial_file)
+        if path is None:
+            return True
+        self.o.output_file = path
+        self.params["output_file"] = path
+        self.o.mode = "file"
+        self.params["mode"] = "file"
+        self._refresh_tray_menu()
+        return True
+
     def cb_set_input_mode(self, type_direct: bool) -> Callable:
         """Factory: callback for the Keyboard → Input mode radio.
 
@@ -951,10 +978,16 @@ def _output_mode_submenu(app_state) -> Menu:
         radio = _output_mode_radio(app_state, key, mode, label)
         if mode == "file":
             # Callable so pystray re-checks on update_menu() — File greys
-            # out / un-greys as soon as `o.output_file` changes (e.g. a
-            # future config dialog), no menu rebuild required.
+            # out / un-greys as soon as `o.output_file` changes (e.g. via
+            # the 'Choose path…' picker below), no menu rebuild required.
             radio.enabled = lambda: bool(getattr(app_state.o, "output_file", None))
         items.append(radio)
+    # Action (not a radio) — opens the native Save As dialog. Always
+    # visible: even when File mode is already armed, the user might want
+    # to switch the target path.
+    pick_item = Item("pick", app_state.cb_pick_output_file_path,
+                     help="Choose path…")
+    items.append(pick_item)
     return Menu(items, name="Output")
 
 
