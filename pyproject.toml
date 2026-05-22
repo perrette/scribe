@@ -30,31 +30,46 @@ dependencies = [
 ]
 
 classifiers = [
+    "Development Status :: 5 - Production/Stable",
+    "Intended Audience :: End Users/Desktop",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
     "Programming Language :: Python :: 3.9",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
     "Operating System :: OS Independent",
+    "Environment :: Console",
+    "Environment :: X11 Applications",
+    "Environment :: MacOS X",
+    "Environment :: Win32 (MS Windows)",
+    "Natural Language :: English",
+    "Natural Language :: French",
+    "Natural Language :: German",
+    "Natural Language :: Italian",
+    "Topic :: Multimedia :: Sound/Audio :: Speech",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Topic :: Office/Business",
+    "Topic :: Text Processing :: Linguistic",
+    "Topic :: Utilities",
 ]
 
 keywords = [
     "speech-to-text",
-    "speech recognition",
+    "stt",
     "transcription",
     "dictation",
     "voice-typing",
-    "voice-to-text",
+    "voice-recognition",
+    "multilingual",
     "realtime",
     "streaming",
-    "language",
-    "AI",
-    "local",
-    "API",
     "cli",
     "tray",
     "vosk",
     "whisper",
+    "faster-whisper",
     "openai",
     "groq",
     "gpt-4o",
@@ -62,6 +77,8 @@ keywords = [
     "wayland",
     "keyboard",
     "clipboard",
+    "microphone",
+    "audio",
 ]
 
 [project.optional-dependencies]
@@ -90,6 +107,10 @@ write_to = "scribe/_version.py"
 
 [project.urls]
 Homepage = "https://github.com/perrette/scribe"
+Source = "https://github.com/perrette/scribe"
+Issues = "https://github.com/perrette/scribe/issues"
+Changelog = "https://github.com/perrette/scribe/releases"
+Funding = "https://github.com/sponsors/perrette"
 
 [project.scripts]
 scribe = "scribe.app:main"
