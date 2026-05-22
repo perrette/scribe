@@ -36,7 +36,7 @@ class AbstractTranscriber(STTBackend):
     _STREAMING_CONTEXT_MAX_CHARS = 200
 
     def __init__(self, model, model_name=None, language=None, samplerate=16000, timeout=None, model_kwargs={},
-                 silence_thresh=-40, silence_duration=0.6,
+                 silence_thresh=-40, stream_chunk_silence_break=0.6, realtime_commit_silence=0.6,
                  vad_mode="auto", vad_threshold=0.5, vad_min_silence_ms=300,
                  pseudo_streaming=False, stream_chunk_max=10.0,
                  stream_chunk_min=1.5, stream_context_reset_silence=1.5):
@@ -51,7 +51,8 @@ class AbstractTranscriber(STTBackend):
         # hack to make volume-only detection survive ambient noise; silero
         # does that properly. dB stays simple by design.
         self.silence_thresh = silence_thresh
-        self.silence_duration = silence_duration
+        self.stream_chunk_silence_break = stream_chunk_silence_break
+        self.realtime_commit_silence = realtime_commit_silence
         # VAD configuration. `vad_mode` picks the SilenceGate implementation
         # in scribe/audio.py:
         #   "auto"   — prefer silero if installed, fall back to dB.
@@ -181,12 +182,12 @@ class AbstractTranscriber(STTBackend):
             # Without this cap a long pause grows the buffer unboundedly
             # (~2 KB/s at 16 kHz int16 mono → 7 MB/h of silence). 5s caps
             # at 160 KB.
-            cap_s = max(5.0, self.silence_duration)
+            cap_s = max(5.0, self.stream_chunk_silence_break)
             max_silence_bytes = int(cap_s * self.samplerate) * 2
             if len(session.silence_buffer) > max_silence_bytes:
                 session.silence_buffer = session.silence_buffer[-max_silence_bytes:]
             sil_dur = time.time() - session.last_sound_time
-            session.waiting = sil_dur >= self.silence_duration
+            session.waiting = sil_dur >= self.stream_chunk_silence_break
 
             # Commit on every detected silence pause. stream_chunk_max is
             # only the basis for the force-cut below; it's not a floor for

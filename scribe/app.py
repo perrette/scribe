@@ -171,7 +171,7 @@ def _resolve_prompt_and_words(prompt_text, prompt_file, words, words_file):
 
 
 def _build_backend_kwargs(backend, model, language, samplerate, duration,
-                          silence_db, silence_duration,
+                          silence_db, stream_chunk_silence_break, realtime_commit_silence,
                           vad_mode, vad_threshold, vad_min_silence_ms,
                           download_folder_vosk, download_folder_whisper,
                           download_folder_whisper_futo,
@@ -193,11 +193,13 @@ def _build_backend_kwargs(backend, model, language, samplerate, duration,
     if backend == "vosk":
         # Vosk has no soft prompt; only a hard grammar. Silently ignore for now.
         return dict(model_name=model, language=language, samplerate=samplerate,
-                    timeout=None, silence_duration=None,
+                    timeout=None,
                     model_kwargs={"download_root": download_folder_vosk})
     if backend == "whisper":
         return dict(model_name=model, language=language, samplerate=samplerate,
-                    timeout=duration, silence_duration=silence_duration,
+                    timeout=duration,
+                    stream_chunk_silence_break=stream_chunk_silence_break,
+                    realtime_commit_silence=realtime_commit_silence,
                     silence_thresh=silence_db,
                     pseudo_streaming=pseudo_streaming, stream_chunk_max=stream_chunk_max,
                     stream_chunk_min=stream_chunk_min,
@@ -212,7 +214,9 @@ def _build_backend_kwargs(backend, model, language, samplerate, duration,
         # pseudo-streaming). No separate hotwords channel here — fold
         # everything into the prompt like the cloud backends do.
         return dict(model_name=model, language=language, samplerate=samplerate,
-                    timeout=duration, silence_duration=silence_duration,
+                    timeout=duration,
+                    stream_chunk_silence_break=stream_chunk_silence_break,
+                    realtime_commit_silence=realtime_commit_silence,
                     silence_thresh=silence_db,
                     pseudo_streaming=pseudo_streaming, stream_chunk_max=stream_chunk_max,
                     stream_chunk_min=stream_chunk_min,
@@ -223,7 +227,9 @@ def _build_backend_kwargs(backend, model, language, samplerate, duration,
     if backend in ("openai", "groq"):
         from scribe.backends.openai_api import REALTIME_MODELS
         kwargs = dict(model_name=model, samplerate=samplerate,
-                      timeout=duration, silence_duration=silence_duration,
+                      timeout=duration,
+                      stream_chunk_silence_break=stream_chunk_silence_break,
+                      realtime_commit_silence=realtime_commit_silence,
                       silence_thresh=silence_db,
                       pseudo_streaming=pseudo_streaming, stream_chunk_max=stream_chunk_max,
                       stream_chunk_min=stream_chunk_min,
@@ -244,7 +250,7 @@ def _build_backend_kwargs(backend, model, language, samplerate, duration,
 
 def get_transcriber(model=None, backend=None, dummy=False, interactive=True, language=None,
                     samplerate=None, duration=None,
-                    silence_db=None, silence_duration=0.6,
+                    silence_db=None, stream_chunk_silence_break=0.6, realtime_commit_silence=0.6,
                     vad_mode="auto", vad_threshold=0.5, vad_min_silence_ms=300,
                     download_folder_vosk=None, download_folder_whisper=None,
                     download_folder_whisper_futo=None,
@@ -282,7 +288,8 @@ def get_transcriber(model=None, backend=None, dummy=False, interactive=True, lan
         silence_db = -40.0
     prompt_text, word_list = _resolve_prompt_and_words(prompt, prompt_file, words, words_file)
     backend_kwargs = _build_backend_kwargs(backend, model, language, samplerate, duration,
-                                          silence_db, silence_duration,
+                                          silence_db, stream_chunk_silence_break,
+                                          realtime_commit_silence,
                                           vad_mode, vad_threshold, vad_min_silence_ms,
                                           download_folder_vosk, download_folder_whisper,
                                           download_folder_whisper_futo,
@@ -296,6 +303,14 @@ def get_transcriber(model=None, backend=None, dummy=False, interactive=True, lan
         print(error)
         print(f"Failed to (down)load model {model}.")
         exit(1)
+
+class _SilenceDurationAction(argparse.Action):
+    """Hidden back-compat alias: --silence-duration N sets both
+    stream_chunk_silence_break and realtime_commit_silence to N."""
+    def __call__(self, parser, namespace, values, option_string=None):
+        setattr(namespace, "stream_chunk_silence_break", values)
+        setattr(namespace, "realtime_commit_silence", values)
+
 
 def get_parser():
 
@@ -351,13 +366,9 @@ def get_parser():
     group = parser.add_argument_group("Silence detection")
     group.add_argument("--duration", default=120, type=float,
                        help="Max recording duration in seconds (default: %(default)s).")
-    group.add_argument("--silence-duration", default=0.6, type=float,
-                       help="Seconds of silence required before triggering a "
-                            "backend's silence behavior (default: %(default)s). "
-                            "For the realtime backend: time before a mid-session "
-                            "commit flushes trailing words. For pseudo-streaming "
-                            "batch backends: candidate cut point within the "
-                            "streaming window.")
+    group.add_argument("--silence-duration", type=float,
+                       action=_SilenceDurationAction, default=argparse.SUPPRESS,
+                       help=argparse.SUPPRESS)
 
     group = parser.add_argument_group("Voice activity detection")
     group.add_argument("--vad-mode", choices=("auto", "db", "silero"), default="auto",
@@ -397,6 +408,10 @@ def get_parser():
                             "sending them over the WebSocket so silent audio "
                             "isn't billed as input tokens (default: on; pass "
                             "--no-realtime-gate to disable).")
+    group.add_argument("--realtime-commit-silence", default=0.6, type=float,
+                       help="Seconds of silence before a mid-session commit flushes "
+                            "trailing words to the gpt-realtime-whisper server "
+                            "(default: %(default)s). Ignored for non-realtime backends.")
 
     group = parser.add_argument_group("Listening mode")
     mode_group = group.add_mutually_exclusive_group()
@@ -405,7 +420,7 @@ def get_parser():
                             help="Force a batch backend (whisper, whisper-futo, "
                                  "openai non-realtime, groq) into chunked "
                                  "pseudo-streaming using --stream-chunk-max and "
-                                 "--silence-duration. Equivalent to the tray's "
+                                 "--stream-chunk-silence-break. Equivalent to the tray's "
                                  "'Mode: Stream'. Native streamers (vosk, "
                                  "gpt-realtime-whisper) are always streaming.")
     mode_group.add_argument("--clip", dest="listen_mode", action="store_const",
@@ -430,6 +445,11 @@ def get_parser():
                        help="Minimum chunk size in seconds before a silence-cut "
                             "is allowed in --stream mode (default: %(default)s). "
                             "Prevents very short clips that cause Whisper hallucinations.")
+    group.add_argument("--stream-chunk-silence-break", default=0.6, type=float,
+                       help="Seconds of silence that triggers a chunk cut in "
+                            "--stream mode (default: %(default)s). The cut fires once "
+                            "a pause of this duration is detected and the buffer "
+                            "exceeds --stream-chunk-min.")
     group.add_argument("--stream-context-reset-silence", default=1.5, type=float,
                        help="Silence duration in seconds above which the rolling "
                             "cross-chunk prompt context is discarded in --stream mode "
