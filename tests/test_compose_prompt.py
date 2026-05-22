@@ -7,9 +7,12 @@ unpunctuated output. `compose_prompt_for_backend` normalises this by
 rendering words as a comma-list with a terminal period — except on
 faster-whisper, where words travel via the dedicated hotwords channel.
 """
+from types import SimpleNamespace
+
 import pytest
 
-from scribe.app import _format_words_for_prompt, compose_prompt_for_backend
+from scribe.app import (_format_words_for_prompt, autodiscover_prompt_files,
+                        compose_prompt_for_backend)
 
 
 # ── _format_words_for_prompt ─────────────────────────────────────────────
@@ -80,3 +83,71 @@ def test_compose_both_empty_returns_none():
     assert compose_prompt_for_backend("groq", None, None) == (None, None)
     assert compose_prompt_for_backend("groq", "", []) == (None, None)
     assert compose_prompt_for_backend("whisper", None, None) == (None, None)
+
+
+# ── autodiscover_prompt_files ─────────────────────────────────────────────
+
+def _ns(**kw):
+    """Minimal argparse-like namespace: defaults to None for all four
+    prompt/words attributes (what argparse fills when the flag is unset)."""
+    defaults = dict(prompt=None, prompt_file=None, words=None, words_file=None)
+    defaults.update(kw)
+    return SimpleNamespace(**defaults)
+
+
+def test_autodiscover_persists_default_paths_when_files_exist(monkeypatch, tmp_path):
+    """The earlier bug: scribe was *loading* ~/.config/scribe/words.txt at
+    startup but never writing the path back to `o`, so the tray menu's
+    "Words file: …" label showed (none). Verify the path is persisted."""
+    p = tmp_path / "prompt.txt"
+    w = tmp_path / "words.txt"
+    p.write_text("style hint")
+    w.write_text("Tierney Comet")
+    monkeypatch.setattr("scribe.app.DEFAULT_PROMPT_FILE", str(p))
+    monkeypatch.setattr("scribe.app.DEFAULT_WORDS_FILE", str(w))
+
+    o = _ns()
+    autodiscover_prompt_files(o)
+
+    assert o.prompt_file == str(p)
+    assert o.words_file == str(w)
+
+
+def test_autodiscover_skips_when_explicit_flag_passed(monkeypatch, tmp_path):
+    """Passing --prompt-file /some/other or --prompt "..." suppresses the
+    fallback — argparse-omitted (None) is the only trigger."""
+    p = tmp_path / "prompt.txt"
+    p.write_text("hi")
+    monkeypatch.setattr("scribe.app.DEFAULT_PROMPT_FILE", str(p))
+
+    o = _ns(prompt_file="/explicit/path.txt")
+    autodiscover_prompt_files(o)
+    assert o.prompt_file == "/explicit/path.txt"
+
+    o = _ns(prompt="inline text")
+    autodiscover_prompt_files(o)
+    assert o.prompt_file is None
+
+
+def test_autodiscover_skips_empty_string_explicit_suppression(monkeypatch, tmp_path):
+    """``--prompt ""`` means "I explicitly want no prompt"; the `is None`
+    check (not truthy) preserves that intent — should NOT auto-load."""
+    p = tmp_path / "prompt.txt"
+    p.write_text("hi")
+    monkeypatch.setattr("scribe.app.DEFAULT_PROMPT_FILE", str(p))
+
+    o = _ns(prompt="")
+    autodiscover_prompt_files(o)
+    assert o.prompt_file is None
+
+
+def test_autodiscover_no_default_files_is_noop(monkeypatch, tmp_path):
+    """When the default files don't exist on disk, the namespace is
+    untouched — no error, just nothing to discover."""
+    monkeypatch.setattr("scribe.app.DEFAULT_PROMPT_FILE", str(tmp_path / "nope.txt"))
+    monkeypatch.setattr("scribe.app.DEFAULT_WORDS_FILE", str(tmp_path / "nada.txt"))
+
+    o = _ns()
+    autodiscover_prompt_files(o)
+    assert o.prompt_file is None
+    assert o.words_file is None

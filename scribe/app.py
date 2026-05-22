@@ -144,6 +144,29 @@ DEFAULT_WORDS_FILE = os.path.join(SCRIBE_CONFIG_DIR, "words.txt")
 DEFAULT_OUTPUT_FILE = os.path.join(platformdirs.user_desktop_dir(), "scribe-notes.txt")
 
 
+def autodiscover_prompt_files(o):
+    """Persist auto-discovered ``prompt.txt`` / ``words.txt`` defaults into
+    the argparse namespace ``o`` so downstream consumers (the tray menu's
+    "Prompt file: …" label, the runtime reload helper) can read them as
+    first-class state instead of re-deriving the defaults. Mirrors the
+    fallback condition in :func:`_resolve_prompt_and_words` exactly: only
+    fires when both the inline flag and the file flag are *unset* — passing
+    ``--prompt ""`` / ``--prompt-file ""`` still suppresses the default.
+    ``o.prompt`` / ``o.prompt_file`` (and the words counterparts) are
+    expected to exist (argparse fills them with ``None``); missing attrs
+    are tolerated for tests that build minimal namespaces."""
+    if (getattr(o, "prompt", None) is None
+            and getattr(o, "prompt_file", None) is None
+            and os.path.exists(DEFAULT_PROMPT_FILE)):
+        o.prompt_file = DEFAULT_PROMPT_FILE
+        print(f"Using default prompt file: {DEFAULT_PROMPT_FILE}")
+    if (getattr(o, "words", None) is None
+            and getattr(o, "words_file", None) is None
+            and os.path.exists(DEFAULT_WORDS_FILE)):
+        o.words_file = DEFAULT_WORDS_FILE
+        print(f"Using default words file: {DEFAULT_WORDS_FILE}")
+
+
 def _resolve_prompt_and_words(prompt_text, prompt_file, words, words_file):
     """Read --prompt-file / --words-file from disk and merge with the inline
     flags. Returns ``(prompt_str_or_None, words_list_or_empty)``.
@@ -817,6 +840,14 @@ def _print_main_status(state, o):
 def main(args=None):
     parser = get_parser()
     o = parser.parse_args(args)
+
+    # Surface auto-discovered prompt.txt / words.txt defaults on the
+    # namespace before downstream consumers read it. Without this, the
+    # tray menu's "Prompt file: …" / "Words file: …" labels show "(none)"
+    # even when scribe is actively biasing on a default file — the file
+    # was being loaded by `_resolve_prompt_and_words`, but the resolved
+    # path stayed local to that function and never propagated to `o`.
+    autodiscover_prompt_files(o)
 
     # Reconcile --stream / --clip with the legacy --pseudo-streaming flag.
     # --stream / --clip win when present; otherwise the existing
