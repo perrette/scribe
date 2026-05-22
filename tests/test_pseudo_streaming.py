@@ -233,6 +233,64 @@ def test_first_chunk_min_inactive_in_patient_mode():
         backend.transcribe_realtime_audio(silent_chunk())
 
 
+def test_long_pause_escape_hatch_commits_short_first_chunk():
+    """A short utterance (above chunk_min but below first_chunk_min)
+    followed by a pause past the context-reset threshold MUST still
+    commit — the first-chunk-min override exists to improve bootstrap
+    quality, not to silently drop short utterances when the user
+    clearly stopped talking. Default Balanced: reset_threshold =
+    3 × 0.6 = 1.8 s."""
+    backend = FakeBackend(model=None, samplerate=SR, pseudo_streaming=True,
+                          stream_chunk_silence_break=0.6, stream_chunk_max=10.0,
+                          stream_chunk_min=1.5, stream_first_chunk_min=3.0,
+                          stream_context_reset_silence=3.0,
+                          stream_context_length=200)
+    backend._streaming_context = ""  # first chunk
+    backend.session = make_session(
+        audio_buffer=loud_chunk(samples=_ABOVE_MIN),  # 2s — above chunk_min, below first_chunk_min
+        last_sound_time=time.time() - 2.0,            # 2s silence > 1.8s reset threshold
+    )
+    with pytest.raises(SilenceDetected, match="Cut at long silence"):
+        backend.transcribe_realtime_audio(silent_chunk())
+
+
+def test_long_pause_escape_hatch_respects_chunk_min_floor():
+    """Even on a very long pause, buffers below the regular chunk_min
+    floor stay rejected — Whisper hallucinates on sub-second clips
+    ('(music)', 'Not to know.') and that protection still applies."""
+    backend = FakeBackend(model=None, samplerate=SR, pseudo_streaming=True,
+                          stream_chunk_silence_break=0.6, stream_chunk_max=10.0,
+                          stream_chunk_min=1.5, stream_first_chunk_min=3.0,
+                          stream_context_reset_silence=3.0,
+                          stream_context_length=200)
+    backend._streaming_context = ""
+    backend.session = make_session(
+        audio_buffer=loud_chunk(samples=int(SR * 0.5)),  # 0.5s, below chunk_min
+        last_sound_time=time.time() - 5.0,              # 5s silence, plenty
+    )
+    # Should NOT raise.
+    backend.transcribe_realtime_audio(silent_chunk())
+
+
+def test_long_pause_escape_hatch_skipped_in_max_mode():
+    """Auto/Max modes have no concrete silence-break — the reset
+    threshold is undefined, so the escape hatch can't fire either.
+    Defers to the force-cut at chunk_max for those modes."""
+    backend = FakeBackend(model=None, samplerate=SR, pseudo_streaming=True,
+                          stream_chunk_silence_break=None,  # Max mode
+                          stream_chunk_max=10.0,
+                          stream_chunk_min=1.5, stream_first_chunk_min=3.0,
+                          stream_context_reset_silence=3.0,
+                          stream_context_length=200)
+    backend._streaming_context = ""
+    backend.session = make_session(
+        audio_buffer=loud_chunk(samples=_ABOVE_MIN),
+        last_sound_time=time.time() - 5.0,
+    )
+    # No silence-cut paths in Max mode — should NOT raise.
+    backend.transcribe_realtime_audio(silent_chunk())
+
+
 def test_first_chunk_min_clamped_to_chunk_max():
     """If first_chunk_min > stream_chunk_max the chunker would never be
     able to commit a first chunk. Clamp at use time so misconfiguration

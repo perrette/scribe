@@ -290,6 +290,16 @@ rolling context to bootstrap. Internally clamped to `≤
 --stream-chunk-max` so a misconfigured pair can't deadlock the
 chunker.
 
+**Short-utterance safety net.** If the bootstrap chunk floor is
+holding back a commit, a pause that reaches the context-reset
+threshold (default `3 × 0.6 s = 1.8 s`) flushes whatever is in the
+buffer anyway — as long as it clears the lower `--stream-chunk-min`
+floor (the Whisper-hallucination guard, default 1.5 s). The
+rationale: a pause that long means the user has stopped talking; the
+first-chunk override is a quality-bias, not a reason to drop
+their utterance. Inactive when `--stream-context-reset-silence inf`
+(you've explicitly opted out of pause-driven commits).
+
 ### Does pseudo-streaming change the API cost?
 
 For cloud backends, going from one big transcription to N chunked

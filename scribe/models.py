@@ -307,6 +307,32 @@ class AbstractTranscriber(STTBackend):
                         f"Cut at silence after {elapsed:.2f}s "
                         f"(silent {sil_dur:.2f}s)"
                     )
+                # Long-pause escape hatch. When silence reaches the
+                # context-reset threshold and we still haven't committed,
+                # flush whatever is in the buffer as long as it clears
+                # the lower stream_chunk_min floor (the Whisper-
+                # hallucination protection). This catches short
+                # utterances stranded below stream_first_chunk_min: the
+                # user clearly stopped talking — don't lose what they
+                # said waiting for a bootstrap window that's never
+                # going to fill. Also clears the rolling context, since
+                # a pause this long is the same topic-shift signal that
+                # the speech-resumption path uses for its own reset.
+                reset_threshold = (self.stream_context_reset_silence
+                                   * silence_break)
+                if (not math.isinf(reset_threshold)
+                        and sil_dur >= reset_threshold
+                        and buffer_ms >= self.stream_chunk_min * 1000):
+                    if self._streaming_context:
+                        self.log(
+                            f"Clearing chunk context after {sil_dur:.2f}s pause"
+                        )
+                        self.clear_streaming_context()
+                    raise SilenceDetected(
+                        f"Cut at long silence after {elapsed:.2f}s "
+                        f"(silent {sil_dur:.2f}s, "
+                        f"below first-chunk floor)"
+                    )
             else:
                 # Auto and Max never silence-cut. Auto defers the cut
                 # decision to the force-cut below (which picks the best
