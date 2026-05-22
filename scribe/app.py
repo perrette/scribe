@@ -249,7 +249,7 @@ def _build_backend_kwargs(backend, model, language, samplerate, duration,
 
 
 def get_transcriber(model=None, backend=None, dummy=False, interactive=True, language=None,
-                    samplerate=None, duration=None,
+                    samplerate=None, clip_timeout=120.0, realtime_timeout=None,
                     silence_db=None, stream_chunk_silence_break=0.6, realtime_commit_silence=0.6,
                     vad_mode="auto", vad_threshold=0.5, vad_min_silence_ms=300,
                     download_folder_vosk=None, download_folder_whisper=None,
@@ -286,6 +286,7 @@ def get_transcriber(model=None, backend=None, dummy=False, interactive=True, lan
     # mode ignores it. Default -40 dBFS — keeps the gate simple by design.
     if silence_db is None:
         silence_db = -40.0
+    duration = realtime_timeout if pseudo_streaming else clip_timeout
     prompt_text, word_list = _resolve_prompt_and_words(prompt, prompt_file, words, words_file)
     backend_kwargs = _build_backend_kwargs(backend, model, language, samplerate, duration,
                                           silence_db, stream_chunk_silence_break,
@@ -310,6 +311,12 @@ class _SilenceDurationAction(argparse.Action):
     def __call__(self, parser, namespace, values, option_string=None):
         setattr(namespace, "stream_chunk_silence_break", values)
         setattr(namespace, "realtime_commit_silence", values)
+
+
+class _DurationAction(argparse.Action):
+    """Hidden back-compat alias: --duration N sets clip_timeout = N."""
+    def __call__(self, parser, namespace, values, option_string=None):
+        setattr(namespace, "clip_timeout", values)
 
 
 def get_parser():
@@ -364,8 +371,9 @@ def get_parser():
                        help="Also append the transcription to this file.")
 
     group = parser.add_argument_group("Silence detection")
-    group.add_argument("--duration", default=120, type=float,
-                       help="Max recording duration in seconds (default: %(default)s).")
+    group.add_argument("--duration", type=float,
+                       action=_DurationAction, default=argparse.SUPPRESS,
+                       help=argparse.SUPPRESS)
     group.add_argument("--silence-duration", type=float,
                        action=_SilenceDurationAction, default=argparse.SUPPRESS,
                        help=argparse.SUPPRESS)
@@ -454,6 +462,12 @@ def get_parser():
                        help="Multiplier of --stream-chunk-silence-break above which the "
                             "rolling cross-chunk prompt context is discarded in --stream mode "
                             "(default: %(default)s×). Use 'inf' to never reset context.")
+    group.add_argument("--clip-timeout", default=120.0, type=float,
+                       help="Auto-stop Clip recording after this many seconds "
+                            "(default: %(default)s).")
+    group.add_argument("--realtime-timeout", default=None, type=float,
+                       help="Auto-stop Stream recording after this many seconds "
+                            "(default: always on — no auto-stop).")
 
     group = parser.add_argument_group("Frontend")
     group.add_argument("--frontend", choices=["tray", "terminal"], default="tray",

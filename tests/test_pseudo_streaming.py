@@ -246,7 +246,7 @@ def test_is_streaming_gate_includes_pseudo_streaming():
 
     t_on = get_transcriber(
         backend='groq', model='whisper-large-v3-turbo',
-        interactive=False, samplerate=SR, duration=120,
+        interactive=False, samplerate=SR, clip_timeout=120,
         silence_db=-40.0, stream_chunk_silence_break=0.6,
         pseudo_streaming=True, stream_chunk_max=10.0,
     )
@@ -258,7 +258,7 @@ def test_is_streaming_gate_includes_pseudo_streaming():
 
     t_off = get_transcriber(
         backend='groq', model='whisper-large-v3-turbo',
-        interactive=False, samplerate=SR, duration=120,
+        interactive=False, samplerate=SR, clip_timeout=120,
         silence_db=-40.0, stream_chunk_silence_break=0.6,
         pseudo_streaming=False, stream_chunk_max=10.0,
     )
