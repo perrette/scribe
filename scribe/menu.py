@@ -1242,7 +1242,7 @@ def _stream_advanced_submenu(app_state) -> Menu:
 
     chunk_max_item = Item("max",
                           _picker_submenu("Chunk max",
-                                          [3.0, 5.0, 10.0, 20.0, None],
+                                          [3.0, 5.0, 10.0, 15.0, 20.0, None],
                                           get_chunk_max, _chunk_max_label,
                                           app_state.cb_set_stream_chunk_max),
                           help="Chunk max",
@@ -1269,7 +1269,7 @@ def _stream_advanced_submenu(app_state) -> Menu:
 
     context_reset_item = Item("reset",
                               _picker_submenu("Context reset",
-                                              [1.0, 1.5, 2.0, 3.0, 5.0, 10.0, math.inf],
+                                              [1.0, 1.5, 2.0, 3.0, 5.0, 8.0, 10.0, math.inf],
                                               get_context_reset, _context_reset_label,
                                               app_state.cb_set_stream_context_reset_silence),
                               help="Context reset",
