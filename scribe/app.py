@@ -178,6 +178,43 @@ def _resolve_prompt_and_words(prompt_text, prompt_file, words, words_file):
     return (prompt_text or None), words
 
 
+_WORD_STRIP_CHARS = " \t\r\n.,;:!?"
+
+
+def _format_words_for_prompt(words):
+    """Render a `--words` list as a punctuated string suitable for joining
+    into a Whisper-family prompt. ``["Tierney", "Comet"]`` → ``"Tierney,
+    Comet."``. Trailing period biases the model toward emitting periods
+    of its own (Whisper mirrors prompt style); comma separator avoids the
+    "every word is its own sentence" look. Strips any stray punctuation
+    the user may have left on individual entries so the output is well-
+    formed regardless of input. Returns ``""`` for an empty list."""
+    cleaned = [w.strip(_WORD_STRIP_CHARS) for w in (words or [])]
+    cleaned = [w for w in cleaned if w]
+    if not cleaned:
+        return ""
+    return ", ".join(cleaned) + "."
+
+
+def compose_prompt_for_backend(backend, prompt_text, words):
+    """Compose ``(prompt, hotwords)`` for a backend, applying the words-
+    auto-format rule. faster-whisper has a dedicated `hotwords` channel so
+    we keep words separate and untouched; every other prompt-using backend
+    (whisper-futo / openai / groq) gets words folded into the prompt as a
+    punctuated sentence so the prompt style biases Whisper toward
+    punctuated output. Returns ``(None, None)`` when both sides are empty
+    so callers can skip the kwarg entirely."""
+    if backend == "whisper":
+        return ((prompt_text or None),
+                (" ".join(words) if words else None))
+    words_blob = _format_words_for_prompt(words)
+    if prompt_text and words_blob:
+        merged = f"{prompt_text} {words_blob}"
+    else:
+        merged = prompt_text or words_blob
+    return ((merged or None), None)
+
+
 def _build_backend_kwargs(backend, model, language, samplerate, duration,
                           silence_db, stream_chunk_silence_break, realtime_commit_silence,
                           vad_mode, vad_threshold, vad_min_silence_ms,
@@ -188,14 +225,7 @@ def _build_backend_kwargs(backend, model, language, samplerate, duration,
                           stream_chunk_min, stream_context_reset_silence,
                           stream_context_length,
                           prompt_text, words, dry_run=False):
-    # Cloud whisper variants (OpenAI batch, Groq, OpenAI realtime) take a
-    # single `prompt` string — fold the word list into it. faster-whisper
-    # gets the word list separately via `hotwords=` (dedicated biasing
-    # channel), so we pass it through unmerged.
-    merged_prompt = prompt_text
-    if words and backend != "whisper":
-        word_blob = " ".join(words)
-        merged_prompt = f"{prompt_text} {word_blob}" if prompt_text else word_blob
+    composed_prompt, composed_hotwords = compose_prompt_for_backend(backend, prompt_text, words)
 
     vad_kwargs = dict(vad_mode=vad_mode, vad_threshold=vad_threshold,
                       vad_min_silence_ms=vad_min_silence_ms)
@@ -215,8 +245,8 @@ def _build_backend_kwargs(backend, model, language, samplerate, duration,
                     stream_chunk_min=stream_chunk_min,
                     stream_context_reset_silence=stream_context_reset_silence,
                     stream_context_length=stream_context_length,
-                    prompt=prompt_text,
-                    hotwords=(" ".join(words) if words else None),
+                    prompt=composed_prompt,
+                    hotwords=composed_hotwords,
                     model_kwargs={"download_root": download_folder_whisper},
                     dry_run=dry_run,
                     **vad_kwargs)
@@ -234,7 +264,7 @@ def _build_backend_kwargs(backend, model, language, samplerate, duration,
                     stream_chunk_min=stream_chunk_min,
                     stream_context_reset_silence=stream_context_reset_silence,
                     stream_context_length=stream_context_length,
-                    prompt=merged_prompt,
+                    prompt=composed_prompt,
                     download_folder=download_folder_whisper_futo,
                     dry_run=dry_run,
                     **vad_kwargs)
@@ -249,7 +279,7 @@ def _build_backend_kwargs(backend, model, language, samplerate, duration,
                       stream_chunk_min=stream_chunk_min,
                       stream_context_reset_silence=stream_context_reset_silence,
                       stream_context_length=stream_context_length,
-                      prompt=merged_prompt,
+                      prompt=composed_prompt,
                       dry_run=dry_run,
                       **vad_kwargs)
         if backend == "openai" and model in REALTIME_MODELS:

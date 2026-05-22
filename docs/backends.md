@@ -164,6 +164,31 @@ the one place a separate "dictionary" really exists — everywhere else
 `--words` is just a convenience to keep your word list out of the
 prompt string in the CLI.
 
+### Prompt style biases output style
+
+Whisper mirrors the *style* of whatever prompt it receives. A
+prompt like `"Tierney Comet"` (a bare wordlist) biases the model
+toward unpunctuated, list-style output — sentences come out without
+periods. A prompt like `"Tierney, Comet."` (or any prose ending in a
+period) biases it toward punctuated output. Two practical
+consequences:
+
+- **`--prompt` is yours to control.** If your `prompt.txt` ends with
+  a period and looks like a sentence, your transcripts will be
+  punctuated. If it ends with a bare keyword, they probably won't.
+  This effect is most visible in **Stream mode**, where Whisper sees
+  short audio chunks and leans more heavily on the prompt for style
+  cues.
+- **`--words` is auto-formatted by scribe.** For backends that fold
+  words into the prompt (`whisper-futo`, `openai`, `groq`), scribe
+  renders the word list as `"word1, word2, …, wordN."` — comma-
+  separated with a single terminal period — so your `words.txt` can
+  stay a bare list with no special formatting and the bias still
+  comes out punctuated. Stray punctuation on individual entries is
+  stripped first, so `words.txt` content is normalised regardless of
+  layout. On `whisper` (faster-whisper, local), words go to the
+  dedicated `hotwords` channel and bypass the prompt entirely.
+
 Both flags read from the corresponding `*-file` argument when present.
 Inline + file inputs are combined.
 
