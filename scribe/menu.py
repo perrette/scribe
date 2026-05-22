@@ -85,12 +85,12 @@ def _vosk_model_for_language(lang_code: str) -> str | None:
 
 
 def _local_remote_prefix(backend_name: str) -> str:
-    """● for local backends, ○ for remote. Used as a leading symbol on
+    """🏠 for local backends, ☁️ for remote. Used as a leading symbol on
     vendor and model labels so the user can distinguish on-device vs
     cloud at a glance, without burning an extra (local) qualifier."""
     backend_cls = BACKENDS.get(backend_name)
     is_local = bool(getattr(backend_cls, "is_local", False)) if backend_cls else False
-    return "● " if is_local else "○ "
+    return "🏠 " if is_local else "☁️ "
 
 
 def format_model_label(backend_name: str, model_id: str, include_vendor: bool = True) -> str:
