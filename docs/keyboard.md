@@ -1,20 +1,22 @@
 # Keyboard modes & typer backends
 
-Scribe delivers transcribed text in one of three mutually-exclusive
+Scribe delivers transcribed text in one of four mutually-exclusive
 modes, selected via the `-m / --mode` CLI flag or the tray's
-**Options → Keyboard mode** radio. The same three modes are exposed in
-both places.
+**Options → Output** radio. The same four modes are exposed in both
+places.
 
 | `--mode` value          | What happens                                                                                                                                                                                                  |
 |-------------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | `keystroke` *(default)* | Transcription lands in the focused window. **Batch models** (Whisper, Groq, OpenAI `gpt-4o-*`): single Ctrl+V at end of recording. **Streaming models** (Vosk, OpenAI `gpt-realtime-whisper`): each chunk is pasted live as it arrives — "appears as you speak". |
 | `clipboard`             | Transcription copied to clipboard; you press Ctrl+V yourself.                                                                                                                                                 |
 | `terminal`              | No clipboard, no keystroke — transcription is only printed to the terminal.                                                                                                                                   |
+| `file`                  | Transcription appended exclusively to `--output-file`. Keyboard / clipboard output is suppressed. Requires `--output-file`.                                                                                   |
 
 ```bash
 scribe                    # keystroke (default)
 scribe --mode clipboard   # clipboard only
 scribe --mode terminal    # terminal only
+scribe --mode file -o transcript.txt   # file only
 scribe -o transcript.txt  # also append to a file (orthogonal to --mode)
 ```
 
@@ -41,10 +43,10 @@ remember Shift for terminal targets, nothing for GUI apps where plain
 
 ## `--type-direct` — bypass the clipboard
 
-In keystroke mode `--type-direct` (or **Options → Keyboard backend →
-Type directly** in the menu) types the transcription as raw keystrokes
-instead of synthesising Ctrl+V. It lands in any focused input,
-terminals included, without depending on a paste shortcut.
+In keystroke mode `--type-direct` (or **Options → Keyboard → Input
+mode → keystroke** in the menu) types the transcription as raw
+keystrokes instead of synthesising Ctrl+V. It lands in any focused
+input, terminals included, without depending on a paste shortcut.
 
 Caveats:
 
@@ -75,8 +77,8 @@ Whichever mode you pick, the Ctrl+V keystroke (or live per-chunk paste,
 or raw type-direct) goes through a *typer* backend. Scribe probes the
 available backends at startup and picks the first one that works in the
 current session. Backends that are *structurally incompatible* with
-your OS / session are hidden from the menu entirely — the **Keyboard
-backend** submenu only appears when there is a real choice.
+your OS / session are hidden from the menu entirely — the **Keyboard →
+Backend** submenu only appears when there is a real choice.
 
 | Backend  | Mechanism                            | Compatible with                                                       |
 |----------|--------------------------------------|-----------------------------------------------------------------------|
@@ -86,14 +88,14 @@ backend** submenu only appears when there is a real choice.
 | `wtype`  | `zwp_virtual_keyboard_v1`            | wlroots-based Wayland compositors (Sway and friends — not GNOME/KDE)  |
 
 Force a specific backend with `--typer eitype` (etc.), or pick it from
-the tray / terminal menu under **Options → Keyboard backend**. The
+the tray / terminal menu under **Options → Keyboard → Backend**. The
 selected backend's name is logged at startup so you can tell which path
 your keystrokes are taking.
 
 ### Per-OS behaviour
 
 - **macOS / Windows** → `pynput` is the only compatible backend (Quartz
-  / WinAPI, native and Unicode-correct). The Keyboard backend submenu
+  / WinAPI, native and Unicode-correct). The Keyboard → Backend submenu
   is hidden entirely — there is nothing to choose.
 - **Linux X11** → `pynput` (XTest) is the natural choice; `ydotool`
   also works if you have its daemon set up. `eitype` / `wtype` are not

@@ -9,9 +9,10 @@ cloud-based APIs, batch and streaming workflows.
 
 ## What it does
 
-- Records from your mic and transcribes via one of four backends —
-  **Vosk** (local, streaming), **Whisper** (local, batch), **OpenAI**
-  (cloud, batch *or* streaming), **Groq** (cloud, batch).
+- Records from your mic and transcribes via one of five backends —
+  **Vosk** (local, streaming), **Whisper** (local, batch),
+  **Whisper FUTO** (local, batch — ACFT-tuned for short dictations),
+  **OpenAI** (cloud, batch *or* streaming), **Groq** (cloud, batch).
 - Delivers the transcript three ways: paste into the focused window
   (default), copy to clipboard, or print to the terminal.
 - Runs as a **system tray icon** with a single Record button, or as an
@@ -43,8 +44,8 @@ scribe
 This launches the system tray icon. Press Record, speak, press Stop —
 the transcription lands in the focused window. Scribe picks the first
 backend whose key / dependency is present, in order **`groq` →
-`openai` → `whisper` → `vosk`**, so with `GROQ_API_KEY` set the
-command above is equivalent to:
+`openai` → `whisper-futo` → `whisper` → `vosk`**, so with `GROQ_API_KEY`
+set the command above is equivalent to:
 
 ```bash
 scribe --backend groq --model whisper-large-v3-turbo
@@ -78,12 +79,13 @@ for what each backend does with them.
 
 ## Backends at a glance
 
-| Backend         | `--backend` | Default model              | Streaming model(s)        | Requires                            |
-|-----------------|-------------|----------------------------|---------------------------|-------------------------------------|
-| Groq (cloud)    | `groq`      | `whisper-large-v3-turbo`   | —                         | `GROQ_API_KEY`                      |
-| OpenAI (cloud)  | `openai`    | `gpt-4o-mini-transcribe`   | `gpt-realtime-whisper`    | `OPENAI_API_KEY`                    |
-| Whisper (local) | `whisper`   | `small`                    | —                         | `pip install scribe-cli[whisper]`   |
-| Vosk (local)    | `vosk`      | language-dependent         | all Vosk models           | `pip install scribe-cli[vosk]`      |
+| Backend              | `--backend`     | Default model              | Streaming model(s)        | Requires                               |
+|----------------------|-----------------|----------------------------|---------------------------|----------------------------------------|
+| Groq (cloud)         | `groq`          | `whisper-large-v3-turbo`   | —                         | `GROQ_API_KEY`                         |
+| OpenAI (cloud)       | `openai`        | `gpt-4o-mini-transcribe`   | `gpt-realtime-whisper`    | `OPENAI_API_KEY`                       |
+| Whisper FUTO (local) | `whisper-futo`  | `small`                    | —                         | `pip install scribe-cli[whisper-futo]` |
+| Whisper (local)      | `whisper`       | `small`                    | —                         | `pip install scribe-cli[whisper]`      |
+| Vosk (local)         | `vosk`          | language-dependent         | all Vosk models           | `pip install scribe-cli[vosk]`         |
 
 Whether a transcription appears live as you speak or all at once when
 you stop depends on the **model** picked — see

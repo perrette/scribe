@@ -31,7 +31,7 @@ appindicator system libs — see [installation.md](installation.md)).
 This is included with `pip install scribe-cli[all]` or `[app]`.
 
 You can predefine which models appear in the tray menu with
-`--vosk-models` and `--whisper-models`:
+`--vosk-models`, `--whisper-models`, and `--whisper-futo-models`:
 
 ```bash
 scribe --vosk-models vosk-model-fr-0.22 \
@@ -40,23 +40,33 @@ scribe --vosk-models vosk-model-fr-0.22 \
 
 ## Menu structure
 
-Both the tray and terminal frontends share the same menu tree:
+Both the tray and terminal frontends share the same menu tree (dynamic
+tray labels shown after `:`; the terminal frontend renders the static
+fallback to the left of the `:`):
 
 ```
 Record                          start recording (default tray action)
 Stop / Cancel                   end or discard an in-flight recording
-Mode: Stream / Clip             toggle live-chunk transcription on batch
+Mode: Stream / Clip ▶           toggle live-chunk transcription on batch
                                   backends (whisper, whisper-futo,
                                   openai gpt-4o-*, groq). Reads as
                                   "Mode: Stream (native)" on native
                                   streamers (vosk, gpt-realtime-whisper),
-                                  where clicking is a no-op.
-Model ▶                         per-vendor submenus, ordered:
-    Whisper (local) ▶             models via --whisper-models — 'small (recommended)'
-    Vosk (local, streaming) ▶     models via --vosk-models
-    OpenAI ▶                      gpt-4o-transcribe, gpt-4o-mini-transcribe,
-                                    gpt-realtime-whisper (streaming)
-    Groq ▶                        whisper-large-v3-turbo
+                                  where the Clip radio is hidden.
+Model: <vendor · model> ▶       per-vendor submenus, ordered (🏠 local /
+                                  ☁️ cloud prefix, '(stream)' suffix on
+                                  streaming models):
+    🏠 Whisper FUTO ▶             models via --whisper-futo-models
+    🏠 Whisper ▶                  models via --whisper-models — 'small (recommended)'
+    🏠 Vosk (stream)              leaf — picks the vosk model mapped to
+                                  the currently-selected Language
+    ☁️ OpenAI ▶                   gpt-4o-transcribe, gpt-4o-mini-transcribe,
+                                    gpt-realtime-whisper (stream)
+    ☁️ Groq ▶                     whisper-large-v3-turbo
+Language: <🇬🇧 en | Auto> ▶     curated languages (en / fr / de / it)
+                                  plus Auto. Auto on vosk reads as
+                                  'Auto (🇬🇧 en)' to advertise the
+                                  concrete fallback.
 Options ▶
     Stream (advanced) ▶           visible iff Mode=Stream
         Chunk min: 1.5s             batch backends only; minimum buffer before
@@ -67,17 +77,22 @@ Options ▶
                                     Max (force-cut only, no silence trigger)
         Context reset: 3× silence   batch backends only; greyed when silence-
           (= 1.8s)                  break is Auto or Max
-        Realtime timeout: Always On always visible when Mode=Stream
+        Stream timeout: Always On   always visible when Mode=Stream
         Stream: Live / Offline      visible iff gpt-realtime-whisper; unifies
           after Xs                  --realtime-gate and --realtime-commit-silence
-    Clip timeout: 2 min           visible iff Mode=Clip
-    Keyboard mode ▶               Clipboard only / Send to focused window /
-                                    Terminal only   (mirrors --mode)
+    Clip timeout: 2 min ▶         visible iff Mode=Clip
+    Output: Keyboard ▶            radio: Keyboard / Clipboard / Terminal / File
+                                    (mirrors --mode). File is greyed in the tray
+                                    until --output-file is configured.
+    Keyboard (paste | pynput) ▶   visible iff Output=Keyboard
+        Input mode: paste ▶         radio: keystroke (raw keystrokes,
+                                    --type-direct) | paste (Ctrl+V from
+                                    clipboard, default)
+        Backend: pynput ▶           radio over typers compatible with this OS
+                                    (eitype / pynput / ydotool / wtype); hidden
+                                    entirely when no typer is compatible.
     Toggle tray app mode          (terminal frontend only)
-    Keyboard backend ▶            eitype / pynput / ydotool / wtype
-                                  (rows incompatible with this OS are hidden;
-                                   submenu hidden entirely when ≤ 1 row left)
-    Advanced ▶                    VAD mode toggle (silero ↔ dB), per-mode
+    VAD ▶                         VAD mode toggle (silero ↔ dB), per-mode
                                     VAD knobs (silero: speech-probability
                                     threshold, min silence duration; dB:
                                     silence threshold — only the active

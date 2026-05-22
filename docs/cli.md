@@ -13,10 +13,11 @@ The flags are grouped to mirror the source-of-truth in
 
 | Flag                            | Purpose                                                                 |
 |---------------------------------|-------------------------------------------------------------------------|
-| `--backend {vosk,whisper,openai,groq}` | Speech-recognition backend (prompted if omitted).                |
+| `--backend {vosk,whisper,whisper-futo,openai,groq}` | Speech-recognition backend (prompted if omitted).            |
 | `--model NAME`                  | Model name for the chosen backend. Auto-routes to the right backend for known model names (e.g. `--model gpt-realtime-whisper` selects `openai`). |
-| `-l, --language LANG`           | Language alias selecting a preset Vosk model (`en`/`fr`/`de`/`it`), or `en` for English-only Whisper models. |
+| `-l, --language LANG`           | Language alias selecting a preset Vosk model (`en`/`fr`/`de`/`it`), or `en` for English-only Whisper / Whisper-FUTO models. |
 | `--download-folder-whisper DIR` | Folder to store Whisper models.                                         |
+| `--download-folder-whisper-futo DIR` | Folder to store Whisper-FUTO ACFT ggml models (default: `$XDG_CACHE_HOME/whisper-futo`). |
 | `--download-folder-vosk DIR`    | Folder to store Vosk models.                                            |
 
 ## Prompting & vocabulary biasing
@@ -55,15 +56,16 @@ flag suppresses only its own side (giving `--prompt ""` still loads
 | Flag                  | Purpose                                                  |
 |-----------------------|----------------------------------------------------------|
 | `--input-device N`    | Microphone device index (see `python -m sounddevice`).   |
+| `--dry-run`           | Short-circuit the STT request boundary in every backend: model load is skipped and the network/SDK call returns a canned `[dry-run transcript]`. Used by the backend × mode smoke-test matrix; handy for plumbing without network access. |
 
 ## Output
 
 | Flag                        | Purpose                                                                                     |
 |-----------------------------|---------------------------------------------------------------------------------------------|
-| `-m, --mode {keystroke,clipboard,terminal}` | Where transcribed text goes (default `keystroke`). See [keyboard.md](keyboard.md). |
+| `-m, --mode {keystroke,clipboard,terminal,file}` | Where transcribed text goes (default `keystroke`). `file` routes the transcript exclusively to `--output-file` and suppresses keyboard/clipboard output. See [keyboard.md](keyboard.md). |
 | `--typer {auto,eitype,pynput,wtype,ydotool}` | Keystroke-injection backend (default `auto`).                                |
 | `--type-direct`             | In keystroke mode, type the transcription as keystrokes instead of synthesising Ctrl+V.     |
-| `-o, --output-file FILE`    | Also append the transcription to this file.                                                 |
+| `-o, --output-file FILE`    | Also append the transcription to this file. Required when `--mode file`.                    |
 
 ## Silence detection
 
@@ -99,13 +101,14 @@ mode's knobs are ignored.
 | `--realtime-delay {minimal,low,medium,high,xhigh}` | `medium`    | Trade off latency vs accuracy on `gpt-realtime-whisper`. Lower = faster partials but more paste churn in the focused window.                                                             |
 | `--realtime-gate` / `--no-realtime-gate`          | on           | Drop silent frames (per the active `--vad-mode`) before sending them over the WebSocket so silent audio isn't billed as input tokens. |
 | `--realtime-commit-silence SECS`                  | `0.6`        | Seconds of silence before a mid-session commit flushes trailing words to the server (default `0.6`). Set to `0` to rely solely on the server's turn detection. |
-| `--realtime-timeout SECS`                         | `None`       | Auto-stop the session after this many seconds in Stream mode (`None` = Always On, no auto-stop). Tray equivalent: **Realtime timeout** in the Stream (advanced) submenu. |
 
 The tray's **Stream (advanced) › Stream** picker unifies `--realtime-gate`
 and `--realtime-commit-silence` into a single choice: **Live** (gate
 off, commit disabled — server turn detection only) or **Offline after
 Xs** (gate on, commit after X seconds of silence). At the CLI level the
-two flags remain independent.
+two flags remain independent. The auto-stop is documented under
+**Listening mode → `--stream-timeout`** below (covers both native
+streamers and pseudo-streaming on batch backends).
 
 Streaming models (Vosk, `gpt-realtime-whisper`) ignore the batch
 silence-chunking knobs; they have their own end-of-utterance signal.
@@ -121,12 +124,14 @@ silence-chunking knobs; they have their own end-of-utterance signal.
 | `--stream-chunk-silence-break SECS` | `0.6` | Silence duration that triggers a chunk cut (default `0.6`). Special value `0` enables Auto mode (best-silence-in-window at force-cut time). |
 | `--stream-context-reset-silence X` | `3.0`  | Multiplier of `--stream-chunk-silence-break` above which the rolling cross-chunk prompt context is discarded (default `3.0`, i.e. 1.8 s at default silence-break). Use `inf` to never reset. |
 | `--clip-timeout SECS`             | `120`   | Auto-stop after this many seconds in Clip mode (default `120`). |
+| `--stream-timeout SECS`           | `None`  | Auto-stop after this many seconds in Stream mode (`None` = Always On, no auto-stop). Tray equivalent: **Stream timeout** in the Stream (advanced) submenu. |
 
 Native streamers (vosk, `gpt-realtime-whisper`) are always streaming
-and ignore `--clip`. `--realtime`, `--pseudo-streaming`, and
-`--streaming-window` are kept as hidden back-compat aliases
-(`--streaming-window N` maps to `--stream-chunk-max 2N` to preserve
-the old effective force-cut threshold).
+and ignore `--clip`. `--realtime`, `--pseudo-streaming`,
+`--streaming-window`, and `--realtime-timeout` are kept as hidden
+back-compat aliases (`--streaming-window N` maps to
+`--stream-chunk-max 2N` to preserve the old effective force-cut
+threshold; `--realtime-timeout` maps to `--stream-timeout`).
 
 ## Frontend
 
@@ -136,6 +141,7 @@ the old effective force-cut threshold).
 | `--no-interactive`          | In terminal mode, skip the interactive menu and record immediately. (`--no-prompt` is kept as a deprecated alias.) |
 | `--vosk-models M [M ...]`   | Vosk models offered in the tray menu.                                |
 | `--whisper-models M [M ...]` | Whisper models offered in the tray menu.                             |
+| `--whisper-futo-models M [M ...]` | Whisper-FUTO ACFT models offered in the tray menu.              |
 
 ## Examples
 
