@@ -71,7 +71,7 @@ scribe --mode file -o transcript.txt                   # append to a file (no ke
 
 With `--no-interactive` (terminal frontend only), scribe skips the
 interactive menu and starts recording right away — handy for scripted,
-one-shot transcriptions. `--no-prompt` is kept as a deprecated alias.
+one-shot transcriptions.
 
 Bias the recogniser toward names, jargon, or a domain glossary with
 `--prompt "free text hint"` and `--words word1 word2 ...` (each also
@@ -122,6 +122,13 @@ I personally use [OpenAI](https://openai.com/api/) with `gpt-4o-mini-transcribe`
   — GNOME / KDE launcher integration.
 - [Fine tuning & CLI reference](docs/cli.md) — every `scribe --help`
   flag with examples.
+
+## Related projects
+
+- **[bard](https://github.com/perrette/bard)** — TTS sibling of scribe,
+  same tray/CLI architecture in reverse: highlight text, hear it
+  spoken. Shares the [`desktop-ai-core`](https://github.com/perrette/desktop-ai-core)
+  backbone (frontends, providers, dialog helpers).
 
 ## Compatibility
 

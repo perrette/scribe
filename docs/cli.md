@@ -138,7 +138,7 @@ threshold; `--realtime-timeout` maps to `--stream-timeout`).
 | Flag                        | Purpose                                                              |
 |-----------------------------|----------------------------------------------------------------------|
 | `--frontend {tray,terminal}` | UI to launch (default `tray`).                                       |
-| `--no-interactive`          | In terminal mode, skip the interactive menu and record immediately. (`--no-prompt` is kept as a deprecated alias.) |
+| `--no-interactive`          | In terminal mode, skip the interactive menu and record immediately. |
 | `--record`                  | Start recording immediately on launch, frontend-agnostic. In terminal it's a one-line shortcut for `--no-interactive`; in tray it auto-fires the Record action ~0.5 s after the icon comes up. Useful for hotkey bindings (`scribe --record` triggers a recording from anywhere) and batched / scripted invocations. |
 | `--vosk-models M [M ...]`   | Vosk models offered in the tray menu.                                |
 | `--whisper-models M [M ...]` | Whisper models offered in the tray menu.                             |

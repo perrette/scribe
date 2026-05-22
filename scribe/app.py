@@ -513,8 +513,7 @@ def get_parser():
     group.add_argument("--frontend", choices=["tray", "terminal"], default="tray",
                        help="UI to launch: tray (system tray icon) or terminal (default: %(default)s).")
     group.add_argument("--no-interactive", "--no-prompt", action="store_false", dest="interactive",
-                       help="In terminal mode, skip the interactive menu and record immediately. "
-                            "(--no-prompt is a deprecated alias kept for backward compatibility.)")
+                       help="In terminal mode, skip the interactive menu and record immediately.")
     group.add_argument("--record", action="store_true",
                        help="Start recording immediately on launch, no UI. Sugar for "
                             "'--frontend terminal --no-interactive'. Useful for batched / "

@@ -149,14 +149,14 @@ style, domain, or word list. The concept is generic across the
 whisper-family backends but each backend exposes it slightly
 differently:
 
-| Backend                              | `--prompt`                    | `--words`                                              |
-|--------------------------------------|-------------------------------|--------------------------------------------------------|
-| `whisper` (faster-whisper, local)    | passed as `initial_prompt=`   | passed as `hotwords=` — a **dedicated biasing channel** separate from the prompt |
-| `whisper-futo` (pywhispercpp, local) | passed as `initial_prompt=`   | joined onto the prompt string (no separate hotwords channel here) |
-| `openai` batch (`gpt-4o*-transcribe`) | passed as `prompt=`           | joined onto the prompt string                          |
-| `groq` (`whisper-large-v3-turbo`)     | passed as `prompt=`           | joined onto the prompt string                          |
-| `openai` realtime (`gpt-realtime-whisper`) | *silently ignored* — the model rejects the prompt parameter server-side (HTTP 400 *"The 'prompt' parameter is not supported for this model."*). The kwarg stays accepted for plumbing compatibility but never reaches the API. | same — joined into the (ignored) prompt |
-| `vosk`                               | *ignored* (no soft prompt)    | *ignored* (Vosk only supports a hard `grammar` allowlist; not yet exposed) |
+| Backend                              | `--prompt`                    | `--words`                                              | `--language`                                           |
+|--------------------------------------|-------------------------------|--------------------------------------------------------|---------------------------------------------------------|
+| `whisper` (faster-whisper, local)    | passed as `initial_prompt=`   | passed as `hotwords=` — a **dedicated biasing channel** separate from the prompt | passed as `language=` (ISO 639-1); `-l en` also auto-substitutes `small.en` etc. |
+| `whisper-futo` (pywhispercpp, local) | passed as `initial_prompt=`   | joined onto the prompt string (no separate hotwords channel here) | passed as `language=` (ISO 639-1); `-l en` auto-substitutes `small.en` etc. |
+| `openai` batch (`gpt-4o*-transcribe`) | passed as `prompt=`           | joined onto the prompt string                          | passed as `language=` hint (ISO 639-1)                  |
+| `groq` (`whisper-large-v3-turbo`)     | passed as `prompt=`           | joined onto the prompt string                          | passed as `language=` hint (ISO 639-1)                  |
+| `openai` realtime (`gpt-realtime-whisper`) | *silently ignored* — the model rejects the prompt parameter server-side (HTTP 400 *"The 'prompt' parameter is not supported for this model."*). The kwarg stays accepted for plumbing compatibility but never reaches the API. | same — joined into the (ignored) prompt | passed as `language=` (ISO 639-1) |
+| `vosk`                               | *ignored* (no soft prompt)    | *ignored* (Vosk only supports a hard `grammar` allowlist; not yet exposed) | picks a per-language model from `scribe/models.toml`; no runtime parameter |
 
 The whisper-family APIs cap the prompt around ~224 tokens; longer
 hints are silently truncated. Faster-whisper's `hotwords` channel is
@@ -186,6 +186,35 @@ invocation, pass an explicit empty value: `--prompt ""` (or
 `--prompt-file ""`) suppresses the prompt default; `--words` with no
 arguments (or `--words-file ""`) suppresses the words default. Each
 side is independent.
+
+## Language
+
+`-l / --language LANG` tells the backend which language to expect.
+What that means in practice varies by backend (see the per-backend
+column in the table above):
+
+- **Whisper-family** (`whisper`, `whisper-futo`, `openai` batch +
+  realtime, `groq`) — the language is passed to the model as a hard
+  lock: the decoder generates that language regardless of what it
+  hears acoustically. Accepts any [ISO 639-1 short code](https://en.wikipedia.org/wiki/List_of_ISO_639-1_codes)
+  Whisper recognises (~99 languages). When unset, Whisper auto-detects
+  per chunk.
+- **English-only model variants** — for `whisper` and `whisper-futo`,
+  `-l en` *also* auto-substitutes the English-only model when one
+  exists (`small` → `small.en`, etc.). These variants trade
+  multilingual coverage for English accuracy.
+- **Vosk** — language isn't a runtime parameter; vosk ships a
+  separate model per language. `-l fr` looks up the vosk model
+  pre-mapped to French in [`scribe/models.toml`](../scribe/models.toml)
+  and instantiates that one. Vosk has no auto-detect path, so the
+  Language menu's `Auto` entry on vosk falls back to a sensible
+  default — the tray shows `Auto (🇬🇧 en)` to make this explicit
+  without mutating the stored `language=None`.
+
+The tray's **Language** submenu exposes the four curated languages
+(`en` / `fr` / `de` / `it`) with origin-country flag prefixes
+(🇬🇧 / 🇫🇷 / 🇩🇪 / 🇮🇹). The CLI accepts these plus any other ISO 639-1
+code the active backend recognises.
 
 ## Stream mode (works with any backend)
 
