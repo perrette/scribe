@@ -165,6 +165,11 @@ class WhisperFutoTranscriber(AbstractTranscriber):
         # recording is a single longer utterance.
         if self.pseudo_streaming:
             kwargs["max_tokens"] = max(12, int(duration_s * 12))
+        self.debug_log_request(audio_bytes, model=self.model_name,
+                               language=kwargs.get("language"),
+                               prompt=kwargs.get("initial_prompt"),
+                               audio_ctx=kwargs.get("audio_ctx"),
+                               max_tokens=kwargs.get("max_tokens"))
         segments = self.model.transcribe(audio, **kwargs)
         text = "".join(s.text for s in segments)
         if self.pseudo_streaming:

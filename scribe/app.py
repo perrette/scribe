@@ -247,7 +247,7 @@ def _build_backend_kwargs(backend, model, language, samplerate, duration,
                           pseudo_streaming, stream_chunk_max,
                           stream_chunk_min, stream_context_reset_silence,
                           stream_context_length,
-                          prompt_text, words, dry_run=False):
+                          prompt_text, words, dry_run=False, debug=False):
     composed_prompt, composed_hotwords = compose_prompt_for_backend(backend, prompt_text, words)
 
     vad_kwargs = dict(vad_mode=vad_mode, vad_threshold=vad_threshold,
@@ -257,7 +257,7 @@ def _build_backend_kwargs(backend, model, language, samplerate, duration,
         return dict(model_name=model, language=language, samplerate=samplerate,
                     timeout=None,
                     model_kwargs={"download_root": download_folder_vosk},
-                    dry_run=dry_run)
+                    dry_run=dry_run, debug=debug)
     if backend == "whisper":
         return dict(model_name=model, language=language, samplerate=samplerate,
                     timeout=duration,
@@ -271,7 +271,7 @@ def _build_backend_kwargs(backend, model, language, samplerate, duration,
                     prompt=composed_prompt,
                     hotwords=composed_hotwords,
                     model_kwargs={"download_root": download_folder_whisper},
-                    dry_run=dry_run,
+                    dry_run=dry_run, debug=debug,
                     **vad_kwargs)
     if backend == "whisper-futo":
         # pywhispercpp 1.4.1 exposes `initial_prompt`; the backend folds
@@ -289,7 +289,7 @@ def _build_backend_kwargs(backend, model, language, samplerate, duration,
                     stream_context_length=stream_context_length,
                     prompt=composed_prompt,
                     download_folder=download_folder_whisper_futo,
-                    dry_run=dry_run,
+                    dry_run=dry_run, debug=debug,
                     **vad_kwargs)
     if backend in ("openai", "groq"):
         from scribe.backends.openai_api import REALTIME_MODELS
@@ -303,7 +303,7 @@ def _build_backend_kwargs(backend, model, language, samplerate, duration,
                       stream_context_reset_silence=stream_context_reset_silence,
                       stream_context_length=stream_context_length,
                       prompt=composed_prompt,
-                      dry_run=dry_run,
+                      dry_run=dry_run, debug=debug,
                       **vad_kwargs)
         if backend == "openai" and model in REALTIME_MODELS:
             kwargs["realtime_delay"] = realtime_delay
@@ -328,7 +328,7 @@ def get_transcriber(model=None, backend=None, dummy=False, interactive=True, lan
                     stream_chunk_min=1.5, stream_context_reset_silence=3.0,
                     stream_context_length=200,
                     prompt=None, prompt_file=None, words=None, words_file=None,
-                    dry_run=False, **kwargs):
+                    dry_run=False, debug=False, **kwargs):
     if dummy:
         return DummyTranscriber("whisper", "dummy")
     if model and not backend:
@@ -368,7 +368,7 @@ def get_transcriber(model=None, backend=None, dummy=False, interactive=True, lan
                                           pseudo_streaming, stream_chunk_max,
                                           stream_chunk_min, stream_context_reset_silence,
                                           stream_context_length,
-                                          prompt_text, word_list, dry_run=dry_run)
+                                          prompt_text, word_list, dry_run=dry_run, debug=debug)
     try:
         return _build_transcriber(backend, **backend_kwargs)
     except Exception as error:
@@ -431,6 +431,10 @@ def get_parser():
                             "Used by tests/test_backend_matrix.py to exercise the "
                             "recording pipeline without network access or every "
                             "model on disk.")
+    group.add_argument("--debug", action="store_true", dest="debug",
+                       help="Log one line per STT request (model, language, "
+                            "prompt, audio length) for diagnosing transcription "
+                            "issues.")
 
     group = parser.add_argument_group("Output")
     group.add_argument("-m", "--mode",

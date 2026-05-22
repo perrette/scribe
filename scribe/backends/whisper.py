@@ -33,12 +33,16 @@ class WhisperTranscriber(AbstractTranscriber):
             self.update_streaming_context(text)
             return {"text": text}
         audio_array = np.frombuffer(audio_bytes, dtype=np.int16).flatten().astype(np.float32) / 32768.0
+        composed_prompt = self.compose_prompt(self._prompt)
+        self.debug_log_request(audio_bytes, model=self.model_name,
+                               language=self.language, prompt=composed_prompt,
+                               hotwords=self._hotwords)
         segments, _info = self.model.transcribe(
             audio_array,
             language=self.language,
             vad_filter=True,
             beam_size=1,
-            initial_prompt=self.compose_prompt(self._prompt),
+            initial_prompt=composed_prompt,
             hotwords=self._hotwords,
             no_speech_threshold=0.6,
             log_prob_threshold=-1.0,

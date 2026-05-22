@@ -57,6 +57,7 @@ class OpenaiAPITranscriber(WhisperTranscriber):
         buffer.name = "audio.wav"  # Set a filename with a valid extension
         prompt = self.compose_prompt(self._prompt)
         extra = {"prompt": prompt} if prompt else {}
+        self.debug_log_request(audio_bytes, model=self.model_name, prompt=prompt)
         try:
             transcription = self.model.audio.transcriptions.create(
                 model=self.model_name,

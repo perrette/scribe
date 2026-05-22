@@ -35,7 +35,7 @@ class AbstractTranscriber(STTBackend):
                  pseudo_streaming=False, stream_chunk_max=10.0,
                  stream_chunk_min=1.5, stream_context_reset_silence=3.0,
                  stream_context_length=200,
-                 dry_run=False):
+                 dry_run=False, debug=False):
         self.model_name = model_name
         self.language = language
         self.model = model
@@ -109,6 +109,11 @@ class AbstractTranscriber(STTBackend):
         # context entirely (each chunk transcribes without any cross-
         # chunk prompt) — the OFF semantic surfaced as a picker value.
         self.stream_context_length = stream_context_length
+        # When True, each backend logs a one-line summary of the request
+        # being sent (model, language, prompt, audio length) just before
+        # the network/SDK call. Driven by the `--debug` CLI flag — off by
+        # default so production output stays clean.
+        self.debug = debug
         # Set by RecordingSession.__init__; backend reads/writes session.audio_buffer
         # etc. inside transcribe_realtime_audio / finalize.
         self.session = None
@@ -166,6 +171,28 @@ class AbstractTranscriber(STTBackend):
                 print("")
                 text = text[1:]
             print(f"[{text}]")
+
+    def debug_log_request(self, audio_bytes=None, **params):
+        """One-line summary of the request a backend is about to send, gated
+        on ``self.debug`` (``--debug`` CLI flag). Off by default. Values are
+        ``repr``-ed so callers don't have to pre-format strings, and the
+        composed prompt is truncated at 200 chars to keep the line scannable
+        when long word lists are in play. ``audio_bytes`` is optional — when
+        passed, its duration in seconds is appended (computed from
+        ``samplerate`` × 2 for int16). The single call site per backend
+        lives just before the SDK / network boundary so what is logged is
+        what is actually about to be sent."""
+        if not self.debug:
+            return
+        parts = [f"backend={self.backend}"]
+        for key, value in params.items():
+            if isinstance(value, str) and len(value) > 200:
+                value = value[:197] + "..."
+            parts.append(f"{key}={value!r}")
+        if audio_bytes is not None:
+            duration = len(audio_bytes) / (self.samplerate * 2)
+            parts.append(f"audio_s={duration:.2f}")
+        self.log("req " + " ".join(parts))
 
     def transcribe_realtime_audio(self, audio_bytes=b""):
         """Generic adapter for batch backends. Two modes:
