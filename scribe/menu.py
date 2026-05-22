@@ -1037,11 +1037,10 @@ def _stream_advanced_submenu(app_state) -> Menu:
     return Menu(items, name="Stream (advanced)")
 
 
-def _advanced_options_menu(app_state) -> Menu:
-    """Backend-specific knobs + numerical tuning — kept off the main Options
-    panel so it stays uncluttered for common use. Items retain their
-    ``visible=`` predicates so vosk users still don't see whisper-only
-    fields."""
+def _vad_options_menu(app_state) -> Menu:
+    """VAD tuning — silero vs dB mode toggle plus the per-mode silence
+    thresholds. Kept in its own submenu so the main Options panel stays
+    uncluttered."""
     # The dB and silero parameter groups are intentionally separate (no
     # shared API yet — see SilenceGate docstring in scribe/audio.py).
     # `visible` on each group hides the inactive set so the user only sees
@@ -1065,7 +1064,7 @@ def _advanced_options_menu(app_state) -> Menu:
                      type=int, help="[silero] Min silence duration (ms)",
                      visible=lambda *_: is_silero_mode()),
     ]
-    return Menu(items, name="Advanced")
+    return Menu(items, name="VAD")
 
 
 def _toggle_options_menu(app_state) -> Menu:
@@ -1099,7 +1098,7 @@ def _toggle_options_menu(app_state) -> Menu:
         # is compatible at all (unlikely).
         *([Item("backend", _typer_menu(app_state), help="Keyboard backend")]
           if len(_compatible_typers()) >= 1 else []),
-        Item("advanced", _advanced_options_menu(app_state), help="Advanced"),
+        Item("vad", _vad_options_menu(app_state), help="VAD"),
     ]
     return Menu(items, name="Options")
 
