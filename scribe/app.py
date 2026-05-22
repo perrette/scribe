@@ -515,6 +515,12 @@ def get_parser():
     group.add_argument("--no-interactive", "--no-prompt", action="store_false", dest="interactive",
                        help="In terminal mode, skip the interactive menu and record immediately. "
                             "(--no-prompt is a deprecated alias kept for backward compatibility.)")
+    group.add_argument("--record", action="store_true",
+                       help="Start recording immediately on launch, no UI. Sugar for "
+                            "'--frontend terminal --no-interactive'. Useful for batched / "
+                            "scripted invocations (e.g. bound to a hotkey or run from cron). "
+                            "Pair with --mode file or --mode terminal to control where the "
+                            "transcript lands.")
     group.add_argument("--vosk-models", nargs="*", default=vosk_models,
                        help="Vosk models offered in the tray menu.")
     group.add_argument("--whisper-models", nargs="*", default=whisper_models,
@@ -788,6 +794,15 @@ def main(args=None):
     # else: leave o.pseudo_streaming alone (default False, or True if
     # --pseudo-streaming was passed).
 
+    # --record: skip the menu and start recording immediately. Affects
+    # both frontends — for terminal it short-circuits the interactive
+    # menu (same effect as --no-interactive); for tray the auto-fire is
+    # scheduled on a small delay below, after the icon's event loop is
+    # up. Frontend-agnostic by design — the user picks tray or terminal
+    # independently.
+    if getattr(o, "record", False):
+        o.interactive = False
+
     # Resolve "auto" to a concrete typer name at startup so the menu can show
     # the actually-selected backend (not a meta "Auto" entry) and we don't
     # re-probe on every recording. If the explicit choice is unavailable
@@ -833,6 +848,15 @@ def main(args=None):
 
         if o.frontend == "tray":
             app = create_app(micro, state)
+            if getattr(o, "record", False):
+                # Auto-fire the Record action shortly after the icon's
+                # event loop comes up. Daemon thread so it can't block
+                # shutdown if the icon never reaches a ready state.
+                import threading
+                threading.Timer(
+                    0.5,
+                    lambda: state.cb_record(None, None),
+                ).start()
             print("Starting app...")
             app.run()
             return

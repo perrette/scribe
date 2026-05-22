@@ -61,7 +61,7 @@ scribe --backend openai --model gpt-4o-mini-transcribe # OpenAI sweet spot
 scribe --backend openai --model gpt-realtime-whisper   # OpenAI streaming
 scribe --backend whisper --model small                 # local, no API key
 scribe --frontend terminal                             # interactive TUI menu
-scribe --frontend terminal --no-interactive            # record immediately, no menu
+scribe --record                                        # start recording immediately on launch (works in tray or terminal)
 scribe --mode clipboard                                # copy to clipboard, no keystroke
 scribe --mode terminal                                 # only print to stdout
 scribe --mode file -o transcript.txt                   # append to a file (no keystroke / clipboard)
