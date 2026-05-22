@@ -45,6 +45,12 @@ Both the tray and terminal frontends share the same menu tree:
 ```
 Record                          start recording (default tray action)
 Stop / Cancel                   end or discard an in-flight recording
+Mode: Realtime / Clip           toggle live-chunk transcription on batch
+                                  backends (whisper, whisper-futo,
+                                  openai gpt-4o-*, groq). Reads as
+                                  "Mode: Realtime (native)" on native
+                                  streamers (vosk, gpt-realtime-whisper),
+                                  where clicking is a no-op.
 Model ▶                         per-vendor submenus, ordered:
     Whisper (local) ▶             models via --whisper-models — 'small (recommended)'
     Vosk (local, streaming) ▶     models via --vosk-models
@@ -64,8 +70,7 @@ Options ▶
                                     min silence duration; dB: silence
                                     threshold — only the active mode's
                                     knobs are shown), realtime gate,
-                                    pseudo-streaming [experimental],
-                                    streaming window [experimental],
+                                    streaming window (tunes Realtime mode),
                                     output file
 Quit
 ```

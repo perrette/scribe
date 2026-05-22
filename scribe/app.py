@@ -389,19 +389,30 @@ def get_parser():
                             "isn't billed as input tokens (default: on; pass "
                             "--no-realtime-gate to disable).")
 
-    group = parser.add_argument_group("Pseudo-streaming (experimental)")
+    group = parser.add_argument_group("Listening mode")
+    mode_group = group.add_mutually_exclusive_group()
+    mode_group.add_argument("--realtime", dest="listen_mode", action="store_const",
+                            const="realtime",
+                            help="Force a batch backend (whisper, whisper-futo, "
+                                 "openai non-realtime, groq) into chunked "
+                                 "pseudo-streaming using --streaming-window and "
+                                 "--silence-duration. Equivalent to the tray's "
+                                 "'Mode: Realtime'. Native streamers (vosk, "
+                                 "gpt-realtime-whisper) are always realtime.")
+    mode_group.add_argument("--clip", dest="listen_mode", action="store_const",
+                            const="clip",
+                            help="Transcribe the whole recording at end (default). "
+                                 "Equivalent to the tray's 'Mode: Clip'.")
+    # Hidden backward-compat alias for --realtime. Same semantics.
     group.add_argument("--pseudo-streaming", action="store_true",
-                       help="[EXPERIMENTAL] Force a batch backend (whisper, groq, "
-                            "openai non-realtime) into chunked pseudo-streaming "
-                            "using --streaming-window and --silence-duration. "
-                            "Off by default — the batch backend transcribes the "
-                            "whole recording on stop.")
+                       help=argparse.SUPPRESS)
     group.add_argument("--streaming-window", default=5.0, type=float,
-                       help="[EXPERIMENTAL] Target streaming window in seconds for "
-                            "--pseudo-streaming (default: %(default)s). After this "
-                            "many seconds of buffered audio, cut at the first "
-                            "silence (>= --silence-duration); if no silence "
-                            "arrives by 2x the window, force-cut.")
+                       help="Target streaming window in seconds for "
+                            "--realtime mode on batch backends "
+                            "(default: %(default)s). After this many seconds "
+                            "of buffered audio, cut at the first silence "
+                            "(>= --silence-duration); if no silence arrives "
+                            "by 2x the window, force-cut.")
 
     group = parser.add_argument_group("Frontend")
     group.add_argument("--frontend", choices=["tray", "terminal"], default="tray",
@@ -642,6 +653,17 @@ def _print_main_status(state, o):
 def main(args=None):
     parser = get_parser()
     o = parser.parse_args(args)
+
+    # Reconcile --realtime / --clip with the legacy --pseudo-streaming flag.
+    # --realtime / --clip win when present; otherwise the existing
+    # --pseudo-streaming boolean drives the default.
+    listen_mode = getattr(o, "listen_mode", None)
+    if listen_mode == "realtime":
+        o.pseudo_streaming = True
+    elif listen_mode == "clip":
+        o.pseudo_streaming = False
+    # else: leave o.pseudo_streaming alone (default False, or True if
+    # --pseudo-streaming was passed).
 
     # Resolve "auto" to a concrete typer name at startup so the menu can show
     # the actually-selected backend (not a meta "Auto" entry) and we don't

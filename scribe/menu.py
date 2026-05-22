@@ -430,14 +430,25 @@ class AppState(AbstractFrontendApp):
         self._refresh_tray_menu()
         return True
 
-    def cb_toggle_pseudo_streaming(self, view, item):
-        new = not bool(getattr(self.transcriber, "pseudo_streaming", False))
-        if self.transcriber is not None:
-            self.transcriber.pseudo_streaming = new
-        self.o.pseudo_streaming = new
-        self.params["pseudo_streaming"] = new
-        self._refresh_tray_menu()
-        return True
+    def cb_set_mode(self, realtime: bool) -> Callable:
+        """Factory: callback for the Mode submenu's Realtime/Clip radio items.
+
+        `realtime=True` sets pseudo_streaming on; `realtime=False` sets it off.
+        On native streamers (supports_streaming=True) both radios no-op —
+        those backends are always Realtime and the Clip radio is hidden
+        anyway, so this only fires if someone clicks the (already-checked)
+        Realtime radio.
+        """
+        def _cb(view, item):
+            if not self._is_batch_backend():
+                return True
+            if self.transcriber is not None:
+                self.transcriber.pseudo_streaming = realtime
+            self.o.pseudo_streaming = realtime
+            self.params["pseudo_streaming"] = realtime
+            self._refresh_tray_menu()
+            return True
+        return _cb
 
     def cb_toggle_realtime_gate(self, view, item):
         new = not bool(getattr(self.transcriber, "_gate_enabled", True))
@@ -862,13 +873,9 @@ def _advanced_options_menu(app_state) -> Menu:
              help="Realtime: drop silent frames (gate)",
              checked=lambda item: bool(getattr(app_state.transcriber, "_gate_enabled", True)),
              visible=app_state._is_realtime),
-        Item("p", app_state.cb_toggle_pseudo_streaming,
-             help="Pseudo-streaming [EXPERIMENTAL]",
-             checked=lambda item: bool(getattr(app_state.transcriber, "pseudo_streaming", False)),
-             visible=app_state._is_batch_backend),
         SetValueItem("w", app_state.cb_set_streaming_window,
                      value=lambda item: getattr(app_state.transcriber, "streaming_window", None),
-                     type=float, help="Streaming window (s) [EXPERIMENTAL]",
+                     type=float, help="Streaming window (s)",
                      visible=app_state._is_batch_backend),
         SetValueItem("f", app_state.cb_set_output_file,
                      value=lambda item: getattr(app_state.o, "output_file", None) or "",
@@ -914,10 +921,46 @@ def build_menu(app_state) -> Menu:
         return f"Language: {_language_display(lang)}"
     language_item.label_fn = _language_label
 
+    def _mode_is_realtime():
+        """Realtime is active when native streaming OR pseudo-streaming is on
+        — matches the `is_streaming` disjunction used in start_recording."""
+        t = app_state.transcriber
+        if t is None:
+            return bool(getattr(app_state.o, "pseudo_streaming", False))
+        return (bool(getattr(type(t), "supports_streaming", False))
+                or bool(getattr(t, "pseudo_streaming", False)))
+
+    def _mode_is_native_streamer():
+        t = app_state.transcriber
+        return t is not None and bool(getattr(type(t), "supports_streaming", False))
+
+    def _mode_label():
+        if _mode_is_native_streamer():
+            return "Mode: Realtime (native)"
+        return "Mode: Realtime" if _mode_is_realtime() else "Mode: Clip"
+
+    # Mode is a radio with 2 elements (Realtime / Clip) so the top-level
+    # label can show the active selection dynamically — same pattern as
+    # Model and Language above. The radio modeling (not checkbox) is
+    # intentional: a checkbox's checkmark + a changing label would double-
+    # encode the same state.
+    realtime_radio = Item("r", app_state.cb_set_mode(True),
+                          help="Realtime (live transcription as you speak)",
+                          checked=lambda _it: _mode_is_realtime())
+    realtime_radio.radio = True
+    clip_radio = Item("c", app_state.cb_set_mode(False),
+                      help="Clip (transcribe at end of recording)",
+                      checked=lambda _it: not _mode_is_realtime(),
+                      visible=app_state._is_batch_backend)
+    clip_radio.radio = True
+    mode_item = Item("Mode", Menu([realtime_radio, clip_radio], name="Mode"))
+    mode_item.label_fn = _mode_label
+
     items = [
         Item("Record", app_state.cb_record, visible=app_state.is_not_recording),
         Item("Stop", app_state.cb_stop, visible=app_state.is_recording),
         Item("Cancel", app_state.cb_cancel, visible=app_state.is_recording),
+        mode_item,
         model_item,
         language_item,
         Item("Options", _toggle_options_menu(app_state)),

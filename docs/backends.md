@@ -184,13 +184,14 @@ invocation, pass an explicit empty value: `--prompt ""` (or
 arguments (or `--words-file ""`) suppresses the words default. Each
 side is independent.
 
-## Pseudo-streaming (experimental)
+## Realtime mode (pseudo-streaming on batch backends)
 
-`--pseudo-streaming` makes a batch backend behave streaming-like by
-cutting the running buffer into chunks driven by silence:
+`--realtime` makes a batch backend behave streaming-like by cutting
+the running buffer into chunks driven by silence (internally this is
+called *pseudo-streaming*):
 
 ```bash
-scribe --pseudo-streaming --streaming-window 5
+scribe --realtime --streaming-window 5
 ```
 
 After `--streaming-window` seconds of buffered audio, scribe cuts at
@@ -201,17 +202,21 @@ trades a little Whisper context for snappier "text appears as you
 speak" UX; raise it (10–30 s) if accuracy on long sentences matters
 more than latency.
 
-This is experimental and off by default. The tray menu surfaces the
-same toggle under Options ▶ Advanced ▶ Pseudo-streaming.
+Realtime is off by default — the default `Clip` mode transcribes the
+whole recording at end (`--clip`). The tray menu surfaces the same
+toggle as the top-level **Mode: Realtime / Clip** item. Native
+streamers (vosk, `gpt-realtime-whisper`) are always Realtime and the
+menu shows **Mode: Realtime (native)** for them.
 
 ### Cross-chunk prompt context
 
-In pseudo-streaming mode scribe automatically augments each chunk's
-prompt with the trailing ~200 characters of the *previous* chunk's
-transcription. This rolling tail is concatenated onto whatever static
-`--prompt` / `--words` you configured and reaches the backend through
-the same channel as the static prompt (the vocabulary biasing table
-above). The motivation is cross-chunk continuity:
+In Realtime mode (pseudo-streaming) scribe automatically augments
+each chunk's prompt with the trailing ~200 characters of the
+*previous* chunk's transcription. This rolling tail is concatenated
+onto whatever static `--prompt` / `--words` you configured and
+reaches the backend through the same channel as the static prompt
+(the vocabulary biasing table above). The motivation is cross-chunk
+continuity:
 
 - **Capitalization drift** — without context, a chunk that starts
   right after a period might come back lowercased.

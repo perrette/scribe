@@ -102,6 +102,18 @@ mode's knobs are ignored.
 Streaming models (Vosk, `gpt-realtime-whisper`) ignore the batch
 silence-chunking knobs; they have their own end-of-utterance signal.
 
+## Listening mode
+
+| Flag                  | Purpose                                                                                              |
+|-----------------------|------------------------------------------------------------------------------------------------------|
+| `--realtime`          | Force a batch backend (whisper, whisper-futo, openai non-realtime, groq) into pseudo-streaming — live chunks driven by `--streaming-window` and `--silence-duration`. Same as the tray's **Mode: Realtime**. |
+| `--clip`              | Default — transcribe the whole recording at end. Same as the tray's **Mode: Clip**.                  |
+| `--streaming-window SECS` | Target chunk window in seconds for Realtime mode on batch backends (default `5`). After this many seconds, cut at the first qualifying silence; force-cut at `2x` the window. |
+
+Native streamers (vosk, `gpt-realtime-whisper`) are always Realtime
+and ignore `--clip`. `--pseudo-streaming` is kept as a hidden alias
+for `--realtime` (backward compat).
+
 ## Frontend
 
 | Flag                        | Purpose                                                              |
