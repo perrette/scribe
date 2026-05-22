@@ -117,12 +117,15 @@ for the full picture.
 ## `groq` (Groq cloud)
 
 Talks to Groq's OpenAI-compatible API and defaults to
-`whisper-large-v3-turbo`. Typically the fastest cloud option for
-full-utterance transcription:
+`whisper-large-v3-turbo`. **Extremely fast** thanks to Groq's
+inference hardware — the recommended cloud backend by default, and
+the natural pick for `--stream` mode where per-chunk roundtrip
+latency dominates perceived speed:
 
 ```bash
 export GROQ_API_KEY=YOURAPIKEY
-scribe --backend groq
+scribe --backend groq          # Clip mode (default)
+scribe --backend groq --stream # live transcription, per-chunk
 ```
 
 The `groq` backend reuses the `openai` Python client under the hood, so
@@ -184,21 +187,59 @@ invocation, pass an explicit empty value: `--prompt ""` (or
 arguments (or `--words-file ""`) suppresses the words default. Each
 side is independent.
 
-## Stream mode (pseudo-streaming on batch backends)
+## Stream mode (works with any backend)
 
-`--stream` makes a batch backend behave streaming-like by cutting
-the running buffer into chunks and emitting each chunk's transcription
-immediately (internally called *pseudo-streaming*):
+`--stream` (or **Mode: Stream** in the tray) emits transcribed text
+**live as you speak**, regardless of which backend you picked. This
+is the headline v1.0.0 improvement: scribe abstracts over the two
+different mechanisms that backends use to deliver live output, so
+`--stream` works uniformly across every supported backend.
+
+- **Native streaming backends** (Vosk, `gpt-realtime-whisper`) push
+  partial results from the server as audio is received — scribe just
+  forwards them to the chosen output (focused window / clipboard /
+  terminal / file). These backends are *always* in Stream mode; the
+  Mode toggle reads "Mode: Stream (native)" for them and is read-only.
+- **Batch backends** (Whisper local, Whisper FUTO, OpenAI
+  `gpt-4o-*-transcribe`, Groq `whisper-large-v3-turbo`) don't accept
+  partial audio. scribe instead cuts the recording buffer on
+  detected silence and issues a separate transcription request for
+  each chunk — internally called *pseudo-streaming*. The user sees
+  the same live experience.
 
 ```bash
-scribe --stream
+scribe --stream                       # any backend, live transcription
+scribe --stream --backend groq        # Groq + Stream is the sweet spot
+scribe --stream --backend whisper     # local, live, no API key
 ```
+
+### How pseudo-streaming carves up a recording
 
 Once the buffer has grown to at least `--stream-chunk-min` (default
 1.5 s), silence of at least `--stream-chunk-silence-break` (default
 0.6 s) triggers a chunk cut. A force-cut fires at `--stream-chunk-max`
 (default 10 s) regardless of silence, to cap latency. The session
 continues until you stop it manually.
+
+### Does pseudo-streaming change the API cost?
+
+For cloud backends, going from one big transcription to N chunked
+requests **does not normally change the bill**:
+
+- **Groq** (`whisper-large-v3-turbo`) is billed per second of audio.
+  Total audio is unchanged → same cost.
+- **OpenAI `whisper-1`** (legacy) is billed per minute of audio. Same
+  logic, same cost.
+- **OpenAI `gpt-4o-transcribe` / `gpt-4o-mini-transcribe`** are token-
+  billed (audio-in + text-out + prompt-in). Audio and output stay
+  identical; the only delta is the rolling cross-chunk *prompt*
+  context (~200 chars ≈ 50–60 tokens per chunk after the first).
+  At gpt-4o-mini-transcribe input rates this is negligible — well
+  under a cent per long session.
+
+That said, your real cost depends on your usage and your account's
+pricing tier — **verify on your provider's billing dashboard** if
+cost is a hard constraint.
 
 Two special values for `--stream-chunk-silence-break` (set via the
 tray's **Silence break** picker or `--stream-chunk-silence-break 0`

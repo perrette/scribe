@@ -94,8 +94,11 @@ you stop depends on the **model** picked — see
 
 ### Getting an API key
 
-Groq is a good cloud backend to start with — very fast, quite accurate, and the
-**free tier** is generous enough for everyday dictation. Sign up at
+Groq is the **recommended cloud backend by default** — extremely fast
+(by a wide margin compared to other cloud STT options, especially in
+**Stream** mode where the per-chunk roundtrip latency dominates the
+perceived speed), quite accurate, and the **free tier** is generous
+enough for everyday dictation. Sign up at
 [console.groq.com](https://console.groq.com/), create an API key
 under **Settings → API Keys**, and export it as `GROQ_API_KEY`.
 
