@@ -67,10 +67,10 @@ flag suppresses only its own side (giving `--prompt ""` still loads
 
 ## Silence detection
 
-| Flag                       | Default | Purpose                                                                |
-|----------------------------|---------|------------------------------------------------------------------------|
-| `--duration SECS`          | `120`   | Max recording duration in seconds.                                     |
-| `--silence-duration SECS`  | `0.6`   | How long silence must persist before triggering a backend's silence behavior (realtime auto-commit, pseudo-streaming cut). |
+> **Deprecated aliases** (still accepted, hidden from `--help`):
+> `--duration N` maps to `--clip-timeout N`; `--silence-duration N`
+> sets both `--stream-chunk-silence-break` and `--realtime-commit-silence`
+> to `N`. Existing scripts using these flags continue to work.
 
 ## Voice activity detection
 
@@ -94,25 +94,39 @@ mode's knobs are ignored.
 
 ## Realtime (`gpt-realtime-whisper`)
 
-| Flag                                              | Default  | Purpose                                                                                                                                                                                  |
-|---------------------------------------------------|----------|------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `--realtime-delay {minimal,low,medium,high,xhigh}` | `medium` | Trade off latency vs accuracy on `gpt-realtime-whisper`. Lower = faster partials but more paste churn in the focused window.                                                             |
-| `--realtime-gate` / `--no-realtime-gate`          | on       | Drop silent frames (per the active `--vad-mode`) before sending them over the WebSocket so silent audio isn't billed as input tokens. After `--silence-duration` of silence, also commit mid-session so trailing words flush live. |
+| Flag                                              | Default      | Purpose                                                                                                                                                                                  |
+|---------------------------------------------------|--------------|------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `--realtime-delay {minimal,low,medium,high,xhigh}` | `medium`    | Trade off latency vs accuracy on `gpt-realtime-whisper`. Lower = faster partials but more paste churn in the focused window.                                                             |
+| `--realtime-gate` / `--no-realtime-gate`          | on           | Drop silent frames (per the active `--vad-mode`) before sending them over the WebSocket so silent audio isn't billed as input tokens. |
+| `--realtime-commit-silence SECS`                  | `0.6`        | Seconds of silence before a mid-session commit flushes trailing words to the server (default `0.6`). Set to `0` to rely solely on the server's turn detection. |
+| `--realtime-timeout SECS`                         | `None`       | Auto-stop the session after this many seconds in Stream mode (`None` = Always On, no auto-stop). Tray equivalent: **Realtime timeout** in the Stream (advanced) submenu. |
+
+The tray's **Stream (advanced) › Stream** picker unifies `--realtime-gate`
+and `--realtime-commit-silence` into a single choice: **Live** (gate
+off, commit disabled — server turn detection only) or **Offline after
+Xs** (gate on, commit after X seconds of silence). At the CLI level the
+two flags remain independent.
 
 Streaming models (Vosk, `gpt-realtime-whisper`) ignore the batch
 silence-chunking knobs; they have their own end-of-utterance signal.
 
 ## Listening mode
 
-| Flag                  | Purpose                                                                                              |
-|-----------------------|------------------------------------------------------------------------------------------------------|
-| `--stream`            | Force a batch backend (whisper, whisper-futo, openai non-realtime, groq) into pseudo-streaming — live chunks driven by `--streaming-window` and `--silence-duration`. Same as the tray's **Mode: Stream**. |
-| `--clip`              | Default — transcribe the whole recording at end. Same as the tray's **Mode: Clip**.                  |
-| `--streaming-window SECS` | Target chunk window in seconds for Stream mode on batch backends (default `5`). After this many seconds, cut at the first qualifying silence; force-cut at `2x` the window. |
+| Flag                              | Default | Purpose                                                                                   |
+|-----------------------------------|---------|-------------------------------------------------------------------------------------------|
+| `--stream`                        | —       | Force a batch backend (whisper, whisper-futo, openai non-realtime, groq) into pseudo-streaming — live chunks driven by `--stream-chunk-max` and `--stream-chunk-silence-break`. Same as the tray's **Mode: Stream**. |
+| `--clip`                          | default | Transcribe the whole recording at end. Same as the tray's **Mode: Clip**.                 |
+| `--stream-chunk-max SECS`         | `10`    | Maximum chunk duration in seconds. Force-cut fires at this threshold when no silence pause has been detected (default `10`). |
+| `--stream-chunk-min SECS`         | `1.5`   | Minimum chunk size before a silence-cut is allowed (default `1.5`). Prevents very short clips that cause Whisper hallucinations. |
+| `--stream-chunk-silence-break SECS` | `0.6` | Silence duration that triggers a chunk cut (default `0.6`). Special value `0` enables Auto mode (best-silence-in-window at force-cut time). |
+| `--stream-context-reset-silence X` | `3.0`  | Multiplier of `--stream-chunk-silence-break` above which the rolling cross-chunk prompt context is discarded (default `3.0`, i.e. 1.8 s at default silence-break). Use `inf` to never reset. |
+| `--clip-timeout SECS`             | `120`   | Auto-stop after this many seconds in Clip mode (default `120`). |
 
 Native streamers (vosk, `gpt-realtime-whisper`) are always streaming
-and ignore `--clip`. `--realtime` and `--pseudo-streaming` are kept as
-hidden aliases for `--stream` (backward compat).
+and ignore `--clip`. `--realtime`, `--pseudo-streaming`, and
+`--streaming-window` are kept as hidden back-compat aliases
+(`--streaming-window N` maps to `--stream-chunk-max 2N` to preserve
+the old effective force-cut threshold).
 
 ## Frontend
 

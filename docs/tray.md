@@ -58,20 +58,30 @@ Model ▶                         per-vendor submenus, ordered:
                                     gpt-realtime-whisper (streaming)
     Groq ▶                        whisper-large-v3-turbo
 Options ▶
+    Stream (advanced) ▶           visible iff Mode=Stream
+        Chunk min: 1.5s             batch backends only; minimum buffer before
+                                    a silence-cut is allowed
+        Chunk max: 10s              batch backends only; force-cut threshold
+        Silence break: 0.6s         batch backends only; special values:
+                                    Auto (longest silence in window),
+                                    Max (force-cut only, no silence trigger)
+        Context reset: 3× silence   batch backends only; greyed when silence-
+          (= 1.8s)                  break is Auto or Max
+        Realtime timeout: Always On always visible when Mode=Stream
+        Stream: Live / Offline      visible iff gpt-realtime-whisper; unifies
+          after Xs                  --realtime-gate and --realtime-commit-silence
+    Clip timeout: 2 min           visible iff Mode=Clip
     Keyboard mode ▶               Clipboard only / Send to focused window /
                                     Terminal only   (mirrors --mode)
     Toggle tray app mode          (terminal frontend only)
     Keyboard backend ▶            eitype / pynput / ydotool / wtype
                                   (rows incompatible with this OS are hidden;
                                    submenu hidden entirely when ≤ 1 row left)
-    Advanced ▶                    silence duration, VAD mode toggle
-                                    (silero ↔ dB), per-mode VAD knobs
-                                    (silero: speech-probability threshold,
-                                    min silence duration; dB: silence
-                                    threshold — only the active mode's
-                                    knobs are shown), realtime gate,
-                                    streaming window (tunes Stream mode),
-                                    output file
+    Advanced ▶                    VAD mode toggle (silero ↔ dB), per-mode
+                                    VAD knobs (silero: speech-probability
+                                    threshold, min silence duration; dB:
+                                    silence threshold — only the active
+                                    mode's knobs are shown)
 Quit
 ```
 
