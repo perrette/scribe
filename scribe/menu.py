@@ -1140,6 +1140,7 @@ def _stream_advanced_submenu(app_state) -> Menu:
                                           [0.1, 1.5, 3.0, 5.0, 10.0],
                                           get_chunk_min, _chunk_min_label,
                                           app_state.cb_set_stream_chunk_min),
+                          help="Chunk min",
                           visible=app_state._is_batch_backend)
     chunk_min_item.label_fn = lambda: f"Chunk min: {_chunk_min_label(get_chunk_min())}"
 
@@ -1148,6 +1149,7 @@ def _stream_advanced_submenu(app_state) -> Menu:
                                           [3.0, 5.0, 10.0, 20.0, None],
                                           get_chunk_max, _chunk_max_label,
                                           app_state.cb_set_stream_chunk_max),
+                          help="Chunk max",
                           visible=app_state._is_batch_backend)
     chunk_max_item.label_fn = lambda: f"Chunk max: {_chunk_max_label(get_chunk_max())}"
 
@@ -1156,6 +1158,7 @@ def _stream_advanced_submenu(app_state) -> Menu:
                                               [0.0, 0.3, 0.6, 1.2, 2.4, None],
                                               get_silence_break, _silence_break_label,
                                               app_state.cb_set_stream_chunk_silence_break),
+                              help="Silence break",
                               visible=app_state._is_batch_backend)
     silence_break_item.label_fn = lambda: f"Silence break: {_silence_break_label(get_silence_break())}"
 
@@ -1173,6 +1176,7 @@ def _stream_advanced_submenu(app_state) -> Menu:
                                               [1.0, 1.5, 2.0, 3.0, 5.0, 10.0, math.inf],
                                               get_context_reset, _context_reset_label,
                                               app_state.cb_set_stream_context_reset_silence),
+                              help="Context reset",
                               visible=app_state._is_batch_backend)
     context_reset_item.label_fn = _context_reset_parent_label
 
@@ -1181,6 +1185,7 @@ def _stream_advanced_submenu(app_state) -> Menu:
                                                [0, 50, 100, 200, 500, 1000],
                                                get_context_length, _context_length_label,
                                                app_state.cb_set_stream_context_length),
+                               help="Context length",
                                visible=app_state._is_batch_backend)
     context_length_item.label_fn = lambda: f"Context length: {_context_length_label(get_context_length())}"
 
@@ -1188,7 +1193,8 @@ def _stream_advanced_submenu(app_state) -> Menu:
                                _picker_submenu("Stream timeout",
                                                [120, 300, 600, 3600, None],
                                                get_stream_timeout, _timeout_label,
-                                               app_state.cb_set_stream_timeout))
+                                               app_state.cb_set_stream_timeout),
+                               help="Stream timeout")
     stream_timeout_item.label_fn = lambda: f"Stream timeout: {_timeout_label(get_stream_timeout())}"
 
     def get_realtime_stream_mode():
@@ -1204,6 +1210,7 @@ def _stream_advanced_submenu(app_state) -> Menu:
                         [None, 0.6, 1.2, 2.0, 5.0, 10.0],
                         get_realtime_stream_mode, _realtime_stream_label,
                         app_state.cb_set_realtime_stream_mode),
+        help="Stream (Live / Offline gate)",
         visible=app_state._is_realtime)
     realtime_stream_item.label_fn = lambda: f"Stream: {_realtime_stream_label(get_realtime_stream_mode())}"
 
@@ -1291,6 +1298,7 @@ def _toggle_options_menu(app_state) -> Menu:
                                              [30, 60, 120, 300, 600],
                                              get_clip_timeout, _timeout_label,
                                              app_state.cb_set_clip_timeout),
+                             help="Clip timeout",
                              visible=app_state._is_mode_clip)
     clip_timeout_item.label_fn = lambda: f"Clip timeout: {_timeout_label(get_clip_timeout())}"
 
