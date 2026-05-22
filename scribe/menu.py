@@ -323,11 +323,7 @@ class AppState(AbstractFrontendApp):
         def _safe_start():
             try:
                 start_recording(
-                    self.micro, session,
-                    mode=getattr(o, "mode", "keystroke"),
-                    typer=getattr(o, "typer", "auto"),
-                    output_file=getattr(o, "output_file", None),
-                    type_direct=getattr(o, "type_direct", False),
+                    self.micro, session, o,
                     start_message="Listening... Use the tray icon menu to stop.",
                 )
             except Exception as exc:

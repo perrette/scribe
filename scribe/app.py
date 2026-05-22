@@ -501,86 +501,119 @@ def get_parser():
     return parser
 
 
+def _detect_is_streaming(session):
+    """Detect whether the live backend behind ``session`` emits chunks
+    (streaming or pseudo-streaming) or a single end-of-recording transcript.
+
+    The registered class may dispatch to a streaming sibling for specific
+    models (e.g. openai → gpt-realtime-whisper), so a class-level lookup
+    via BACKENDS would lie — query the live instance instead.
+    """
+    backend_obj = getattr(session, "backend", session)
+    if isinstance(backend_obj, str):
+        return False
+    return (
+        bool(getattr(backend_obj, "supports_streaming", False))
+        or bool(getattr(backend_obj, "pseudo_streaming", False))
+    )
+
+
+def _output_signature(o):
+    """Snapshot of every ``o`` attribute the Output dispatch depends on.
+
+    Compared on the chunk boundary so the recording loop can rebuild the
+    Output when the tray menu toggles Output mode / typer / type_direct /
+    output_file mid-recording.
+    """
+    return (
+        getattr(o, "mode", "keystroke"),
+        getattr(o, "typer", None),
+        getattr(o, "type_direct", False),
+        getattr(o, "output_file", None),
+    )
+
+
+def _resolve_output(o, *, is_streaming, backend_obj):
+    """Build an Output from the live ``o`` Namespace.
+
+    Centralised so the live-switch handler in :func:`start_recording`
+    rebuilds via the same path as the initial construction.
+    """
+    from scribe.output import make_output
+    mode = getattr(o, "mode", "keystroke")
+    return make_output(
+        mode=mode,
+        typer=getattr(o, "typer", None) if mode == "keystroke" else None,
+        type_direct=getattr(o, "type_direct", False),
+        output_file=getattr(o, "output_file", None) if mode == "file" else None,
+        is_streaming=is_streaming,
+        backend_obj=backend_obj,
+    )
+
+
 # Commencer l'enregistrement
-def start_recording(micro, session, mode="keystroke", typer="auto",
-                    output_file=None, callback=None, type_direct=False, **greetings):
+def start_recording(micro, session, o, callback=None, **greetings):
     """Drive a recording, dispatching the transcript to the destination implied
-    by ``mode`` (the four-way Output radio in the tray):
+    by ``o.mode`` (the four-way Output radio in the tray):
 
       - 'keystroke': land in the focused window. For streaming backends (vosk)
         each chunk is pasted live as it arrives; for batch backends the full
-        text is pasted once at end-of-recording. With ``type_direct=True`` the
-        chunks/text are typed as raw keystrokes instead of pasted from the
+        text is pasted once at end-of-recording. With ``o.type_direct=True``
+        the chunks/text are typed as raw keystrokes instead of pasted from the
         clipboard — useful for terminals where Ctrl+V is the ^V control char.
       - 'clipboard': copy to clipboard, user pastes manually.
       - 'terminal':  no clipboard, no keystroke — text only printed.
-      - 'file':      append to ``output_file`` only — keyboard/clipboard
-                     output is suppressed. Requires ``output_file``.
+      - 'file':      append to ``o.output_file`` only — keyboard/clipboard
+                     output is suppressed. Requires ``o.output_file``.
+
+    The output destination is resolved from ``o`` on every chunk boundary:
+    if the user flips Output mode / Backend / Input mode via the tray menu
+    mid-recording the next chunk lands in the new sink without restart.
     """
-    if mode not in ("keystroke", "clipboard", "terminal", "file"):
-        raise ValueError(
-            f"Unknown mode {mode!r} (expected keystroke|clipboard|terminal|file)"
-        )
-    if mode == "file" and not output_file:
-        raise ValueError(
-            "mode='file' requires --output-file (or set o.output_file before "
-            "switching the Output radio)."
-        )
-
-    # Query the live transcriber instance — the registered class may dispatch
-    # to a streaming sibling for specific models (e.g. openai →
-    # gpt-realtime-whisper), so a class-level lookup via BACKENDS would lie.
-    # Pseudo-streaming also yields chunks (silence-cut batch transcriptions)
-    # so the output should treat it the same: live paste/type per chunk.
     backend_obj = getattr(session, "backend", session)
-    if isinstance(backend_obj, str):
-        is_streaming = False
-    else:
-        is_streaming = (
-            bool(getattr(backend_obj, "supports_streaming", False))
-            or bool(getattr(backend_obj, "pseudo_streaming", False))
-        )
-    # Clipboard is written in clipboard mode (the user pastes manually) and in
-    # paste-based keystroke mode (the paste source). type_direct keystroke
-    # mode bypasses the clipboard entirely — we type the chunks/text raw.
-    # File mode is mutually exclusive: no clipboard, no keystroke.
-    do_clipboard = mode == "clipboard" or (mode == "keystroke" and not type_direct)
-    do_live_paste = (mode == "keystroke") and is_streaming and not type_direct
-    do_paste_at_end = (mode == "keystroke") and not is_streaming and not type_direct
-    do_live_type = (mode == "keystroke") and is_streaming and type_direct
-    do_type_at_end = (mode == "keystroke") and not is_streaming and type_direct
-    do_file = mode == "file"
+    is_streaming = _detect_is_streaming(session)
 
-    if do_live_type or do_type_at_end:
-        from scribe.typers import pick_typer
-        _typer_obj = pick_typer(typer if typer != "auto" else None)
-    else:
-        _typer_obj = None
+    output = _resolve_output(o, is_streaming=is_streaming, backend_obj=backend_obj)
+    last_signature = _output_signature(o)
 
-    if do_live_paste:
-        from scribe.keyboard import paste_via_clipboard
+    # Log the initial wiring — matches the previous diagnostic lines so
+    # users tailing the journal see the same hints.
+    mode = getattr(o, "mode", "keystroke")
+    type_direct = bool(getattr(o, "type_direct", False))
+    if mode == "keystroke" and is_streaming and not type_direct:
         session.log("Live paste-per-chunk: each chunk lands in the focused window as it arrives.")
-    elif do_live_type:
-        assert _typer_obj is not None
-        session.log(f"Live type-per-chunk via {_typer_obj.name}: each chunk is typed directly as it arrives.")
-
-    if do_clipboard:
-        import pyperclip
+    elif mode == "keystroke" and is_streaming and type_direct:
+        from scribe.output import KeyboardOutput
+        if isinstance(output, KeyboardOutput) and output.typer_obj is not None:
+            session.log(
+                f"Live type-per-chunk via {output.typer_obj.name}: "
+                "each chunk is typed directly as it arrives."
+            )
+    if mode == "clipboard" or (mode == "keystroke" and not type_direct):
         session.log("The transcription will be copied to clipboard as it becomes available.")
-
-    # Tell streaming backends whether their output is about to hit the
-    # clipboard-paste race or a direct-keystroke typer. The realtime
-    # backend's per-token deltas only need coalescing in paste mode;
-    # type-direct (ydotool/wtype/pynput via uinput/xtest) types each
-    # character synchronously and benefits from raw per-delta emission
-    # for snappier UX. Set as a plain attribute — backends that don't
-    # implement coalescing ignore it.
-    if not isinstance(backend_obj, str) and hasattr(backend_obj, "_coalesce_deltas"):
-        backend_obj._coalesce_deltas = do_live_paste
 
     fulltext = ""
 
     for result in session.start_recording(micro, **greetings):
+        # Detect live-switch: if any output-affecting attr changed since
+        # the last chunk, rebuild the Output. Rebuild on the boundary so
+        # this chunk lands in the NEW destination.
+        sig = _output_signature(o)
+        if sig != last_signature:
+            try:
+                output = _resolve_output(o, is_streaming=is_streaming,
+                                         backend_obj=backend_obj)
+                last_signature = sig
+            except ValueError as exc:
+                # Fall back to the previous Output and revert o.mode to
+                # whatever the last-known-good signature said. Keeps the
+                # recording alive instead of crashing on the user's mid-
+                # session menu toggle (e.g. switching to File without a
+                # path set).
+                session.notify_error("Output", str(exc))
+                o.mode = last_signature[0]
+                # Don't update last_signature — next chunk will see the
+                # reverted o.mode and skip the rebuild branch.
 
         if result.get('text'):
             clear_line()
@@ -591,43 +624,11 @@ def start_recording(micro, session, mode="keystroke", typer="auto",
             # just concatenates verbatim.
             chunk_text = result['text']
             fulltext += chunk_text
-
-            if do_file:
-                # File mode: the transcript only goes to disk; keyboard/
-                # clipboard output is suppressed below. Pre-restructure
-                # the file-write was additive (you could keystroke AND
-                # also tee to a file). The new contract makes File a
-                # destination, not a side-channel — set --output-file
-                # without `--mode file` and the file is not written.
-                with open(output_file, "a") as f:
-                    f.write(result['text'] + "\n")
-
-            if do_live_paste:
-                # Live paste-per-chunk: copy this chunk to clipboard and fire
-                # Ctrl+V. Universal Unicode support (clipboard handles any
-                # codepoint) and orthogonal to typer choice (Ctrl+V is the
-                # same keystroke regardless of layout).
-                paste_via_clipboard(chunk_text, typer=typer,
-                                     verify_iters=2, sleep_s=0.05)
-            elif do_live_type:
-                assert _typer_obj is not None
-                _typer_obj.type(chunk_text)
-            elif do_clipboard:
-                pyperclip.copy(fulltext.strip())
-
+            output.on_chunk(chunk_text, fulltext)
         else:
             print_partial(result.get('partial', ''))
 
-    if do_paste_at_end and fulltext.strip():
-        from scribe.keyboard import paste_via_clipboard
-        # Multi-chunk transcriptions (e.g. local whisper with silence-splitting)
-        # called pyperclip.copy() many times during recording. wl-copy is async
-        # on Wayland — paste_via_clipboard force-writes the final text and
-        # polls until the clipboard reflects it before triggering Ctrl+V.
-        paste_via_clipboard(fulltext.strip(), typer=typer)
-    elif do_type_at_end and fulltext.strip():
-        assert _typer_obj is not None
-        _typer_obj.type(fulltext.strip())
+    output.on_finalize(fulltext)
 
     if callback:
         callback()
@@ -814,9 +815,7 @@ def main(args=None):
         else:
             greetings = dict(start_message="Listening... Press Ctrl+C to stop.")
             start_recording(micro, state.session if state.session is not None else state.transcriber,
-                            mode=o.mode, typer=o.typer, output_file=o.output_file,
-                            type_direct=getattr(o, "type_direct", False),
-                            **greetings)
+                            o, **greetings)
 
         o.interactive = True
         o.backend = None
