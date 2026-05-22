@@ -2,7 +2,7 @@
 is_streaming gate in scribe.app.
 
 Covers the recent behaviour changes:
-- silence-cut fires on any detected silence (was gated by elapsed >= streaming_window)
+- silence-cut fires on any detected silence (no window floor)
 - silence_buffer capped at max(5s, silence_duration)
 - is_streaming reflects pseudo_streaming on the instance, not just the class
 """
@@ -102,7 +102,7 @@ def test_pseudo_off_just_accumulates():
 
 def test_pseudo_on_loud_chunk_extends_audio_buffer():
     backend = FakeBackend(model=None, samplerate=SR, pseudo_streaming=True,
-                          silence_duration=0.6, streaming_window=5.0)
+                          silence_duration=0.6, stream_chunk_max=10.0)
     backend.session = make_session()
     chunk = loud_chunk()
     backend.transcribe_realtime_audio(chunk)
@@ -114,7 +114,7 @@ def test_pseudo_on_loud_chunk_extends_audio_buffer():
 
 def test_pseudo_on_short_silence_does_not_commit():
     backend = FakeBackend(model=None, samplerate=SR, pseudo_streaming=True,
-                          silence_duration=0.6, streaming_window=5.0)
+                          silence_duration=0.6, stream_chunk_max=10.0)
     backend.session = make_session(
         audio_buffer=loud_chunk(),               # >= 100ms of speech in buffer
         last_sound_time=time.time() - 0.1,        # silent for 0.1s only
@@ -125,16 +125,16 @@ def test_pseudo_on_short_silence_does_not_commit():
 
 # pseudo_streaming = True: silence >= silence_duration -> commit ------------
 
-# Audio buffer must clear AbstractTranscriber._CHUNK_MIN_MS (1500ms) for any
-# cut to fire. Each loud_chunk(SR*2) = 2s of audio at 16 kHz.
+# Audio buffer must clear stream_chunk_min (1.5s default) for any cut to
+# fire. Each loud_chunk(SR*2) = 2s of audio at 16 kHz.
 _ABOVE_MIN = SR * 2
 
 
 def test_pseudo_on_long_silence_does_not_commit_if_buffer_below_min():
-    """_CHUNK_MIN_MS gates the cut even on long silence — protects Whisper
+    """stream_chunk_min gates the cut even on long silence — protects Whisper
     from hallucinating on tiny chunks (e.g. "(music)", "Not to know.")."""
     backend = FakeBackend(model=None, samplerate=SR, pseudo_streaming=True,
-                          silence_duration=0.6, streaming_window=5.0)
+                          silence_duration=0.6, stream_chunk_max=10.0)
     # 200ms of audio — well above old 100ms threshold, well below new 1500ms.
     backend.session = make_session(
         audio_buffer=loud_chunk(samples=int(SR * 0.2)),
@@ -146,7 +146,7 @@ def test_pseudo_on_long_silence_does_not_commit_if_buffer_below_min():
 
 def test_pseudo_on_long_silence_commits():
     backend = FakeBackend(model=None, samplerate=SR, pseudo_streaming=True,
-                          silence_duration=0.6, streaming_window=5.0)
+                          silence_duration=0.6, stream_chunk_max=10.0)
     backend.session = make_session(
         audio_buffer=loud_chunk(samples=_ABOVE_MIN),
         last_sound_time=time.time() - 1.0,        # been silent 1s > 0.6s
@@ -155,13 +155,13 @@ def test_pseudo_on_long_silence_commits():
         backend.transcribe_realtime_audio(silent_chunk())
 
 
-# Key recent change: commit even when elapsed < streaming_window ------------
+# Silence-cut fires before chunk-max elapses ----------------------------------
 
-def test_pseudo_on_commits_before_streaming_window_elapses():
-    """Was: silence-cut required elapsed >= streaming_window. Now any silence
-    pause >= silence_duration commits."""
+def test_pseudo_on_commits_before_chunk_max_elapses():
+    """Silence-cut fires whenever a pause >= silence_duration is detected,
+    regardless of how much elapsed time has accumulated."""
     backend = FakeBackend(model=None, samplerate=SR, pseudo_streaming=True,
-                          silence_duration=0.6, streaming_window=5.0)
+                          silence_duration=0.6, stream_chunk_max=10.0)
     now = time.time()
     backend.session = make_session(
         audio_buffer=loud_chunk(samples=_ABOVE_MIN),
@@ -172,15 +172,15 @@ def test_pseudo_on_commits_before_streaming_window_elapses():
         backend.transcribe_realtime_audio(silent_chunk())
 
 
-# Force-cut at 2x streaming_window when there is no silence pause -----------
+# Force-cut at stream_chunk_max when there is no silence pause ---------------
 
-def test_pseudo_on_force_cut_at_double_window():
+def test_pseudo_on_force_cut_at_chunk_max():
     backend = FakeBackend(model=None, samplerate=SR, pseudo_streaming=True,
-                          silence_duration=0.6, streaming_window=5.0)
+                          silence_duration=0.6, stream_chunk_max=10.0)
     now = time.time()
     backend.session = make_session(
         audio_buffer=loud_chunk(samples=_ABOVE_MIN),
-        start_time=now - 11.0,                    # elapsed = 11s > 2*5s
+        start_time=now - 11.0,                    # elapsed = 11s > chunk_max=10s
         last_sound_time=now,                       # still actively speaking
     )
     with pytest.raises(SilenceDetected, match="Force-cut"):
@@ -191,7 +191,7 @@ def test_pseudo_on_force_cut_at_double_window():
 
 def test_speech_resumption_uses_last_half_second_preroll():
     backend = FakeBackend(model=None, samplerate=SR, pseudo_streaming=True,
-                          silence_duration=0.6, streaming_window=5.0)
+                          silence_duration=0.6, stream_chunk_max=10.0)
     # silence_buffer holds 1s of silence; pre-roll should grab last 0.5s
     backend.session = make_session(silence_buffer=silent_chunk(samples=SR))
 
@@ -208,7 +208,7 @@ def test_speech_resumption_uses_last_half_second_preroll():
 def test_silence_buffer_capped_at_5_seconds_default():
     """Default silence_duration=0.6 < 5s floor, so cap = 5s = 160 KB."""
     backend = FakeBackend(model=None, samplerate=SR, pseudo_streaming=True,
-                          silence_duration=0.6, streaming_window=5.0)
+                          silence_duration=0.6, stream_chunk_max=10.0)
     backend.session = make_session(last_sound_time=time.time())  # sil_dur stays small -> no commit
 
     chunk = silent_chunk(samples=SR)               # 1s of silence per call
@@ -222,7 +222,7 @@ def test_silence_buffer_capped_at_5_seconds_default():
 def test_silence_buffer_cap_follows_silence_duration_when_larger():
     """If user sets silence_duration=8s, cap follows to 8s (> 5s floor)."""
     backend = FakeBackend(model=None, samplerate=SR, pseudo_streaming=True,
-                          silence_duration=8.0, streaming_window=5.0)
+                          silence_duration=8.0, stream_chunk_max=10.0)
     backend.session = make_session(last_sound_time=time.time())
 
     chunk = silent_chunk(samples=SR)
@@ -248,7 +248,7 @@ def test_is_streaming_gate_includes_pseudo_streaming():
         backend='groq', model='whisper-large-v3-turbo',
         interactive=False, samplerate=SR, duration=120,
         silence_db=-40.0, silence_duration=0.6,
-        pseudo_streaming=True, streaming_window=5.0,
+        pseudo_streaming=True, stream_chunk_max=10.0,
     )
     is_streaming_on = (
         bool(getattr(t_on, "supports_streaming", False))
@@ -260,7 +260,7 @@ def test_is_streaming_gate_includes_pseudo_streaming():
         backend='groq', model='whisper-large-v3-turbo',
         interactive=False, samplerate=SR, duration=120,
         silence_db=-40.0, silence_duration=0.6,
-        pseudo_streaming=False, streaming_window=5.0,
+        pseudo_streaming=False, stream_chunk_max=10.0,
     )
     is_streaming_off = (
         bool(getattr(t_off, "supports_streaming", False))
@@ -273,7 +273,7 @@ def test_is_streaming_gate_includes_pseudo_streaming():
 
 def _make_pseudo_backend(**overrides):
     kwargs = dict(model=None, samplerate=SR, pseudo_streaming=True,
-                  silence_duration=0.6, streaming_window=5.0)
+                  silence_duration=0.6, stream_chunk_max=10.0)
     kwargs.update(overrides)
     return FakeBackend(**kwargs)
 

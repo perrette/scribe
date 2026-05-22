@@ -38,7 +38,7 @@ class AbstractTranscriber(STTBackend):
     def __init__(self, model, model_name=None, language=None, samplerate=16000, timeout=None, model_kwargs={},
                  silence_thresh=-40, silence_duration=0.6,
                  vad_mode="auto", vad_threshold=0.5, vad_min_silence_ms=300,
-                 pseudo_streaming=False, streaming_window=5.0,
+                 pseudo_streaming=False, stream_chunk_max=10.0,
                  stream_chunk_min=1.5, stream_context_reset_silence=1.5):
         self.model_name = model_name
         self.language = language
@@ -88,7 +88,7 @@ class AbstractTranscriber(STTBackend):
         # window. When off, transcribe_realtime_audio just accumulates and
         # finalize() transcribes the whole recording.
         self.pseudo_streaming = pseudo_streaming
-        self.streaming_window = streaming_window
+        self.stream_chunk_max = stream_chunk_max
         self.stream_chunk_min = stream_chunk_min
         self.stream_context_reset_silence = stream_context_reset_silence
         # Set by RecordingSession.__init__; backend reads/writes session.audio_buffer
@@ -148,10 +148,10 @@ class AbstractTranscriber(STTBackend):
         - Default (pseudo_streaming=False): accumulate the whole recording
           into session.audio_buffer; finalize() runs one transcription.
         - Pseudo-streaming (pseudo_streaming=True, experimental): cut the
-          running buffer into chunks. First-fit silence cut once the buffer
-          has accumulated >= streaming_window seconds; force-cut at
-          2 * streaming_window. Cuts raise SilenceDetected; the session
-          loop catches that, calls finalize(), and resumes.
+          running buffer into chunks. Silence-cut when a pause >= silence
+          duration is detected; force-cut at stream_chunk_max seconds.
+          Cuts raise SilenceDetected; the session loop catches that, calls
+          finalize(), and resumes.
 
         Streaming backends (Vosk, OpenAI realtime) override this — they
         feed audio incrementally to their own engines and never hit this
@@ -188,12 +188,11 @@ class AbstractTranscriber(STTBackend):
             sil_dur = time.time() - session.last_sound_time
             session.waiting = sil_dur >= self.silence_duration
 
-            # Commit on every detected silence pause. The streaming_window
-            # is no longer a "wait at least N seconds before cutting" floor —
-            # it's only the basis for the force-cut at 2 * window below.
-            # session.reset() in the session loop resets start_time on each
-            # commit, so `elapsed` here always measures time since the last
-            # commit (or start of recording).
+            # Commit on every detected silence pause. stream_chunk_max is
+            # only the basis for the force-cut below; it's not a floor for
+            # silence-cuts. session.reset() in the session loop resets
+            # start_time on each commit, so `elapsed` here always measures
+            # time since the last commit (or start of recording).
             if session.waiting and buffer_ms >= self.stream_chunk_min * 1000:
                 raise SilenceDetected(
                     f"Cut at silence after {elapsed:.2f}s "
@@ -222,9 +221,9 @@ class AbstractTranscriber(STTBackend):
             session.audio_buffer += silence_buffer_data[-length_of_half_a_second:].tobytes() + audio_bytes
             session.silence_buffer = b''
 
-        if elapsed >= 2 * self.streaming_window and buffer_ms >= self.stream_chunk_min * 1000:
+        if elapsed >= self.stream_chunk_max and buffer_ms >= self.stream_chunk_min * 1000:
             raise SilenceDetected(
-                f"Force-cut at 2x streaming window ({elapsed:.2f}s)"
+                f"Force-cut at chunk-max ({elapsed:.2f}s)"
             )
 
         return {"partial": f"{len(session.audio_buffer)} bytes received "

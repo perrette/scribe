@@ -532,12 +532,12 @@ class AppState(AbstractFrontendApp):
                 self.transcriber._invalidate_silence_gate()
         return True
 
-    def cb_set_streaming_window(self, view, item):
-        val = self._coerce_float(item.value(item), "window")
+    def cb_set_stream_chunk_max(self, view, item):
+        val = self._coerce_float(item.value(item), "chunk max")
         if val is not None:
-            self.o.streaming_window = val
+            self.o.stream_chunk_max = val
             if self.transcriber is not None:
-                self.transcriber.streaming_window = val
+                self.transcriber.stream_chunk_max = val
         return True
 
     def cb_set_output_file(self, view, item):
@@ -873,9 +873,9 @@ def _advanced_options_menu(app_state) -> Menu:
              help="Realtime: drop silent frames (gate)",
              checked=lambda item: bool(getattr(app_state.transcriber, "_gate_enabled", True)),
              visible=app_state._is_realtime),
-        SetValueItem("w", app_state.cb_set_streaming_window,
-                     value=lambda item: getattr(app_state.transcriber, "streaming_window", None),
-                     type=float, help="Streaming window (s)",
+        SetValueItem("w", app_state.cb_set_stream_chunk_max,
+                     value=lambda item: getattr(app_state.transcriber, "stream_chunk_max", None),
+                     type=float, help="Stream chunk max (s)",
                      visible=app_state._is_batch_backend),
         SetValueItem("f", app_state.cb_set_output_file,
                      value=lambda item: getattr(app_state.o, "output_file", None) or "",

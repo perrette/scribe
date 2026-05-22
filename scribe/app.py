@@ -176,7 +176,7 @@ def _build_backend_kwargs(backend, model, language, samplerate, duration,
                           download_folder_vosk, download_folder_whisper,
                           download_folder_whisper_futo,
                           realtime_delay, realtime_gate,
-                          pseudo_streaming, streaming_window,
+                          pseudo_streaming, stream_chunk_max,
                           stream_chunk_min, stream_context_reset_silence,
                           prompt_text, words):
     # Cloud whisper variants (OpenAI batch, Groq, OpenAI realtime) take a
@@ -199,7 +199,7 @@ def _build_backend_kwargs(backend, model, language, samplerate, duration,
         return dict(model_name=model, language=language, samplerate=samplerate,
                     timeout=duration, silence_duration=silence_duration,
                     silence_thresh=silence_db,
-                    pseudo_streaming=pseudo_streaming, streaming_window=streaming_window,
+                    pseudo_streaming=pseudo_streaming, stream_chunk_max=stream_chunk_max,
                     stream_chunk_min=stream_chunk_min,
                     stream_context_reset_silence=stream_context_reset_silence,
                     prompt=prompt_text,
@@ -214,7 +214,7 @@ def _build_backend_kwargs(backend, model, language, samplerate, duration,
         return dict(model_name=model, language=language, samplerate=samplerate,
                     timeout=duration, silence_duration=silence_duration,
                     silence_thresh=silence_db,
-                    pseudo_streaming=pseudo_streaming, streaming_window=streaming_window,
+                    pseudo_streaming=pseudo_streaming, stream_chunk_max=stream_chunk_max,
                     stream_chunk_min=stream_chunk_min,
                     stream_context_reset_silence=stream_context_reset_silence,
                     prompt=merged_prompt,
@@ -225,7 +225,7 @@ def _build_backend_kwargs(backend, model, language, samplerate, duration,
         kwargs = dict(model_name=model, samplerate=samplerate,
                       timeout=duration, silence_duration=silence_duration,
                       silence_thresh=silence_db,
-                      pseudo_streaming=pseudo_streaming, streaming_window=streaming_window,
+                      pseudo_streaming=pseudo_streaming, stream_chunk_max=stream_chunk_max,
                       stream_chunk_min=stream_chunk_min,
                       stream_context_reset_silence=stream_context_reset_silence,
                       prompt=merged_prompt,
@@ -237,7 +237,7 @@ def _build_backend_kwargs(backend, model, language, samplerate, duration,
             # already streams natively. Strip these so its __init__ doesn't
             # see options it doesn't act on.
             kwargs.pop("pseudo_streaming", None)
-            kwargs.pop("streaming_window", None)
+            kwargs.pop("stream_chunk_max", None)
         return kwargs
     raise ValueError(f"Unknown backend: {backend}")
 
@@ -249,7 +249,7 @@ def get_transcriber(model=None, backend=None, dummy=False, interactive=True, lan
                     download_folder_vosk=None, download_folder_whisper=None,
                     download_folder_whisper_futo=None,
                     realtime_delay="medium", realtime_gate=True,
-                    pseudo_streaming=False, streaming_window=5.0,
+                    pseudo_streaming=False, stream_chunk_max=10.0,
                     stream_chunk_min=1.5, stream_context_reset_silence=1.5,
                     prompt=None, prompt_file=None, words=None, words_file=None,
                     **kwargs):
@@ -287,7 +287,7 @@ def get_transcriber(model=None, backend=None, dummy=False, interactive=True, lan
                                           download_folder_vosk, download_folder_whisper,
                                           download_folder_whisper_futo,
                                           realtime_delay, realtime_gate,
-                                          pseudo_streaming, streaming_window,
+                                          pseudo_streaming, stream_chunk_max,
                                           stream_chunk_min, stream_context_reset_silence,
                                           prompt_text, word_list)
     try:
@@ -404,7 +404,7 @@ def get_parser():
                             const="stream",
                             help="Force a batch backend (whisper, whisper-futo, "
                                  "openai non-realtime, groq) into chunked "
-                                 "pseudo-streaming using --streaming-window and "
+                                 "pseudo-streaming using --stream-chunk-max and "
                                  "--silence-duration. Equivalent to the tray's "
                                  "'Mode: Stream'. Native streamers (vosk, "
                                  "gpt-realtime-whisper) are always streaming.")
@@ -417,13 +417,15 @@ def get_parser():
                             const="stream", help=argparse.SUPPRESS)
     group.add_argument("--pseudo-streaming", action="store_true",
                        help=argparse.SUPPRESS)
-    group.add_argument("--streaming-window", default=5.0, type=float,
-                       help="Target streaming window in seconds for "
-                            "--stream mode on batch backends "
-                            "(default: %(default)s). After this many seconds "
-                            "of buffered audio, cut at the first silence "
-                            "(>= --silence-duration); if no silence arrives "
-                            "by 2x the window, force-cut.")
+    group.add_argument("--stream-chunk-max", default=10.0, type=float,
+                       dest="stream_chunk_max",
+                       help="Maximum chunk duration in seconds for --stream mode "
+                            "on batch backends (default: %(default)s). Force-cut "
+                            "fires at this threshold when no silence pause has "
+                            "triggered a commit.")
+    group.add_argument("--streaming-window", type=lambda s: 2.0 * float(s),
+                       dest="stream_chunk_max", default=argparse.SUPPRESS,
+                       help=argparse.SUPPRESS)
     group.add_argument("--stream-chunk-min", default=1.5, type=float,
                        help="Minimum chunk size in seconds before a silence-cut "
                             "is allowed in --stream mode (default: %(default)s). "
