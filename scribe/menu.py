@@ -106,11 +106,11 @@ def format_model_label(backend_name: str, model_id: str, include_vendor: bool = 
         else:
             display = model_id
         if include_vendor:
-            return f"{prefix}{vendor} {display}{streaming_suffix}"
+            return f"{prefix}{vendor} | {display}{streaming_suffix}"
         return display
 
     if include_vendor:
-        return f"{prefix}{vendor} {model_id}{streaming_suffix}"
+        return f"{prefix}{vendor} | {model_id}{streaming_suffix}"
     return f"{model_id}{streaming_suffix}"
 
 
