@@ -647,11 +647,17 @@ def start_recording(micro, session, o, callback=None, **greetings):
         if result.get('text'):
             clear_line()
             print(result.get('text'))
-            # Backends own their own inter-chunk spacing — Vosk appends a
-            # space to each phrase, gpt-realtime-whisper deltas already
-            # carry leading whitespace per Whisper tokenization. The app
-            # just concatenates verbatim.
             chunk_text = result['text']
+            # Some backends own their inter-chunk spacing (Vosk appends a
+            # trailing space per phrase, gpt-realtime-whisper deltas carry
+            # leading whitespace per Whisper tokenization), BUT pseudo-
+            # streaming chunks from whisper / whisper-futo / openai batch /
+            # groq are standalone transcriptions with no padding. If the
+            # running text doesn't end in whitespace and this chunk doesn't
+            # start with whitespace, insert a separator — otherwise the
+            # sentence boundary collapses into "...hello.How are you?".
+            if fulltext and fulltext[-1:].strip() and chunk_text[:1].strip():
+                chunk_text = " " + chunk_text
             fulltext += chunk_text
             output.on_chunk(chunk_text, fulltext)
         else:
