@@ -177,6 +177,7 @@ def _build_backend_kwargs(backend, model, language, samplerate, duration,
                           download_folder_whisper_futo,
                           realtime_delay, realtime_gate,
                           pseudo_streaming, streaming_window,
+                          stream_chunk_min, stream_context_reset_silence,
                           prompt_text, words):
     # Cloud whisper variants (OpenAI batch, Groq, OpenAI realtime) take a
     # single `prompt` string — fold the word list into it. faster-whisper
@@ -199,6 +200,8 @@ def _build_backend_kwargs(backend, model, language, samplerate, duration,
                     timeout=duration, silence_duration=silence_duration,
                     silence_thresh=silence_db,
                     pseudo_streaming=pseudo_streaming, streaming_window=streaming_window,
+                    stream_chunk_min=stream_chunk_min,
+                    stream_context_reset_silence=stream_context_reset_silence,
                     prompt=prompt_text,
                     hotwords=(" ".join(words) if words else None),
                     model_kwargs={"download_root": download_folder_whisper},
@@ -212,6 +215,8 @@ def _build_backend_kwargs(backend, model, language, samplerate, duration,
                     timeout=duration, silence_duration=silence_duration,
                     silence_thresh=silence_db,
                     pseudo_streaming=pseudo_streaming, streaming_window=streaming_window,
+                    stream_chunk_min=stream_chunk_min,
+                    stream_context_reset_silence=stream_context_reset_silence,
                     prompt=merged_prompt,
                     download_folder=download_folder_whisper_futo,
                     **vad_kwargs)
@@ -221,6 +226,8 @@ def _build_backend_kwargs(backend, model, language, samplerate, duration,
                       timeout=duration, silence_duration=silence_duration,
                       silence_thresh=silence_db,
                       pseudo_streaming=pseudo_streaming, streaming_window=streaming_window,
+                      stream_chunk_min=stream_chunk_min,
+                      stream_context_reset_silence=stream_context_reset_silence,
                       prompt=merged_prompt,
                       **vad_kwargs)
         if backend == "openai" and model in REALTIME_MODELS:
@@ -243,6 +250,7 @@ def get_transcriber(model=None, backend=None, dummy=False, interactive=True, lan
                     download_folder_whisper_futo=None,
                     realtime_delay="medium", realtime_gate=True,
                     pseudo_streaming=False, streaming_window=5.0,
+                    stream_chunk_min=1.5, stream_context_reset_silence=1.5,
                     prompt=None, prompt_file=None, words=None, words_file=None,
                     **kwargs):
     if dummy:
@@ -280,6 +288,7 @@ def get_transcriber(model=None, backend=None, dummy=False, interactive=True, lan
                                           download_folder_whisper_futo,
                                           realtime_delay, realtime_gate,
                                           pseudo_streaming, streaming_window,
+                                          stream_chunk_min, stream_context_reset_silence,
                                           prompt_text, word_list)
     try:
         return _build_transcriber(backend, **backend_kwargs)
@@ -415,6 +424,14 @@ def get_parser():
                             "of buffered audio, cut at the first silence "
                             "(>= --silence-duration); if no silence arrives "
                             "by 2x the window, force-cut.")
+    group.add_argument("--stream-chunk-min", default=1.5, type=float,
+                       help="Minimum chunk size in seconds before a silence-cut "
+                            "is allowed in --stream mode (default: %(default)s). "
+                            "Prevents very short clips that cause Whisper hallucinations.")
+    group.add_argument("--stream-context-reset-silence", default=1.5, type=float,
+                       help="Silence duration in seconds above which the rolling "
+                            "cross-chunk prompt context is discarded in --stream mode "
+                            "(default: %(default)s). A long pause implies a topic change.")
 
     group = parser.add_argument_group("Frontend")
     group.add_argument("--frontend", choices=["tray", "terminal"], default="tray",

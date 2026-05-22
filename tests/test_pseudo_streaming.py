@@ -309,7 +309,7 @@ def test_context_reset_long_pause_clears_context():
 def test_context_reset_at_exact_threshold_clears():
     """Boundary: sil_dur == _CONTEXT_RESET_SILENCE_S clears (>= check)."""
     backend = _make_pseudo_backend()
-    threshold = backend._CONTEXT_RESET_SILENCE_S
+    threshold = backend.stream_context_reset_silence
     # Subtract a tiny epsilon FROM the past so by the time
     # transcribe_realtime_audio computes time.time() - last_sound_time the
     # gap is just above threshold. Avoids flakiness from clock granularity.

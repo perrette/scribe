@@ -28,15 +28,6 @@ class AbstractTranscriber(STTBackend):
     backend = None
     _frozen_options = frozenset()
 
-    # Pseudo-streaming: don't cut a chunk smaller than this. Whisper-family
-    # models hallucinate on very short clips ("Not to know.", "Thanks for
-    # watching!", etc. on near-silence), so the floor exists for quality,
-    # not just to avoid API rejection. 1.5 s gives Whisper enough context
-    # to anchor on real content and emit no_speech_prob > threshold on
-    # silence. Sub-threshold accumulations stay in the buffer until more
-    # audio arrives.
-    _CHUNK_MIN_MS = 1500.0
-
     # Pseudo-streaming: trailing chars of previous chunks fed back as
     # `initial_prompt` so whisper has cross-chunk context (capitalization
     # after a period, article gender, language lock). Whisper's prompt
@@ -44,20 +35,11 @@ class AbstractTranscriber(STTBackend):
     # leaves room for the user's static prompt + words list.
     _STREAMING_CONTEXT_MAX_CHARS = 200
 
-    # Pseudo-streaming: drop the rolling chunk-tail context when the
-    # silence between two utterances exceeds this. Rationale: a long
-    # pause = new sentence / new idea, and carrying a possibly-bad prior
-    # chunk forward biases the next one (hallucinations like "fin de la
-    # vidéo" and decoder repetition loops self-reinforce through the
-    # prompt). Short pauses (mid-sentence punctuation) keep context for
-    # grammatical cohesion. Whisper.cpp's `--keep-context off` default
-    # is the more extreme version of this same trade-off.
-    _CONTEXT_RESET_SILENCE_S = 1.5
-
     def __init__(self, model, model_name=None, language=None, samplerate=16000, timeout=None, model_kwargs={},
                  silence_thresh=-40, silence_duration=0.6,
                  vad_mode="auto", vad_threshold=0.5, vad_min_silence_ms=300,
-                 pseudo_streaming=False, streaming_window=5.0):
+                 pseudo_streaming=False, streaming_window=5.0,
+                 stream_chunk_min=1.5, stream_context_reset_silence=1.5):
         self.model_name = model_name
         self.language = language
         self.model = model
@@ -107,6 +89,8 @@ class AbstractTranscriber(STTBackend):
         # finalize() transcribes the whole recording.
         self.pseudo_streaming = pseudo_streaming
         self.streaming_window = streaming_window
+        self.stream_chunk_min = stream_chunk_min
+        self.stream_context_reset_silence = stream_context_reset_silence
         # Set by RecordingSession.__init__; backend reads/writes session.audio_buffer
         # etc. inside transcribe_realtime_audio / finalize.
         self.session = None
@@ -210,7 +194,7 @@ class AbstractTranscriber(STTBackend):
             # session.reset() in the session loop resets start_time on each
             # commit, so `elapsed` here always measures time since the last
             # commit (or start of recording).
-            if session.waiting and buffer_ms >= self._CHUNK_MIN_MS:
+            if session.waiting and buffer_ms >= self.stream_chunk_min * 1000:
                 raise SilenceDetected(
                     f"Cut at silence after {elapsed:.2f}s "
                     f"(silent {sil_dur:.2f}s)"
@@ -226,7 +210,7 @@ class AbstractTranscriber(STTBackend):
             # stale prompt bias every subsequent chunk. The mid-utterance
             # case is mild; the contamination case was severe.
             sil_dur = time.time() - session.last_sound_time
-            if (sil_dur >= self._CONTEXT_RESET_SILENCE_S
+            if (sil_dur >= self.stream_context_reset_silence
                     and self._streaming_context):
                 self.log(f"Clearing chunk context after {sil_dur:.2f}s pause")
                 self.clear_streaming_context()
@@ -238,7 +222,7 @@ class AbstractTranscriber(STTBackend):
             session.audio_buffer += silence_buffer_data[-length_of_half_a_second:].tobytes() + audio_bytes
             session.silence_buffer = b''
 
-        if elapsed >= 2 * self.streaming_window and buffer_ms >= self._CHUNK_MIN_MS:
+        if elapsed >= 2 * self.streaming_window and buffer_ms >= self.stream_chunk_min * 1000:
             raise SilenceDetected(
                 f"Force-cut at 2x streaming window ({elapsed:.2f}s)"
             )
