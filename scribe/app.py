@@ -245,7 +245,8 @@ def _build_backend_kwargs(backend, model, language, samplerate, duration,
                           download_folder_whisper_futo,
                           realtime_delay, realtime_gate,
                           pseudo_streaming, stream_chunk_max,
-                          stream_chunk_min, stream_context_reset_silence,
+                          stream_chunk_min, stream_first_chunk_min,
+                          stream_context_reset_silence,
                           stream_context_length,
                           prompt_text, words, dry_run=False, debug=False):
     composed_prompt, composed_hotwords = compose_prompt_for_backend(backend, prompt_text, words)
@@ -266,6 +267,7 @@ def _build_backend_kwargs(backend, model, language, samplerate, duration,
                     silence_thresh=silence_db,
                     pseudo_streaming=pseudo_streaming, stream_chunk_max=stream_chunk_max,
                     stream_chunk_min=stream_chunk_min,
+                    stream_first_chunk_min=stream_first_chunk_min,
                     stream_context_reset_silence=stream_context_reset_silence,
                     stream_context_length=stream_context_length,
                     prompt=composed_prompt,
@@ -285,6 +287,7 @@ def _build_backend_kwargs(backend, model, language, samplerate, duration,
                     silence_thresh=silence_db,
                     pseudo_streaming=pseudo_streaming, stream_chunk_max=stream_chunk_max,
                     stream_chunk_min=stream_chunk_min,
+                    stream_first_chunk_min=stream_first_chunk_min,
                     stream_context_reset_silence=stream_context_reset_silence,
                     stream_context_length=stream_context_length,
                     prompt=composed_prompt,
@@ -300,6 +303,7 @@ def _build_backend_kwargs(backend, model, language, samplerate, duration,
                       silence_thresh=silence_db,
                       pseudo_streaming=pseudo_streaming, stream_chunk_max=stream_chunk_max,
                       stream_chunk_min=stream_chunk_min,
+                      stream_first_chunk_min=stream_first_chunk_min,
                       stream_context_reset_silence=stream_context_reset_silence,
                       stream_context_length=stream_context_length,
                       prompt=composed_prompt,
@@ -325,7 +329,8 @@ def get_transcriber(model=None, backend=None, dummy=False, interactive=True, lan
                     download_folder_whisper_futo=None,
                     realtime_delay="medium", realtime_gate=True,
                     pseudo_streaming=False, stream_chunk_max=10.0,
-                    stream_chunk_min=1.5, stream_context_reset_silence=3.0,
+                    stream_chunk_min=1.5, stream_first_chunk_min=3.0,
+                    stream_context_reset_silence=3.0,
                     stream_context_length=200,
                     prompt=None, prompt_file=None, words=None, words_file=None,
                     dry_run=False, debug=False, **kwargs):
@@ -366,7 +371,8 @@ def get_transcriber(model=None, backend=None, dummy=False, interactive=True, lan
                                           download_folder_whisper_futo,
                                           realtime_delay, realtime_gate,
                                           pseudo_streaming, stream_chunk_max,
-                                          stream_chunk_min, stream_context_reset_silence,
+                                          stream_chunk_min, stream_first_chunk_min,
+                                          stream_context_reset_silence,
                                           stream_context_length,
                                           prompt_text, word_list, dry_run=dry_run, debug=debug)
     try:
@@ -537,6 +543,16 @@ def get_parser():
     group.add_argument("--streaming-window", type=lambda s: 2.0 * float(s),
                        dest="stream_chunk_max", default=argparse.SUPPRESS,
                        help=argparse.SUPPRESS)
+    group.add_argument("--stream-first-chunk-min", default=3.0, type=float,
+                       dest="stream_first_chunk_min",
+                       help="Minimum chunk size in seconds for the *first* chunk "
+                            "of a streaming thread (default: %(default)s). Higher "
+                            "than --stream-chunk-min so the bootstrap chunk has "
+                            "enough audio for Whisper to produce a punctuated "
+                            "transcript, whose tail then seeds the rolling prompt "
+                            "for subsequent chunks. Applies on recording start and "
+                            "right after a context-reset silence. Clamped to "
+                            "<= --stream-chunk-max.")
     group.add_argument("--stream-chunk-min", default=1.5, type=float,
                        help="Minimum chunk size in seconds before a silence-cut "
                             "is allowed in --stream mode (default: %(default)s). "

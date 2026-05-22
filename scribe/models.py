@@ -33,7 +33,8 @@ class AbstractTranscriber(STTBackend):
                  silence_thresh=-40, stream_chunk_silence_break=0.6, realtime_commit_silence=0.6,
                  vad_mode="auto", vad_threshold=0.5, vad_min_silence_ms=300,
                  pseudo_streaming=False, stream_chunk_max=10.0,
-                 stream_chunk_min=1.5, stream_context_reset_silence=3.0,
+                 stream_chunk_min=1.5, stream_first_chunk_min=3.0,
+                 stream_context_reset_silence=3.0,
                  stream_context_length=200,
                  dry_run=False, debug=False):
         self.model_name = model_name
@@ -101,6 +102,17 @@ class AbstractTranscriber(STTBackend):
         self.pseudo_streaming = pseudo_streaming
         self.stream_chunk_max = stream_chunk_max
         self.stream_chunk_min = stream_chunk_min
+        # First-chunk minimum: applies to the very first chunk of a
+        # streaming thread (recording start, or just after a context-reset
+        # silence cleared `_streaming_context`). A higher floor here forces
+        # the first chunk to accumulate enough audio that Whisper can
+        # produce a properly-punctuated bootstrap transcript — the tail of
+        # which then seeds the rolling prompt for every chunk after it.
+        # Default 3 s vs. the regular 1.5 s: short pauses inside the first
+        # phrase no longer cut the chunk too early; subsequent chunks stay
+        # responsive at 1.5 s. Clamped to <= stream_chunk_max at use time
+        # so misconfiguration can't deadlock the chunker.
+        self.stream_first_chunk_min = stream_first_chunk_min
         self.stream_context_reset_silence = stream_context_reset_silence
         # Pseudo-streaming: cap on the rolling cross-chunk prompt context
         # in characters. Whisper's prompt window is 224 tokens, so ~200
@@ -232,6 +244,30 @@ class AbstractTranscriber(STTBackend):
         max_mode = silence_break is None
         fixed_break = not (auto_mode or max_mode)
 
+        # First-chunk floor override. An empty rolling context marks
+        # either the start of recording or the chunk right after a
+        # context-reset silence — both cases where Whisper has no prior
+        # text to bias on and benefits from a longer audio window for a
+        # punctuated bootstrap transcript. Once the rolling context is
+        # populated, fall back to the regular per-chunk floor.
+        #
+        # Gated additionally on stream_context_length > 0 so the Patient
+        # profile (context_length=0 → context never populates → every
+        # chunk would look "empty") falls back to the regular floor and
+        # an explicit `--stream-chunk-min 0.5` keeps short utterances
+        # committable. The override only makes sense when there *is* a
+        # rolling context whose bootstrap we're trying to protect.
+        #
+        # Clamped to <= stream_chunk_max so it can never sit above the
+        # force-cut threshold and deadlock the chunker (e.g. a user
+        # setting first-chunk-min=20 with chunk-max=10).
+        effective_chunk_min = (
+            min(self.stream_first_chunk_min, self.stream_chunk_max)
+            if (not self._streaming_context
+                and self.stream_context_length > 0)
+            else self.stream_chunk_min
+        )
+
         # Silence decision delegated to the configured SilenceGate. In dB
         # mode `in_utterance` picks LOW vs HIGH threshold (hysteresis); in
         # silero mode it's ignored (silero handles onset/offset smoothing
@@ -266,7 +302,7 @@ class AbstractTranscriber(STTBackend):
                 # loop resets start_time on each commit, so `elapsed`
                 # here always measures time since the last commit (or
                 # start of recording).
-                if session.waiting and buffer_ms >= self.stream_chunk_min * 1000:
+                if session.waiting and buffer_ms >= effective_chunk_min * 1000:
                     raise SilenceDetected(
                         f"Cut at silence after {elapsed:.2f}s "
                         f"(silent {sil_dur:.2f}s)"
@@ -315,14 +351,14 @@ class AbstractTranscriber(STTBackend):
             session.audio_buffer += silence_buffer_data[-length_of_half_a_second:].tobytes() + audio_bytes
             session.silence_buffer = b''
 
-        if elapsed >= self.stream_chunk_max and buffer_ms >= self.stream_chunk_min * 1000:
+        if elapsed >= self.stream_chunk_max and buffer_ms >= effective_chunk_min * 1000:
             if auto_mode:
                 # Best-silence-in-window: pick the longest tracked silence
                 # whose start position leaves at least stream_chunk_min of
                 # audio before the cut. The remainder (silence preroll
                 # plus subsequent speech) carries over to the next chunk
                 # via _pending_chunk_audio.
-                min_start_ms = self.stream_chunk_min * 1000
+                min_start_ms = effective_chunk_min * 1000
                 candidates = [(s, d) for (s, d) in session.silence_intervals
                               if s >= min_start_ms]
                 if candidates:

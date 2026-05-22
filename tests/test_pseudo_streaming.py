@@ -150,8 +150,12 @@ def test_pseudo_on_long_silence_does_not_commit_if_buffer_below_min():
 
 
 def test_pseudo_on_long_silence_commits():
+    # stream_first_chunk_min=1.5 opts out of the bootstrap-chunk floor so
+    # this test exercises silence-cut mechanics at the regular chunk_min,
+    # not the first-chunk override (covered separately below).
     backend = FakeBackend(model=None, samplerate=SR, pseudo_streaming=True,
-                          stream_chunk_silence_break=0.6, stream_chunk_max=10.0)
+                          stream_chunk_silence_break=0.6, stream_chunk_max=10.0,
+                          stream_first_chunk_min=1.5)
     backend.session = make_session(
         audio_buffer=loud_chunk(samples=_ABOVE_MIN),
         last_sound_time=time.time() - 1.0,        # been silent 1s > 0.6s
@@ -160,13 +164,104 @@ def test_pseudo_on_long_silence_commits():
         backend.transcribe_realtime_audio(silent_chunk())
 
 
+# First-chunk-min: bootstrap floor when the rolling context is empty --------
+
+def test_first_chunk_min_blocks_silence_cut_below_floor():
+    """With empty context + context_length > 0, the silence-cut should
+    require buffer >= stream_first_chunk_min (not the regular chunk_min).
+    A 2 s buffer between the two floors should NOT trigger a cut."""
+    backend = FakeBackend(model=None, samplerate=SR, pseudo_streaming=True,
+                          stream_chunk_silence_break=0.6, stream_chunk_max=10.0,
+                          stream_chunk_min=1.5, stream_first_chunk_min=3.0,
+                          stream_context_length=200)
+    backend._streaming_context = ""  # explicit: first chunk
+    backend.session = make_session(
+        audio_buffer=loud_chunk(samples=_ABOVE_MIN),   # 2s, between the floors
+        last_sound_time=time.time() - 1.0,             # silent 1s > 0.6s break
+    )
+    # Would have cut at the regular 1.5s floor — first-chunk override holds it.
+    backend.transcribe_realtime_audio(silent_chunk())
+
+
+def test_first_chunk_min_allows_cut_when_buffer_above_floor():
+    """Same setup but the buffer clears the first-chunk floor — cut fires."""
+    backend = FakeBackend(model=None, samplerate=SR, pseudo_streaming=True,
+                          stream_chunk_silence_break=0.6, stream_chunk_max=10.0,
+                          stream_chunk_min=1.5, stream_first_chunk_min=3.0,
+                          stream_context_length=200)
+    backend._streaming_context = ""
+    backend.session = make_session(
+        audio_buffer=loud_chunk(samples=SR * 4),       # 4s > first_chunk_min
+        last_sound_time=time.time() - 1.0,
+    )
+    with pytest.raises(SilenceDetected, match="Cut at silence"):
+        backend.transcribe_realtime_audio(silent_chunk())
+
+
+def test_first_chunk_min_inactive_once_context_populated():
+    """After the first chunk's text seeds the rolling tail, subsequent
+    chunks fall back to the regular stream_chunk_min — a 2s buffer cuts
+    even though it's below first_chunk_min."""
+    backend = FakeBackend(model=None, samplerate=SR, pseudo_streaming=True,
+                          stream_chunk_silence_break=0.6, stream_chunk_max=10.0,
+                          stream_chunk_min=1.5, stream_first_chunk_min=3.0,
+                          stream_context_length=200)
+    backend._streaming_context = "Some prior chunk's tail."
+    backend.session = make_session(
+        audio_buffer=loud_chunk(samples=_ABOVE_MIN),   # 2s, above regular floor
+        last_sound_time=time.time() - 1.0,
+    )
+    with pytest.raises(SilenceDetected, match="Cut at silence"):
+        backend.transcribe_realtime_audio(silent_chunk())
+
+
+def test_first_chunk_min_inactive_in_patient_mode():
+    """Patient profile uses stream_context_length=0 → context never
+    populates. The first-chunk override is gated on context_length > 0
+    so Patient-mode users keep their configured chunk_min for every
+    chunk and short utterances stay committable."""
+    backend = FakeBackend(model=None, samplerate=SR, pseudo_streaming=True,
+                          stream_chunk_silence_break=0.6, stream_chunk_max=300.0,
+                          stream_chunk_min=0.5, stream_first_chunk_min=3.0,
+                          stream_context_length=0)  # Patient
+    backend._streaming_context = ""  # always empty in this mode
+    backend.session = make_session(
+        audio_buffer=loud_chunk(samples=int(SR * 0.8)),  # 0.8s > 0.5s, < 3.0s
+        last_sound_time=time.time() - 1.0,
+    )
+    with pytest.raises(SilenceDetected, match="Cut at silence"):
+        backend.transcribe_realtime_audio(silent_chunk())
+
+
+def test_first_chunk_min_clamped_to_chunk_max():
+    """If first_chunk_min > stream_chunk_max the chunker would never be
+    able to commit a first chunk. Clamp at use time so misconfiguration
+    can't deadlock — first_chunk_min effectively becomes chunk_max."""
+    backend = FakeBackend(model=None, samplerate=SR, pseudo_streaming=True,
+                          stream_chunk_silence_break=0.6, stream_chunk_max=5.0,
+                          stream_chunk_min=1.5, stream_first_chunk_min=20.0,
+                          stream_context_length=200)
+    backend._streaming_context = ""
+    now = time.time()
+    backend.session = make_session(
+        # 5.5s buffer + elapsed past chunk_max → force-cut path.
+        # Without clamp: buffer would have to clear 20s. With clamp: 5s suffices.
+        audio_buffer=loud_chunk(samples=int(SR * 5.5)),
+        start_time=now - 6.0,
+        last_sound_time=now,
+    )
+    with pytest.raises(SilenceDetected, match="Force-cut"):
+        backend.transcribe_realtime_audio(loud_chunk())
+
+
 # Silence-cut fires before chunk-max elapses ----------------------------------
 
 def test_pseudo_on_commits_before_chunk_max_elapses():
     """Silence-cut fires whenever a pause >= stream_chunk_silence_break is detected,
     regardless of how much elapsed time has accumulated."""
     backend = FakeBackend(model=None, samplerate=SR, pseudo_streaming=True,
-                          stream_chunk_silence_break=0.6, stream_chunk_max=10.0)
+                          stream_chunk_silence_break=0.6, stream_chunk_max=10.0,
+                          stream_first_chunk_min=1.5)
     now = time.time()
     backend.session = make_session(
         audio_buffer=loud_chunk(samples=_ABOVE_MIN),
@@ -181,7 +276,8 @@ def test_pseudo_on_commits_before_chunk_max_elapses():
 
 def test_pseudo_on_force_cut_at_chunk_max():
     backend = FakeBackend(model=None, samplerate=SR, pseudo_streaming=True,
-                          stream_chunk_silence_break=0.6, stream_chunk_max=10.0)
+                          stream_chunk_silence_break=0.6, stream_chunk_max=10.0,
+                          stream_first_chunk_min=1.5)
     now = time.time()
     backend.session = make_session(
         audio_buffer=loud_chunk(samples=_ABOVE_MIN),
@@ -426,7 +522,8 @@ def test_auto_mode_cuts_at_longest_valid_silence():
     in _pending_chunk_audio for the next chunk."""
     backend = FakeBackend(model=None, samplerate=SR, pseudo_streaming=True,
                           stream_chunk_silence_break=0,
-                          stream_chunk_min=1.5, stream_chunk_max=10.0)
+                          stream_chunk_min=1.5, stream_first_chunk_min=1.5,
+                          stream_chunk_max=10.0)
     now = time.time()
     # 12s of audio in buffer — comfortably bigger than the cut offset
     # below, so the slice is well-defined.
@@ -458,7 +555,8 @@ def test_auto_mode_falls_back_to_force_cut_when_no_valid_silence():
     fall back to the brute force-cut at chunk_max."""
     backend = FakeBackend(model=None, samplerate=SR, pseudo_streaming=True,
                           stream_chunk_silence_break=0,
-                          stream_chunk_min=1.5, stream_chunk_max=10.0)
+                          stream_chunk_min=1.5, stream_first_chunk_min=1.5,
+                          stream_chunk_max=10.0)
     now = time.time()
     backend.session = make_session(
         audio_buffer=loud_chunk(samples=_ABOVE_MIN),
