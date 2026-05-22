@@ -31,7 +31,7 @@ app.
 
 After writing the desktop file, `scribe-install` checks whether you're
 on a Wayland session without `eitype` (the recommended typer backend
-for GNOME / KDE / Hyprland — see [keyboard.md](keyboard.md)). If so:
+for GNOME / KDE / Hyprland — see [output.md](output.md)). If so:
 
 - If `cargo` is already on your `$PATH`, it asks whether to run
   `cargo install --git https://github.com/Adam-D-Lewis/eitype` for you

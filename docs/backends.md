@@ -70,7 +70,7 @@ Vosk transcribes in real time and is very good at one language at a
 time, but tends to make more mistakes than Whisper and does not produce
 punctuation. It becomes really useful in longer, interactive sessions
 where the live "appears as you speak" UX matters — see
-[keyboard.md](keyboard.md) for how the keystroke mode interacts with
+[output.md](output.md) for how the keystroke mode interacts with
 streaming models.
 
 There are many [Vosk models](https://alphacephei.com/vosk/models)

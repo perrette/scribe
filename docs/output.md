@@ -1,9 +1,9 @@
-# Keyboard modes & typer backends
+# Output modes
 
-Scribe delivers transcribed text in one of four mutually-exclusive
-modes, selected via the `-m / --mode` CLI flag or the tray's
-**Options → Output** radio. The same four modes are exposed in both
-places.
+Scribe delivers transcribed text via exactly one of four
+mutually-exclusive output modes, selected with the `-m / --mode` CLI
+flag or the tray's **Options → Output** radio. The same four modes are
+exposed in both places.
 
 | `--mode` value          | What happens                                                                                                                                                                                                  |
 |-------------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
@@ -19,16 +19,28 @@ scribe --mode terminal    # terminal only
 scribe --mode file -o transcript.txt   # file only
 ```
 
-The mechanism inside `keystroke` mode (Ctrl+V at end vs paste-per-chunk)
-is auto-picked from the active model. Switching models via the Model
-menu re-evaluates the mechanism on the next recording — no need to
-re-pick the radio.
+## `keystroke` — paste into the focused window (default)
+
+In keystroke mode the transcription lands in whichever window has
+focus. The mechanism inside `keystroke` mode (Ctrl+V at end vs
+paste-per-chunk) is auto-picked from the active model:
+
+- **Batch models** (Whisper, Groq, OpenAI `gpt-4o-*`) copy the full
+  transcription to the clipboard and synthesise a single Ctrl+V at end
+  of recording.
+- **Streaming models** (Vosk, OpenAI `gpt-realtime-whisper`) paste each
+  chunk live as it arrives — "appears as you speak".
+- `--type-direct` (see below) bypasses the clipboard and types raw
+  keystrokes instead.
+
+Switching models via the Model menu re-evaluates the mechanism on the
+next recording — no need to re-pick the radio.
 
 > The clipboard is left holding the transcription after scribe finishes
 > — if you want to preserve your previous clipboard contents, save them
 > somewhere else first.
 
-## Pasting into a terminal
+### Pasting into a terminal
 
 Terminals (GNOME Terminal, Kitty, Alacritty, VS Code's integrated
 terminal, …) don't bind plain `Ctrl+V` to paste — they interpret it as
@@ -40,7 +52,7 @@ the moment scribe fires the paste: the terminal then sees
 remember Shift for terminal targets, nothing for GUI apps where plain
 `Ctrl+V` already works (including VS Code's editor pane).
 
-## `--type-direct` — bypass the clipboard
+### `--type-direct` — bypass the clipboard
 
 In keystroke mode `--type-direct` (or **Options → Keyboard → Input
 mode → keystroke** in the menu) types the transcription as raw
@@ -62,31 +74,15 @@ Switch your system keyboard layout to one that covers the script you're
 dictating, or stick to the paste path (plain `Ctrl+V`, or the Shift
 trick above) for lossless Unicode.
 
-## File output
+### Typer backends
 
-`--mode file` writes transcribed text to the file path given by
-`-o / --output-file` and suppresses every other output (no keystroke,
-no clipboard copy, no terminal print). The path is required; without
-it, scribe raises a `ValueError` at recording start. Each chunk is
-appended verbatim (no per-chunk newline injection — the backend's own
-chunk spacing controls the file format).
-
-```bash
-scribe --mode file -o ~/dictation.txt
-```
-
-From the tray, **Options → Output → Choose path…** opens a native
-file picker (tkinter) that sets the path and switches to File mode
-in one click. The File radio is greyed out until a path is configured.
-
-## Typer backends
-
-Whichever mode you pick, the Ctrl+V keystroke (or live per-chunk paste,
-or raw type-direct) goes through a *typer* backend. Scribe probes the
-available backends at startup and picks the first one that works in the
-current session. Backends that are *structurally incompatible* with
-your OS / session are hidden from the menu entirely — the **Keyboard →
-Backend** submenu only appears when there is a real choice.
+Whichever path you take inside keystroke mode — the end-of-recording
+Ctrl+V, the live per-chunk paste, or raw `--type-direct` — the actual
+key events go through a *typer* backend. Scribe probes the available
+backends at startup and picks the first one that works in the current
+session. Backends that are *structurally incompatible* with your OS /
+session are hidden from the menu entirely — the **Keyboard → Backend**
+submenu only appears when there is a real choice.
 
 | Backend  | Mechanism                            | Compatible with                                                       |
 |----------|--------------------------------------|-----------------------------------------------------------------------|
@@ -100,7 +96,7 @@ the tray / terminal menu under **Options → Keyboard → Backend**. The
 selected backend's name is logged at startup so you can tell which path
 your keystrokes are taking.
 
-### Per-OS behaviour
+#### Per-OS behaviour
 
 - **macOS / Windows** → `pynput` is the only compatible backend (Quartz
   / WinAPI, native and Unicode-correct). The Keyboard → Backend submenu
@@ -115,7 +111,7 @@ your keystrokes are taking.
   without setup; `eitype` not yet (no libei portal there); `pynput` /
   `ydotool` are the other fallbacks.
 
-## Ubuntu / Wayland caveats and recommended fix
+#### Ubuntu / Wayland caveats and recommended fix
 
 Ubuntu 24.04+ defaults to GNOME on Wayland. Without extra setup scribe
 falls back to `pynput` → XTest, which lands keystrokes in
@@ -178,7 +174,7 @@ Roadmap for native libei integration (eventual Python bindings,
 expanded compositor support) is tracked in
 [docs/roadmap-libei.md](roadmap-libei.md).
 
-## Realtime backend: delta coalescing
+### Realtime backend: delta coalescing
 
 The `gpt-realtime-whisper` backend emits one transcription delta per
 word/subword at ~30–80 ms intervals — much faster than the
@@ -208,3 +204,52 @@ coalesces in paste mode there for consistency, but it's harmless.
 This whole behaviour is realtime-specific — Vosk's per-phrase commits
 already arrive at a sane cadence, and the pseudo-streaming backends
 emit one chunk per silence cut (already coarse enough).
+
+## `clipboard` — copy to clipboard
+
+```bash
+scribe --mode clipboard
+```
+
+The transcription is copied to the system clipboard at end of recording
+and you press Ctrl+V (or Ctrl+Shift+V in a terminal) yourself. No
+keystrokes are synthesised, so there is no typer-backend involvement
+and no Wayland portal prompt — `pyperclip` / `wl-copy` is all that is
+needed.
+
+As with keystroke mode, the clipboard is left holding the
+transcription after scribe finishes; save any previous clipboard
+contents elsewhere first if you want to keep them.
+
+## `terminal` — print only (no clipboard, no keystroke)
+
+```bash
+scribe --mode terminal
+```
+
+The transcription is printed to scribe's own stdout and nothing else
+happens — the clipboard is untouched, no keystrokes are synthesised,
+no file is written. Useful for piping scribe into another tool, for
+debugging which text is actually being produced, or for sessions where
+you just want to read the transcription off the terminal.
+
+## `file` — write exclusively to `--output-file`
+
+```bash
+scribe --mode file -o ~/dictation.txt
+```
+
+`--mode file` appends transcribed text to the file path given by
+`-o / --output-file` and suppresses every other output (no keystroke,
+no clipboard copy, no terminal print). The four output modes are
+mutually exclusive — there is no double-write to file + keyboard.
+
+The path is required; without it, scribe raises a `ValueError` at
+recording start. Each chunk is appended verbatim (no per-chunk newline
+injection — the backend's own chunk spacing controls the file format).
+
+From the tray, **Options → Output → Choose path…** opens a native
+file picker (tkinter) that sets the path and switches to File mode in
+one click. The File radio is greyed out until a path is configured.
+If the chosen file already exists, an append-confirm dialog warns that
+new chunks will be appended to it before switching modes.

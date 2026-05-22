@@ -112,7 +112,7 @@ I personally use [OpenAI](https://openai.com/api/) with `gpt-4o-mini-transcribe`
   extras, Ubuntu / GNOME tray libs.
 - [Backends in detail](docs/backends.md) — model lists, when to pick
   which, the realtime model.
-- [Keyboard modes & typer backends](docs/keyboard.md) — keystroke vs
+- [Output modes & typer backends](docs/output.md) — keystroke vs
   clipboard, Wayland / `eitype`, `--type-direct`.
 - [System tray & global hotkeys](docs/tray.md) — menu tree, icon
   states, `SIGUSR1`/`SIGUSR2`.
@@ -125,6 +125,6 @@ I personally use [OpenAI](https://openai.com/api/) with `gpt-4o-mini-transcribe`
 
 Initially developed for Python 3 on Ubuntu 24.04 (GNOME + Wayland);
 works on macOS and Windows too. Wayland keystroke injection is
-convoluted but [solved](docs/keyboard.md). For dependencies of
+convoluted but [solved](docs/output.md). For dependencies of
 individual subsystems, check `pynput` (keyboard) and `pystray` (tray
 icon).

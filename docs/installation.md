@@ -74,7 +74,7 @@ be installed first so `PyGObject` can compile.
 
 The Python `pynput` package is the default typer and is pulled in by
 `[keyboard]` / `[all]`. The other typer backends (`eitype`, `wtype`,
-`ydotool`) are OS-level binaries — see [keyboard.md](keyboard.md) for
+`ydotool`) are OS-level binaries — see [output.md](output.md) for
 when you need them and how to install each.
 
 ## Model cache

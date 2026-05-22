@@ -62,7 +62,7 @@ flag suppresses only its own side (giving `--prompt ""` still loads
 
 | Flag                        | Purpose                                                                                     |
 |-----------------------------|---------------------------------------------------------------------------------------------|
-| `-m, --mode {keystroke,clipboard,terminal,file}` | Where transcribed text goes (default `keystroke`). `file` routes the transcript exclusively to `--output-file` and suppresses keyboard/clipboard output. See [keyboard.md](keyboard.md). |
+| `-m, --mode {keystroke,clipboard,terminal,file}` | Where transcribed text goes (default `keystroke`). `file` routes the transcript exclusively to `--output-file` and suppresses keyboard/clipboard output. See [output.md](output.md). |
 | `--typer {auto,eitype,pynput,wtype,ydotool}` | Keystroke-injection backend (default `auto`).                                |
 | `--type-direct`             | In keystroke mode, type the transcription as keystrokes instead of synthesising Ctrl+V.     |
 | `-o, --output-file FILE`    | Path where the transcription is appended when `--mode file`. *Required* in that mode and ignored otherwise — the four output modes are mutually exclusive (no double-write to file + keyboard, etc.). |
