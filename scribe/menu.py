@@ -600,6 +600,22 @@ class AppState(AbstractFrontendApp):
             return True
         return _cb
 
+    def cb_set_realtime_stream_mode(self, value) -> Callable:
+        """value=None → Live (gate off, commit-silence=0); value=float → Offline."""
+        def _cb(view, item):
+            gate = value is not None
+            commit_silence = 0.0 if value is None else value
+            self.o.realtime_gate = gate
+            self.params["realtime_gate"] = gate
+            self.o.realtime_commit_silence = commit_silence
+            self.params["realtime_commit_silence"] = commit_silence
+            if self.transcriber is not None and hasattr(self.transcriber, "_gate_enabled"):
+                self.transcriber._gate_enabled = gate
+                self.transcriber.realtime_commit_silence = commit_silence
+            self._refresh_tray_menu()
+            return True
+        return _cb
+
     def cb_set_output_file(self, view, item):
         ans = item.value(item)
         if not ans:
@@ -934,6 +950,13 @@ def _timeout_label(v) -> str:
     return _format_seconds(v)
 
 
+def _realtime_stream_label(v) -> str:
+    """None → 'Live'; float → 'Offline after Xs'."""
+    if v is None:
+        return "Live"
+    return f"Offline after {v:g}s"
+
+
 def _picker_submenu(name: str, choices: list, getter, value_to_label, cb_factory) -> Menu:
     """Radio submenu over a fixed value list.
 
@@ -1016,12 +1039,29 @@ def _stream_advanced_submenu(app_state) -> Menu:
                                                  app_state.cb_set_realtime_timeout))
     realtime_timeout_item.label_fn = lambda: f"Realtime timeout: {_timeout_label(get_realtime_timeout())}"
 
+    def get_realtime_stream_mode():
+        t = app_state.transcriber
+        if t is not None and hasattr(t, "_gate_enabled"):
+            return None if not t._gate_enabled else getattr(t, "realtime_commit_silence", 0.6)
+        gate = getattr(app_state.o, "realtime_gate", True)
+        return None if not gate else getattr(app_state.o, "realtime_commit_silence", 0.6)
+
+    realtime_stream_item = Item(
+        "rtstream",
+        _picker_submenu("Stream",
+                        [None, 0.6, 1.2, 2.0, 5.0, 10.0],
+                        get_realtime_stream_mode, _realtime_stream_label,
+                        app_state.cb_set_realtime_stream_mode),
+        visible=app_state._is_realtime)
+    realtime_stream_item.label_fn = lambda: f"Stream: {_realtime_stream_label(get_realtime_stream_mode())}"
+
     items = [
         chunk_min_item,
         chunk_max_item,
         silence_break_item,
         context_reset_item,
         realtime_timeout_item,
+        realtime_stream_item,
     ]
     return Menu(items, name="Stream (advanced)")
 
@@ -1059,10 +1099,6 @@ def _advanced_options_menu(app_state) -> Menu:
                      value=lambda item: getattr(app_state.transcriber, "vad_min_silence_ms", None),
                      type=int, help="[silero] Min silence duration (ms)",
                      visible=lambda *_: is_silero_mode()),
-        Item("g", app_state.cb_toggle_realtime_gate,
-             help="Realtime: drop silent frames (gate)",
-             checked=lambda item: bool(getattr(app_state.transcriber, "_gate_enabled", True)),
-             visible=app_state._is_realtime),
         SetValueItem("f", app_state.cb_set_output_file,
                      value=lambda item: getattr(app_state.o, "output_file", None) or "",
                      type=str, help="Output file"),
