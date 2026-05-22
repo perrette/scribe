@@ -659,6 +659,12 @@ class AppState(AbstractFrontendApp):
             return True
         return _cb
 
+    def cb_set_stream_context_length(self, value) -> Callable:
+        def _cb(view, item):
+            self._set_stream_attr("stream_context_length", value)
+            return True
+        return _cb
+
     def cb_set_stream_timeout(self, value) -> Callable:
         """Mode=Stream auto-stop timeout. Writes to o.stream_timeout and, if
         a Stream-mode session is currently armed, updates the live timeout."""
@@ -1074,6 +1080,13 @@ def _context_reset_label(v) -> str:
     return f"{v:g}× silence"
 
 
+def _context_length_label(v) -> str:
+    """0 → 'OFF' (no rolling context); int → 'N chars'."""
+    if not v:
+        return "OFF"
+    return f"{int(v)} chars"
+
+
 def _timeout_label(v) -> str:
     if v is None:
         return "Always On"
@@ -1119,6 +1132,7 @@ def _stream_advanced_submenu(app_state) -> Menu:
     def get_chunk_max(): return _get_attr("stream_chunk_max")
     def get_silence_break(): return _get_attr("stream_chunk_silence_break")
     def get_context_reset(): return _get_attr("stream_context_reset_silence")
+    def get_context_length(): return _get_attr("stream_context_length", 200)
     def get_stream_timeout(): return getattr(app_state.o, "stream_timeout", None)
 
     chunk_min_item = Item("min",
@@ -1156,11 +1170,19 @@ def _stream_advanced_submenu(app_state) -> Menu:
 
     context_reset_item = Item("reset",
                               _picker_submenu("Context reset",
-                                              [1.0, 1.5, 2.0, 3.0, math.inf],
+                                              [1.0, 1.5, 2.0, 3.0, 5.0, 10.0, math.inf],
                                               get_context_reset, _context_reset_label,
                                               app_state.cb_set_stream_context_reset_silence),
                               visible=app_state._is_batch_backend)
     context_reset_item.label_fn = _context_reset_parent_label
+
+    context_length_item = Item("clen",
+                               _picker_submenu("Context length",
+                                               [0, 50, 100, 200, 500, 1000],
+                                               get_context_length, _context_length_label,
+                                               app_state.cb_set_stream_context_length),
+                               visible=app_state._is_batch_backend)
+    context_length_item.label_fn = lambda: f"Context length: {_context_length_label(get_context_length())}"
 
     stream_timeout_item = Item("rt",
                                _picker_submenu("Stream timeout",
@@ -1190,6 +1212,7 @@ def _stream_advanced_submenu(app_state) -> Menu:
         chunk_max_item,
         silence_break_item,
         context_reset_item,
+        context_length_item,
         stream_timeout_item,
         realtime_stream_item,
     ]

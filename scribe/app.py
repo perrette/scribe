@@ -178,6 +178,7 @@ def _build_backend_kwargs(backend, model, language, samplerate, duration,
                           realtime_delay, realtime_gate,
                           pseudo_streaming, stream_chunk_max,
                           stream_chunk_min, stream_context_reset_silence,
+                          stream_context_length,
                           prompt_text, words, dry_run=False):
     # Cloud whisper variants (OpenAI batch, Groq, OpenAI realtime) take a
     # single `prompt` string — fold the word list into it. faster-whisper
@@ -205,6 +206,7 @@ def _build_backend_kwargs(backend, model, language, samplerate, duration,
                     pseudo_streaming=pseudo_streaming, stream_chunk_max=stream_chunk_max,
                     stream_chunk_min=stream_chunk_min,
                     stream_context_reset_silence=stream_context_reset_silence,
+                    stream_context_length=stream_context_length,
                     prompt=prompt_text,
                     hotwords=(" ".join(words) if words else None),
                     model_kwargs={"download_root": download_folder_whisper},
@@ -223,6 +225,7 @@ def _build_backend_kwargs(backend, model, language, samplerate, duration,
                     pseudo_streaming=pseudo_streaming, stream_chunk_max=stream_chunk_max,
                     stream_chunk_min=stream_chunk_min,
                     stream_context_reset_silence=stream_context_reset_silence,
+                    stream_context_length=stream_context_length,
                     prompt=merged_prompt,
                     download_folder=download_folder_whisper_futo,
                     dry_run=dry_run,
@@ -237,6 +240,7 @@ def _build_backend_kwargs(backend, model, language, samplerate, duration,
                       pseudo_streaming=pseudo_streaming, stream_chunk_max=stream_chunk_max,
                       stream_chunk_min=stream_chunk_min,
                       stream_context_reset_silence=stream_context_reset_silence,
+                      stream_context_length=stream_context_length,
                       prompt=merged_prompt,
                       dry_run=dry_run,
                       **vad_kwargs)
@@ -261,6 +265,7 @@ def get_transcriber(model=None, backend=None, dummy=False, interactive=True, lan
                     realtime_delay="medium", realtime_gate=True,
                     pseudo_streaming=False, stream_chunk_max=10.0,
                     stream_chunk_min=1.5, stream_context_reset_silence=3.0,
+                    stream_context_length=200,
                     prompt=None, prompt_file=None, words=None, words_file=None,
                     dry_run=False, **kwargs):
     if dummy:
@@ -301,6 +306,7 @@ def get_transcriber(model=None, backend=None, dummy=False, interactive=True, lan
                                           realtime_delay, realtime_gate,
                                           pseudo_streaming, stream_chunk_max,
                                           stream_chunk_min, stream_context_reset_silence,
+                                          stream_context_length,
                                           prompt_text, word_list, dry_run=dry_run)
     try:
         return _build_transcriber(backend, **backend_kwargs)
@@ -475,6 +481,12 @@ def get_parser():
                        help="Multiplier of --stream-chunk-silence-break above which the "
                             "rolling cross-chunk prompt context is discarded in --stream mode "
                             "(default: %(default)s×). Use 'inf' to never reset context.")
+    group.add_argument("--stream-context-length", default=200, type=int,
+                       help="Max character length of the rolling cross-chunk prompt "
+                            "context fed back to each new chunk in --stream mode "
+                            "(default: %(default)s). 0 disables the rolling context "
+                            "entirely — each chunk is transcribed without any "
+                            "cross-chunk prompt.")
     group.add_argument("--clip-timeout", default=120.0, type=float,
                        help="Auto-stop Clip recording after this many seconds "
                             "(default: %(default)s).")

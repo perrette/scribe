@@ -29,18 +29,12 @@ class AbstractTranscriber(STTBackend):
     backend = None
     _frozen_options = frozenset()
 
-    # Pseudo-streaming: trailing chars of previous chunks fed back as
-    # `initial_prompt` so whisper has cross-chunk context (capitalization
-    # after a period, article gender, language lock). Whisper's prompt
-    # window is 224 tokens — ~200 chars of French stays well under it and
-    # leaves room for the user's static prompt + words list.
-    _STREAMING_CONTEXT_MAX_CHARS = 200
-
     def __init__(self, model, model_name=None, language=None, samplerate=16000, timeout=None, model_kwargs={},
                  silence_thresh=-40, stream_chunk_silence_break=0.6, realtime_commit_silence=0.6,
                  vad_mode="auto", vad_threshold=0.5, vad_min_silence_ms=300,
                  pseudo_streaming=False, stream_chunk_max=10.0,
                  stream_chunk_min=1.5, stream_context_reset_silence=3.0,
+                 stream_context_length=200,
                  dry_run=False):
         self.model_name = model_name
         self.language = language
@@ -108,6 +102,13 @@ class AbstractTranscriber(STTBackend):
         self.stream_chunk_max = stream_chunk_max
         self.stream_chunk_min = stream_chunk_min
         self.stream_context_reset_silence = stream_context_reset_silence
+        # Pseudo-streaming: cap on the rolling cross-chunk prompt context
+        # in characters. Whisper's prompt window is 224 tokens, so ~200
+        # chars of French stays well under it and leaves room for the
+        # user's static prompt + words list. 0 disables the rolling
+        # context entirely (each chunk transcribes without any cross-
+        # chunk prompt) — the OFF semantic surfaced as a picker value.
+        self.stream_context_length = stream_context_length
         # Set by RecordingSession.__init__; backend reads/writes session.audio_buffer
         # etc. inside transcribe_realtime_audio / finalize.
         self.session = None
@@ -328,17 +329,18 @@ class AbstractTranscriber(STTBackend):
 
     def update_streaming_context(self, text):
         """Append the latest chunk's text to the rolling context and trim
-        to the last `_STREAMING_CONTEXT_MAX_CHARS` characters. No-op in
-        batch mode (no chunking → nothing to carry forward).
+        to the last `self.stream_context_length` characters. No-op in
+        batch mode (no chunking → nothing to carry forward) or when the
+        length cap is 0 (OFF — user disabled rolling context entirely).
         """
-        if not self.pseudo_streaming:
+        if not self.pseudo_streaming or self.stream_context_length <= 0:
             return
         text = (text or "").strip()
         if not text:
             return
         combined = f"{self._streaming_context} {text}".strip() if self._streaming_context else text
-        if len(combined) > self._STREAMING_CONTEXT_MAX_CHARS:
-            combined = combined[-self._STREAMING_CONTEXT_MAX_CHARS:]
+        if len(combined) > self.stream_context_length:
+            combined = combined[-self.stream_context_length:]
         self._streaming_context = combined
 
     def clear_streaming_context(self):
