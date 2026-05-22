@@ -659,12 +659,12 @@ class AppState(AbstractFrontendApp):
             return True
         return _cb
 
-    def cb_set_realtime_timeout(self, value) -> Callable:
-        """Mode=Stream auto-stop timeout. Writes to o.realtime_timeout and, if
+    def cb_set_stream_timeout(self, value) -> Callable:
+        """Mode=Stream auto-stop timeout. Writes to o.stream_timeout and, if
         a Stream-mode session is currently armed, updates the live timeout."""
         def _cb(view, item):
-            self.o.realtime_timeout = value
-            self.params["realtime_timeout"] = value
+            self.o.stream_timeout = value
+            self.params["stream_timeout"] = value
             if self.transcriber is not None and self._is_mode_stream():
                 self.transcriber.timeout = value
             self._refresh_tray_menu()
@@ -1119,7 +1119,7 @@ def _stream_advanced_submenu(app_state) -> Menu:
     def get_chunk_max(): return _get_attr("stream_chunk_max")
     def get_silence_break(): return _get_attr("stream_chunk_silence_break")
     def get_context_reset(): return _get_attr("stream_context_reset_silence")
-    def get_realtime_timeout(): return getattr(app_state.o, "realtime_timeout", None)
+    def get_stream_timeout(): return getattr(app_state.o, "stream_timeout", None)
 
     chunk_min_item = Item("min",
                           _picker_submenu("Chunk min",
@@ -1162,12 +1162,12 @@ def _stream_advanced_submenu(app_state) -> Menu:
                               visible=app_state._is_batch_backend)
     context_reset_item.label_fn = _context_reset_parent_label
 
-    realtime_timeout_item = Item("rt",
-                                 _picker_submenu("Realtime timeout",
-                                                 [120, 300, 600, 3600, None],
-                                                 get_realtime_timeout, _timeout_label,
-                                                 app_state.cb_set_realtime_timeout))
-    realtime_timeout_item.label_fn = lambda: f"Realtime timeout: {_timeout_label(get_realtime_timeout())}"
+    stream_timeout_item = Item("rt",
+                               _picker_submenu("Stream timeout",
+                                               [120, 300, 600, 3600, None],
+                                               get_stream_timeout, _timeout_label,
+                                               app_state.cb_set_stream_timeout))
+    stream_timeout_item.label_fn = lambda: f"Stream timeout: {_timeout_label(get_stream_timeout())}"
 
     def get_realtime_stream_mode():
         t = app_state.transcriber
@@ -1190,7 +1190,7 @@ def _stream_advanced_submenu(app_state) -> Menu:
         chunk_max_item,
         silence_break_item,
         context_reset_item,
-        realtime_timeout_item,
+        stream_timeout_item,
         realtime_stream_item,
     ]
     return Menu(items, name="Stream (advanced)")

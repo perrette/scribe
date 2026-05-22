@@ -253,7 +253,7 @@ def _build_backend_kwargs(backend, model, language, samplerate, duration,
 
 
 def get_transcriber(model=None, backend=None, dummy=False, interactive=True, language=None,
-                    samplerate=None, clip_timeout=120.0, realtime_timeout=None,
+                    samplerate=None, clip_timeout=120.0, stream_timeout=None,
                     silence_db=None, stream_chunk_silence_break=0.6, realtime_commit_silence=0.6,
                     vad_mode="auto", vad_threshold=0.5, vad_min_silence_ms=300,
                     download_folder_vosk=None, download_folder_whisper=None,
@@ -290,7 +290,7 @@ def get_transcriber(model=None, backend=None, dummy=False, interactive=True, lan
     # mode ignores it. Default -40 dBFS — keeps the gate simple by design.
     if silence_db is None:
         silence_db = -40.0
-    duration = realtime_timeout if pseudo_streaming else clip_timeout
+    duration = stream_timeout if pseudo_streaming else clip_timeout
     prompt_text, word_list = _resolve_prompt_and_words(prompt, prompt_file, words, words_file)
     backend_kwargs = _build_backend_kwargs(backend, model, language, samplerate, duration,
                                           silence_db, stream_chunk_silence_break,
@@ -478,9 +478,12 @@ def get_parser():
     group.add_argument("--clip-timeout", default=120.0, type=float,
                        help="Auto-stop Clip recording after this many seconds "
                             "(default: %(default)s).")
-    group.add_argument("--realtime-timeout", default=None, type=float,
+    group.add_argument("--stream-timeout", default=None, type=float,
                        help="Auto-stop Stream recording after this many seconds "
                             "(default: always on — no auto-stop).")
+    # Hidden back-compat alias kept from when Stream mode was called Realtime.
+    group.add_argument("--realtime-timeout", dest="stream_timeout", type=float,
+                       default=argparse.SUPPRESS, help=argparse.SUPPRESS)
 
     group = parser.add_argument_group("Frontend")
     group.add_argument("--frontend", choices=["tray", "terminal"], default="tray",
