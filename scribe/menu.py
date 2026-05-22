@@ -616,19 +616,6 @@ class AppState(AbstractFrontendApp):
             return True
         return _cb
 
-    def cb_set_output_file(self, view, item):
-        ans = item.value(item)
-        if not ans:
-            self.o.output_file = None
-            return True
-        invalid_regex = re.compile(r'[^A-Za-z0-9_\-\\\/\.]')
-        if not invalid_regex.search(ans):
-            self.o.output_file = ans
-        else:
-            print(f"Invalid characters: {' '.join(map(repr, invalid_regex.findall(ans)))}")
-            print(f"Invalid file name: {repr(ans)}")
-        return True
-
     def cb_set_typer(self, typer_name: str) -> Callable:
         """Factory: return a callback that sets the active typer backend."""
         def _cb(view, item):
@@ -1099,9 +1086,6 @@ def _advanced_options_menu(app_state) -> Menu:
                      value=lambda item: getattr(app_state.transcriber, "vad_min_silence_ms", None),
                      type=int, help="[silero] Min silence duration (ms)",
                      visible=lambda *_: is_silero_mode()),
-        SetValueItem("f", app_state.cb_set_output_file,
-                     value=lambda item: getattr(app_state.o, "output_file", None) or "",
-                     type=str, help="Output file"),
     ]
     return Menu(items, name="Advanced")
 
