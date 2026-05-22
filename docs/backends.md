@@ -361,3 +361,40 @@ arbitrarily long pauses.
 
 Short pauses (mid-sentence punctuation) keep the context; the cut at
 the start of every new recording also clears it.
+
+### Streaming recipes — two profiles
+
+The defaults stream phrases in as you talk; the Patient profile waits
+for natural pauses and transcribes one utterance at a time. They make
+opposite trade-offs around the same fundamental tension: short audio
+windows give Whisper less to work with, so cross-chunk *context*
+matters more in Balanced, less in Patient.
+
+#### Balanced (default)
+
+```bash
+scribe --stream
+```
+
+Phrases commit every ~10 s or on a 0.6 s pause, with a 200-char
+rolling prompt carrying earlier text forward as context for each new
+chunk. Whisper sees short audio windows in isolation; the rolling
+context partially compensates by telling the model what was just
+said. Good live-feel, small per-chunk accuracy hit vs. Patient.
+
+#### Patient (auto-clip)
+
+```bash
+scribe --stream \
+       --stream-chunk-min 0.5 \
+       --stream-chunk-max 300 \
+       --stream-chunk-silence-break 2 \
+       --stream-context-length 0
+```
+
+Each utterance is a complete self-contained sentence. scribe waits
+for a 2 s pause, transcribes the whole thing at once, then waits for
+the next one. No rolling context (`context-length 0`) because each
+chunk is already a full utterance — there's nothing short to
+compensate for. Highest per-chunk accuracy; no text appears until
+you finish talking.

@@ -113,7 +113,8 @@ I personally use [OpenAI](https://openai.com/api/) with `gpt-4o-mini-transcribe`
 - [Installation & dependencies](docs/installation.md) — PortAudio,
   extras, Ubuntu / GNOME tray libs.
 - [Backends in detail](docs/backends.md) — model lists, when to pick
-  which, the realtime model.
+  which, the realtime model, [Streaming recipes](docs/backends.md#streaming-recipes--two-profiles)
+  (Balanced / Patient profiles).
 - [Output modes & typer backends](docs/output.md) — keystroke vs
   clipboard, Wayland / `eitype`, `--type-direct`.
 - [System tray & global hotkeys](docs/tray.md) — menu tree, icon
