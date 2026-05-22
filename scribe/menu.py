@@ -62,10 +62,10 @@ def format_model_label(backend_name: str, model_id: str, include_vendor: bool = 
         lang = _vosk_language_for_model(model_id)
         display = lang if lang is not None else model_id
         if include_vendor:
-            return f"{vendor} {display} (local, streaming)"
+            return f"{vendor} {display} (local) (stream)"
         return display
 
-    streaming_suffix = " (streaming)" if supports_streaming else ""
+    streaming_suffix = " (stream)" if supports_streaming else ""
     qualifier = " (local)" if (is_local and include_vendor) else ""
 
     if include_vendor:
