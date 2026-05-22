@@ -1085,19 +1085,39 @@ def _toggle_options_menu(app_state) -> Menu:
                              visible=app_state._is_mode_clip)
     clip_timeout_item.label_fn = lambda: f"Clip timeout: {_timeout_label(get_clip_timeout())}"
 
+    # Keyboard submenu groups Mode (where text goes) and Backend (which
+    # typer implementation) under one parent — both are keyboard-output
+    # concerns. The Backend sub-item carries the "Type directly" toggle
+    # so it stays useful even on platforms with only one compatible
+    # typer; hide only if nothing is compatible at all (unlikely).
+    # Parent + sub-item labels reflect the active selection so the user
+    # sees the current config without drilling in (same pattern as Mode,
+    # Model, Language above).
+    def _kbd_typer():
+        return getattr(app_state.o, "typer", None) or "auto"
+
+    mode_subitem = Item("mode", _output_mode_submenu(app_state), help="Mode")
+    mode_subitem.label_fn = lambda: f"Mode: {_output_mode(app_state.o)}"
+
+    keyboard_items = [mode_subitem]
+    if len(_compatible_typers()) >= 1:
+        backend_subitem = Item("backend", _typer_menu(app_state), help="Backend")
+        backend_subitem.label_fn = lambda: f"Backend: {_kbd_typer()}"
+        keyboard_items.append(backend_subitem)
+    keyboard_item = Item("kbd", Menu(keyboard_items, name="Keyboard"), help="Keyboard")
+    keyboard_item.label_fn = lambda: (
+        f"Keyboard: {_output_mode(app_state.o)} ({_kbd_typer()})"
+        if len(_compatible_typers()) >= 1
+        else f"Keyboard: {_output_mode(app_state.o)}"
+    )
+
     items = [
         stream_advanced_item,
         clip_timeout_item,
-        Item("mode", _output_mode_submenu(app_state), help="Keyboard mode"),
+        keyboard_item,
         Item("x", app_state.cb_toggle_frontend, help="Toggle tray app mode",
              checked=lambda item: getattr(app_state.o, "frontend", None) == "tray",
              visible=is_terminal),
-        # The Keyboard backend submenu always carries the "Type directly"
-        # checkbox, so it's worth showing even when only one typer is
-        # compatible (macOS, Windows — pynput only). Hide only if no typer
-        # is compatible at all (unlikely).
-        *([Item("backend", _typer_menu(app_state), help="Keyboard backend")]
-          if len(_compatible_typers()) >= 1 else []),
         Item("vad", _vad_options_menu(app_state), help="VAD"),
     ]
     return Menu(items, name="Options")
