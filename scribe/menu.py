@@ -1427,9 +1427,34 @@ def build_menu(app_state) -> Menu:
         model_item,
         language_item,
         Item("Options", _toggle_options_menu(app_state)),
+        Item("About", _about_submenu(), help="About"),
         Item("Quit", app_state.cb_quit),
     ]
     return Menu(items)
+
+
+def _open_url(url: str) -> Callable:
+    """Action callback that launches the system browser at *url*."""
+    def _cb(view, item):
+        import webbrowser
+        webbrowser.open(url)
+        return True
+    return _cb
+
+
+def _about_submenu() -> Menu:
+    """About: app identity, version, license, source link. Static — no
+    AppState needed since none of the entries depend on live state."""
+    try:
+        from scribe._version import __version__ as version
+    except ImportError:
+        version = "dev"
+    items = [
+        Item(f"Scribe v{version}", _noop_callback),
+        Item("© Mahé Perrette · MIT License", _noop_callback),
+        Item("GitHub →", _open_url("https://github.com/perrette/scribe")),
+    ]
+    return Menu(items, name="About")
 
 
 # NOTE: pystray menus are static once built — SetValueItem entries cannot be
