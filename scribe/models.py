@@ -1,3 +1,4 @@
+import math
 import os
 import time
 from pathlib import Path
@@ -39,7 +40,7 @@ class AbstractTranscriber(STTBackend):
                  silence_thresh=-40, stream_chunk_silence_break=0.6, realtime_commit_silence=0.6,
                  vad_mode="auto", vad_threshold=0.5, vad_min_silence_ms=300,
                  pseudo_streaming=False, stream_chunk_max=10.0,
-                 stream_chunk_min=1.5, stream_context_reset_silence=1.5):
+                 stream_chunk_min=1.5, stream_context_reset_silence=3.0):
         self.model_name = model_name
         self.language = language
         self.model = model
@@ -210,8 +211,10 @@ class AbstractTranscriber(STTBackend):
             # stale prompt bias every subsequent chunk. The mid-utterance
             # case is mild; the contamination case was severe.
             sil_dur = time.time() - session.last_sound_time
-            if (sil_dur >= self.stream_context_reset_silence
-                    and self._streaming_context):
+            reset_threshold = self.stream_context_reset_silence * self.stream_chunk_silence_break
+            if (self._streaming_context
+                    and not math.isinf(reset_threshold)
+                    and sil_dur >= reset_threshold):
                 self.log(f"Clearing chunk context after {sil_dur:.2f}s pause")
                 self.clear_streaming_context()
             session.last_sound_time = time.time()

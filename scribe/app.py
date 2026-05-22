@@ -256,7 +256,7 @@ def get_transcriber(model=None, backend=None, dummy=False, interactive=True, lan
                     download_folder_whisper_futo=None,
                     realtime_delay="medium", realtime_gate=True,
                     pseudo_streaming=False, stream_chunk_max=10.0,
-                    stream_chunk_min=1.5, stream_context_reset_silence=1.5,
+                    stream_chunk_min=1.5, stream_context_reset_silence=3.0,
                     prompt=None, prompt_file=None, words=None, words_file=None,
                     **kwargs):
     if dummy:
@@ -450,10 +450,10 @@ def get_parser():
                             "--stream mode (default: %(default)s). The cut fires once "
                             "a pause of this duration is detected and the buffer "
                             "exceeds --stream-chunk-min.")
-    group.add_argument("--stream-context-reset-silence", default=1.5, type=float,
-                       help="Silence duration in seconds above which the rolling "
-                            "cross-chunk prompt context is discarded in --stream mode "
-                            "(default: %(default)s). A long pause implies a topic change.")
+    group.add_argument("--stream-context-reset-silence", default=3.0, type=float,
+                       help="Multiplier of --stream-chunk-silence-break above which the "
+                            "rolling cross-chunk prompt context is discarded in --stream mode "
+                            "(default: %(default)s×). Use 'inf' to never reset context.")
 
     group = parser.add_argument_group("Frontend")
     group.add_argument("--frontend", choices=["tray", "terminal"], default="tray",

@@ -279,7 +279,7 @@ def _make_pseudo_backend(**overrides):
 
 
 def test_context_reset_short_pause_preserves_context():
-    """A pause shorter than _CONTEXT_RESET_SILENCE_S (1.5s) keeps the
+    """A pause shorter than the resolved context-reset threshold keeps the
     rolling prompt — short intra-sentence punctuation breaks should still
     benefit from cross-chunk grammar continuity."""
     backend = _make_pseudo_backend()
@@ -292,7 +292,7 @@ def test_context_reset_short_pause_preserves_context():
 
 
 def test_context_reset_long_pause_clears_context():
-    """A pause >= _CONTEXT_RESET_SILENCE_S between two utterances drops the
+    """A pause >= the resolved context-reset threshold between two utterances drops the
     rolling prompt — protects the new utterance from being biased toward
     the old one."""
     backend = _make_pseudo_backend()
@@ -307,9 +307,9 @@ def test_context_reset_long_pause_clears_context():
 
 
 def test_context_reset_at_exact_threshold_clears():
-    """Boundary: sil_dur == _CONTEXT_RESET_SILENCE_S clears (>= check)."""
+    """Boundary: sil_dur == resolved threshold (multiplier × silence-break) clears (>= check)."""
     backend = _make_pseudo_backend()
-    threshold = backend.stream_context_reset_silence
+    threshold = backend.stream_context_reset_silence * backend.stream_chunk_silence_break
     # Subtract a tiny epsilon FROM the past so by the time
     # transcribe_realtime_audio computes time.time() - last_sound_time the
     # gap is just above threshold. Avoids flakiness from clock granularity.
@@ -322,13 +322,13 @@ def test_context_reset_at_exact_threshold_clears():
 
 
 def test_context_reset_mid_chunk_with_long_pause_also_clears():
-    """Mid-utterance long pauses (audio_buffer non-empty AND sil_dur >= 1.5s)
+    """Mid-utterance long pauses (audio_buffer non-empty AND sil_dur >= reset threshold)
     also clear context. We dropped the `not session.audio_buffer` guard
     because a single noise spike during an inter-utterance pause was
     enough to fill audio_buffer below the commit floor and block the
     reset (see test_context_reset_survives_noise_spike_during_pause).
     Sacrificing the rare genuine mid-utterance case is the accepted
-    trade-off: a ≥1.5s break inside one sentence is unusual, and even
+    trade-off: a ≥1.8s break inside one sentence is unusual, and even
     then losing one sentence of cross-chunk priming is mild compared to
     the self-reinforcing contamination loop the guard was enabling."""
     backend = _make_pseudo_backend()
@@ -378,7 +378,7 @@ def test_context_reset_survives_noise_spike_during_pause():
       1. User finishes a phrase → commit fires → context = "write a test".
       2. During the pause, a single brief noise spike crosses the silence
          threshold (keyboard click, fan, breath).
-      3. The user pauses for several seconds (well over 1.5s).
+      3. The user pauses for several seconds (well over the context-reset threshold).
       4. The user resumes a new phrase.
 
     Before the fix the reset was gated on `not session.audio_buffer`; the
@@ -396,7 +396,7 @@ def test_context_reset_survives_noise_spike_during_pause():
     backend.transcribe_realtime_audio(loud_chunk(samples=int(SR * 0.05)))
     assert backend.session.audio_buffer, "spike should have landed in buffer"
 
-    # (3) long silent pause (well over the 1.5s context-reset threshold).
+    # (3) long silent pause (well over the context-reset threshold).
     # We don't have a way to advance time without sleeping; nudge
     # last_sound_time backwards instead.
     backend.session.last_sound_time = time.time() - 3.0
