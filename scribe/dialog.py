@@ -7,6 +7,32 @@ Kept scribe-local for now so the worktree is self-contained; promotion to
 from __future__ import annotations
 
 
+def select_file_open(
+    title: str = "Choose file",
+    initial_dir: str | None = None,
+    initial_file: str | None = None,
+    filetypes: list[tuple[str, str]] | None = None,
+) -> str | None:
+    """Open a native 'Open' file dialog for an existing file. Returns the
+    chosen path or None if the user cancelled. Same Tk-lifecycle pattern as
+    ``select_file_save`` (withdrawn root, destroy in finally) so repeated
+    invocations from the tray menu don't leak top-level windows."""
+    from tkinter import Tk, filedialog
+
+    root = Tk()
+    root.withdraw()
+    try:
+        path = filedialog.askopenfilename(
+            title=title,
+            initialdir=initial_dir,
+            initialfile=initial_file,
+            filetypes=filetypes or [("All files", "*.*"), ("Text", "*.txt")],
+        )
+        return path or None
+    finally:
+        root.destroy()
+
+
 def select_file_save(
     title: str = "Choose output file",
     initial_dir: str | None = None,

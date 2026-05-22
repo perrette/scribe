@@ -514,6 +514,73 @@ class AppState(AbstractFrontendApp):
         self._refresh_tray_menu()
         return True
 
+    def cb_pick_prompt_file_path(self, view, item):
+        """Open a native 'Open File' dialog and route the chosen file as the
+        prompt source. Updates ``o.prompt_file`` + ``self.params``, then
+        re-resolves the prompt/words and pushes the result into the live
+        transcriber's ``_prompt`` / ``_hotwords`` so the new bias takes
+        effect on the next chunk. Cancel → no-op."""
+        return self._pick_prompt_or_words("prompt_file", "Choose prompt file")
+
+    def cb_pick_words_file_path(self, view, item):
+        """Same as :meth:`cb_pick_prompt_file_path` but for the words file."""
+        return self._pick_prompt_or_words("words_file", "Choose words file")
+
+    def cb_reload_prompt_files(self, view, item):
+        """Re-read the currently-selected prompt + words files from disk
+        without opening a dialog. Lets the user edit ``prompt.txt`` /
+        ``words.txt`` in a text editor and pick up the change with a single
+        click instead of having to re-select the same file via the picker."""
+        self._reload_prompt_into_transcriber()
+        self._refresh_tray_menu()
+        return True
+
+    def _pick_prompt_or_words(self, attr, title):
+        """Shared core for the two file pickers — ``attr`` is the namespace
+        key (``"prompt_file"`` or ``"words_file"``) and ``title`` is the
+        dialog caption."""
+        from os.path import basename, dirname
+
+        from scribe.app import SCRIBE_CONFIG_DIR
+        from scribe.dialog import select_file_open
+
+        current = getattr(self.o, attr, None)
+        initial_dir = dirname(current) if current else SCRIBE_CONFIG_DIR
+        initial_file = basename(current) if current else None
+        path = select_file_open(title=title,
+                                initial_dir=initial_dir,
+                                initial_file=initial_file)
+        if path is None:
+            return True
+        setattr(self.o, attr, path)
+        self.params[attr] = path
+        self._reload_prompt_into_transcriber()
+        self._refresh_tray_menu()
+        return True
+
+    def _reload_prompt_into_transcriber(self):
+        """Re-resolve ``--prompt`` / ``--prompt-file`` / ``--words`` /
+        ``--words-file`` from the current ``self.o`` snapshot and push the
+        composed result into the live transcriber. No-op when no transcriber
+        is attached (e.g. during early menu construction in tests)."""
+        from scribe.app import _resolve_prompt_and_words, compose_prompt_for_backend
+
+        prompt_text, word_list = _resolve_prompt_and_words(
+            getattr(self.o, "prompt", None),
+            getattr(self.o, "prompt_file", None),
+            getattr(self.o, "words", None),
+            getattr(self.o, "words_file", None),
+        )
+        t = self.transcriber
+        if t is None:
+            return
+        backend = getattr(t, "backend", None)
+        composed_prompt, composed_hotwords = compose_prompt_for_backend(
+            backend, prompt_text, word_list)
+        t._prompt = composed_prompt
+        if hasattr(t, "_hotwords"):
+            t._hotwords = composed_hotwords
+
     def cb_set_input_mode(self, type_direct: bool) -> Callable:
         """Factory: callback for the Keyboard → Input mode radio.
 
@@ -1312,6 +1379,51 @@ def _keyboard_advanced_submenu(app_state) -> Menu:
     return Menu(items, name="Keyboard (advanced)")
 
 
+def _prompt_status_label(o) -> str:
+    """Short status string for the Options → Prompt label: which of the two
+    files is loaded, e.g. ``"prompt+words"``, ``"words only"``, ``"none"``.
+    Keeps the menu line compact while still telling the user whether *any*
+    bias is in effect; basenames live inside the submenu items."""
+    has_prompt = bool(getattr(o, "prompt_file", None) or getattr(o, "prompt", None))
+    has_words = bool(getattr(o, "words_file", None) or getattr(o, "words", None))
+    if has_prompt and has_words:
+        return "prompt + words"
+    if has_prompt:
+        return "prompt only"
+    if has_words:
+        return "words only"
+    return "none"
+
+
+def _prompt_files_submenu(app_state) -> Menu:
+    """Options → Prompt submenu: pickers for the prompt file and words file.
+
+    Each leaf's label shows the basename of the currently-loaded file (or
+    "(none)") so the user can see at a glance which file is biasing the
+    model. Click → native Open File dialog. Mirrors the Output → Choose
+    path… picker UX. Both fall back to ``~/.config/scribe/`` (resolved via
+    platformdirs in :data:`scribe.app.SCRIBE_CONFIG_DIR`) as the initial
+    directory when no file is currently set."""
+    from os.path import basename
+
+    def _label(attr, kind):
+        path = getattr(app_state.o, attr, None)
+        return f"{kind} file: {basename(path) if path else '(none)'}"
+
+    prompt_item = Item("prompt", app_state.cb_pick_prompt_file_path,
+                       help="Prompt file (free-text style hint)")
+    prompt_item.label_fn = lambda: _label("prompt_file", "Prompt")
+    words_item = Item("words", app_state.cb_pick_words_file_path,
+                      help="Words file (vocabulary bias)")
+    words_item.label_fn = lambda: _label("words_file", "Words")
+    # Reload re-reads the currently-selected files from disk — handy after
+    # editing prompt.txt / words.txt in a text editor, no need to re-select
+    # them via the picker.
+    reload_item = Item("Reload now", app_state.cb_reload_prompt_files,
+                       help="Re-read the selected files from disk")
+    return Menu([prompt_item, words_item, reload_item], name="Prompt")
+
+
 def _toggle_options_menu(app_state) -> Menu:
     is_terminal = _is_terminal_frontend(app_state)
 
@@ -1336,6 +1448,17 @@ def _toggle_options_menu(app_state) -> Menu:
     output_item = Item("output", _output_mode_submenu(app_state), help="Output")
     output_item.label_fn = lambda: f"Output: {_output_mode_label(app_state.o)}"
 
+    # Prompt sub-menu: file pickers for the prompt file + words file so the
+    # user can see which file is biasing the model and swap it without
+    # restarting. Visible only for backends that actually consume the
+    # prompt; vosk silently ignores it and openai-realtime rejects it
+    # server-side.
+    prompt_item = Item("prompt", _prompt_files_submenu(app_state), help="Prompt")
+    prompt_item.label_fn = lambda: (
+        f"Prompt: "
+        f"{_prompt_status_label(app_state.o)}"
+    )
+
     # Keyboard sub-menu: only meaningful when Output=Keyboard. Holds the
     # Input mode (keystroke vs paste) and the Backend typer radio.
     keyboard_item = Item("kbd", _keyboard_advanced_submenu(app_state),
@@ -1351,6 +1474,7 @@ def _toggle_options_menu(app_state) -> Menu:
         stream_advanced_item,
         clip_timeout_item,
         output_item,
+        prompt_item,
         keyboard_item,
         Item("x", app_state.cb_toggle_frontend, help="Toggle tray app mode",
              checked=lambda item: getattr(app_state.o, "frontend", None) == "tray",
