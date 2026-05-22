@@ -648,9 +648,19 @@ def create_app(micro, app_state):
     session = RecordingSession(backend=transcriber, error_callback=show_error_dialog)
     app_state.session = session
 
-    image = Image.open(Path(scribe_data.__file__).parent / "share" / "icon.png")
-    image_recording = Image.open(Path(scribe_data.__file__).parent / "share" / "icon_recording.png")
-    image_writing = Image.open(Path(scribe_data.__file__).parent / "share" / "icon_writing.png")
+    # Source PNGs are 406×406 high-res; most system tray hosts expect
+    # ~16–32 px and either scale poorly or render at native size. Pre-
+    # scale here so the tray icon matches OS conventions everywhere.
+    _TRAY_ICON_SIZE = 32
+
+    def _load_tray_icon(name):
+        img = Image.open(Path(scribe_data.__file__).parent / "share" / name)
+        img.thumbnail((_TRAY_ICON_SIZE, _TRAY_ICON_SIZE), Image.LANCZOS)
+        return img
+
+    image = _load_tray_icon("icon.png")
+    image_recording = _load_tray_icon("icon_recording.png")
+    image_writing = _load_tray_icon("icon_writing.png")
     # Composite (red + writing 'a'): shown while recording AND the silence
     # gate says speech is active. Gives the user a visual confirmation that
     # the audio is actually being captured/sent — not just sitting in

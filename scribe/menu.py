@@ -29,7 +29,7 @@ _VENDOR_PREFIX = {
     "openai": "OpenAI",
     "groq": "Groq",
     "whisper": "Whisper",
-    "whisper-futo": "Whisper (FUTO)",
+    "whisper-futo": "Whisper FUTO",
     "vosk": "Vosk",
 }
 
