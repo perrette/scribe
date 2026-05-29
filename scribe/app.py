@@ -2,6 +2,7 @@ import os
 from pathlib import Path
 import tomllib
 import signal
+import sys
 import argparse
 import platformdirs
 from scribe.audio import Microphone
@@ -599,6 +600,17 @@ def get_parser():
                        help="Whisper models offered in the tray menu.")
     group.add_argument("--whisper-futo-models", nargs="*", default=whisper_futo_models,
                        help="FUTO ACFT Whisper models offered in the tray menu.")
+    _hk_record, _hk_cancel = _default_hotkeys()
+    group.add_argument("--hotkey-record", default=_hk_record,
+                       help="Global hotkey to toggle recording in tray mode "
+                            "(pynput combo syntax, e.g. '<cmd>+c', '<ctrl>+<alt>+c'; "
+                            "<cmd> is the Super/Windows/Command key). "
+                            "Default: %(default)s (OS-specific).")
+    group.add_argument("--hotkey-cancel", default=_hk_cancel,
+                       help="Global hotkey to cancel an in-flight recording in tray mode. "
+                            "Default: %(default)s (OS-specific).")
+    group.add_argument("--no-hotkeys", action="store_false", dest="hotkeys",
+                       help="Disable the in-app global hotkey listener (tray mode).")
 
     return parser
 
@@ -743,6 +755,82 @@ def start_recording(micro, session, o, callback=None, **greetings):
 
 
 
+def _default_hotkeys():
+    """Return OS-appropriate (record, cancel) global-hotkey combos.
+
+    Super+C / Super+Z are typically free on Linux/X11, but poor defaults
+    elsewhere: on Windows the Win key combos collide with the shell (Win+C →
+    Copilot, Win+Z → Snap Layouts) and pynput's non-suppressing hook lets *both*
+    the OS action and our callback fire; on macOS <cmd> combos clash with
+    copy/undo. So default to Ctrl+Alt+C / Ctrl+Alt+Z off Linux, where those
+    chords are normally unbound. All values stay overridable via the CLI.
+    """
+    if sys.platform == "linux":
+        return "<cmd>+c", "<cmd>+z"
+    return "<ctrl>+<alt>+c", "<ctrl>+<alt>+z"
+
+
+def _start_global_hotkeys(icon, app_state):
+    """Start a pynput global-hotkey listener bound to the configured combos.
+
+    Mirrors the SIGUSR1/SIGUSR2 handlers (toggle record / cancel). Platform
+    support is uneven and intentionally best-effort — the Unix signal path
+    remains the supported route where global capture is restricted:
+
+      * Windows: works (Win32 hooks). Avoid OS-reserved Win+key combos.
+      * Linux/X11: works.
+      * Linux/Wayland: the compositor blocks global key grabs, so the listener
+        won't fire — use SIGUSR1/2 bound to a desktop shortcut instead.
+      * macOS: needs Accessibility/Input-Monitoring permission.
+
+    Runs as a daemon thread so it never blocks shutdown. Returns the listener
+    (or None when disabled/unavailable) and never raises — a failure here
+    must not take down the tray.
+    """
+    o = app_state.o
+    if not getattr(o, "hotkeys", True):
+        return None
+
+    _rec_default, _cancel_default = _default_hotkeys()
+    record_combo = getattr(o, "hotkey_record", _rec_default)
+    cancel_combo = getattr(o, "hotkey_cancel", _cancel_default)
+
+    try:
+        from pynput import keyboard
+    except Exception as exc:  # pragma: no cover - pynput is a base dep
+        print(colored(f"Global hotkeys disabled (pynput unavailable): {exc}", "light_red"))
+        return None
+
+    def _on_record():
+        app_state.cb_record(icon, None)
+
+    def _on_cancel():
+        if icon._session.busy:
+            app_state.cb_cancel(icon, None)
+
+    mapping = {}
+    if record_combo:
+        mapping[record_combo] = _on_record
+    if cancel_combo:
+        mapping[cancel_combo] = _on_cancel
+    if not mapping:
+        return None
+
+    try:
+        listener = keyboard.GlobalHotKeys(mapping)
+        listener.daemon = True
+        listener.start()
+    except Exception as exc:
+        print(colored(f"Global hotkeys unavailable ({exc}); "
+                      "use the tray menu or SIGUSR1/2.", "light_red"))
+        return None
+
+    shown = " / ".join(c for c in (record_combo, cancel_combo) if c)
+    print(f"Global hotkeys: {colored(shown, 'light_blue', attrs=['bold'])} "
+          "(record / cancel)")
+    return listener
+
+
 def create_app(micro, app_state):
     """Construct the system-tray pystray Icon from the unified menu spec.
 
@@ -830,6 +918,10 @@ def create_app(micro, app_state):
     if hasattr(signal, "SIGUSR2"):
         register_signal_toggle(signal.SIGUSR2,
                                lambda: icon._session.busy and app_state.cb_cancel(icon, None))
+
+    # In-app global hotkeys (cross-platform, incl. Windows where SIGUSR* don't
+    # exist). Kept on the icon so the reference lives as long as the tray does.
+    icon._hotkey_listener = _start_global_hotkeys(icon, app_state)
 
     return icon
 

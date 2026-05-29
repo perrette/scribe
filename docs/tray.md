@@ -114,8 +114,46 @@ disabled "<vendor> — <reason>" row so you know what's missing.
 
 ## Global hotkey integration
 
-In tray / app mode scribe writes its PID to a pidfile and listens for
-two signals:
+### In-app global hotkeys
+
+In tray / app mode scribe runs a built-in global-hotkey listener (via
+`pynput`, a base dependency). Defaults are **OS-specific** so they land on
+chords that are normally free on each platform:
+
+| Action          | Linux (X11)   | Windows / macOS     |
+|-----------------|---------------|---------------------|
+| toggle record   | `Super`+`C`   | `Ctrl`+`Alt`+`C`    |
+| cancel          | `Super`+`Z`   | `Ctrl`+`Alt`+`Z`    |
+
+On Windows the Win-key chords are avoided on purpose: `Win`+`C` (Copilot)
+and `Win`+`Z` (Snap Layouts) are claimed by the shell, and pynput's hook
+doesn't suppress the key, so *both* the OS action and scribe's callback
+would fire. On macOS `Cmd` chords collide with copy/undo. The combos are
+**configurable** either way:
+
+```bash
+scribe --hotkey-record "<cmd>+c" --hotkey-cancel "<cmd>+z"   # Super/Win/Cmd + C/Z
+scribe --no-hotkeys                                          # turn the listener off
+```
+
+(`<cmd>` is the Super / Windows / Command key in pynput syntax.)
+
+**Platform support is uneven** — this is why scribe also keeps the Unix
+signal mechanism below:
+
+| Platform        | In-app global hotkeys                                                |
+|-----------------|---------------------------------------------------------------------|
+| Windows         | Works out of the box (default `Ctrl`+`Alt`+`C/Z`).                  |
+| Linux (X11)     | Works out of the box (default `Super`+`C/Z`).                       |
+| Linux (Wayland) | **Doesn't work** — the compositor blocks global key capture. Use the SIGUSR1/2 + custom-shortcut path below instead. |
+| macOS           | Needs Accessibility / Input-Monitoring permission (System Settings → Privacy & Security). |
+
+The listener is best-effort: if the OS won't grant a global hook, scribe
+logs a line and keeps running (tray + signals still work).
+
+### Unix signals (Linux / macOS)
+
+scribe writes its PID to a pidfile and listens for two signals:
 
 - `SIGUSR1` — toggle recording (same as clicking Record / Stop).
 - `SIGUSR2` — cancel an in-flight recording.
