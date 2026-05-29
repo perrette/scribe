@@ -25,13 +25,29 @@ cloud-based APIs, batch and streaming workflows.
 
 ## Install
 
+**Linux / macOS:**
+
 ```bash
 sudo apt-get install portaudio19-dev xclip   # Ubuntu; macOS: brew install portaudio
 pip install scribe-cli[all]
 export GROQ_API_KEY=YOURAPIKEY                # or OPENAI_API_KEY, or skip and run local
 ```
 
-See documentation below for setting up keyboard input on Ubuntu Wayland.
+**Windows** (PowerShell) — no system packages needed; `sounddevice` bundles
+PortAudio and the clipboard is native, so skip the `apt`/`brew` step:
+
+```powershell
+py -m venv .venv
+.\.venv\Scripts\Activate.ps1          # if blocked: Set-ExecutionPolicy -Scope CurrentUser RemoteSigned
+pip install scribe-cli[whisper]        # local Whisper; or [all], or a cloud backend
+$env:GROQ_API_KEY = "YOURAPIKEY"        # or OPENAI_API_KEY, or skip and run local
+```
+
+The tray app and keyboard typing work out of the box on Windows — `pynput`
+and `pystray` are regular dependencies, and there is nothing to create by
+hand (no `C:\tmp`). See [docs/installation.md](docs/installation.md#windows)
+for the full Windows walkthrough, and the documentation below for setting up
+keyboard input on Ubuntu Wayland.
 
 
 ## Usage
@@ -133,8 +149,24 @@ I personally use [OpenAI](https://openai.com/api/) with `gpt-4o-mini-transcribe`
 
 ## Compatibility
 
-Initially developed for Python 3 on Ubuntu 24.04 (GNOME + Wayland);
-works on macOS and Windows too. Wayland keystroke injection is
-convoluted but [solved](docs/output.md). For dependencies of
-individual subsystems, check `pynput` (keyboard) and `pystray` (tray
-icon).
+| OS                 | Status                                                              |
+|--------------------|---------------------------------------------------------------------|
+| Ubuntu 24.04       | Primary dev platform (GNOME, X11 and Wayland).                      |
+| macOS              | Works.                                                              |
+| Windows 11         | Tested and working on Python 3.14 (64-bit / `win_amd64`). Every dependency resolves a ready-made wheel — no toolchain or Python downgrade needed. |
+
+Wayland keystroke injection is convoluted but [solved](docs/output.md).
+For dependencies of individual subsystems, check `pynput` (keyboard) and
+`pystray` (tray icon).
+
+**Windows notes:**
+
+- The tray icon is hidden under the taskbar overflow arrow (`^`) by
+  default. Pin it via *Settings → Personalization → Taskbar → Other
+  system tray icons*.
+- A **single click** on the tray icon fires the default action (Record).
+  This is a free bonus of pystray's Win32 backend; on Ubuntu the
+  AppIndicator backend only opens the menu (a backend limitation, not a
+  bug).
+- If recording fails, allow mic access under *Settings → Privacy &
+  security → Microphone → "Let desktop apps access your microphone"*.

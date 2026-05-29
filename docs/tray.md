@@ -26,9 +26,17 @@ recording / waiting, transcribing, and idle.
 Transcription and API errors are surfaced as a pop-up dialog instead
 of just crashing the tray.
 
-The tray requires `pystray` (and on Linux, `PyGObject` plus the
-appindicator system libs — see [installation.md](installation.md)).
-This is included with `pip install scribe-cli[all]` or `[app]`.
+The tray uses `pystray`, which is a **base dependency** — it ships with
+the plain `pip install scribe-cli`, so the default tray works on Windows
+and macOS with no extras. On Linux the AppIndicator backend additionally
+needs `PyGObject` plus the appindicator system libs; install those via
+`[app]` or `[all]` (see [installation.md](installation.md)).
+
+**Click behaviour differs by platform.** On Windows, a single click on
+the tray icon fires the default action (Record), because pystray's Win32
+backend can activate the default menu item. On Ubuntu the AppIndicator
+backend doesn't support a click-to-default action, so a click only opens
+the menu. This is a pystray backend difference, not a scribe bug.
 
 You can predefine which models appear in the tray menu with
 `--vosk-models`, `--whisper-models`, and `--whisper-futo-models`:

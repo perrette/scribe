@@ -21,7 +21,10 @@ On macOS use Homebrew:
 brew install portaudio
 ```
 
-(Windows ships everything needed via the wheels.)
+On Windows there are **no system packages to install**: `sounddevice`
+bundles PortAudio in its wheel and the clipboard uses the native Windows
+API, so neither `portaudio19-dev` nor `xclip` apply. See the
+[Windows quickstart](#windows) below.
 
 ## Python package
 
@@ -50,13 +53,51 @@ the four backends and the tray UI:
 | `[vosk]`     | `vosk`                                             | local Vosk backend (streaming)          |
 | `[openai]`   | `openai`, `soundfile`                              | OpenAI cloud backend (incl. realtime)   |
 | `[groq]`     | `openai`, `soundfile`                              | Groq cloud backend                      |
-| `[keyboard]` | `pynput`                                           | the `pynput` typer (XTest/Quartz/WinAPI)|
-| `[app]`      | `pystray`, `PyGObject`                             | system tray icon                        |
-| `[all]`      | all of the above                                   | one-shot setup                          |
+| `[keyboard]` | `pynput`                                           | back-compat only — `pynput` is a base dep now |
+| `[app]`      | `PyGObject` (Linux only)                            | the Linux AppIndicator tray binding     |
+| `[all]`      | every backend + Linux tray binding                 | one-shot setup                          |
+
+> **`pynput` and `pystray` are base dependencies.** The default run uses
+> the keyboard typer and the system-tray app, so both ship with the plain
+> `pip install scribe-cli` — you do **not** need `[keyboard]` or `[app]`
+> for the standard experience. `[app]` now only adds the Linux-only
+> `PyGObject` AppIndicator binding (skipped automatically on Windows/macOS
+> via a `sys_platform == 'linux'` marker, since it needs GTK and won't
+> pip-install elsewhere).
 
 You need at least one backend extra (or none if you only plan to use
 cloud backends *and* already have the `openai` package). The `groq`
 backend reuses the `openai` client, so `[openai]` covers both.
+
+## Windows
+
+Windows 11 is tested and working on Python 3.14 (64-bit). Every
+dependency — `onnxruntime`, `faster-whisper`/`ctranslate2`,
+`pystray`/`Pillow`, `pynput` — resolves a ready-made `win_amd64` wheel,
+so there is no build toolchain to install and no need to downgrade
+Python.
+
+From PowerShell:
+
+```powershell
+py -m venv .venv
+.\.venv\Scripts\Activate.ps1
+# If activation is blocked by the execution policy, run once:
+#   Set-ExecutionPolicy -Scope CurrentUser RemoteSigned
+pip install -e .[whisper]      # or [all], or a cloud backend like [openai]
+scribe
+```
+
+That's the whole setup. There are **no system packages** to install
+(`apt`/`portaudio19-dev`/`xclip` are Linux-only) and **nothing to create
+by hand** — earlier builds needed a manual `C:\tmp` folder, which is no
+longer the case.
+
+- **Tray icon:** appears under the taskbar overflow arrow (`^`) by
+  default; pin it via *Settings → Personalization → Taskbar → Other
+  system tray icons*. A single click on the icon starts recording.
+- **Microphone:** if recording fails, enable *Settings → Privacy &
+  security → Microphone → "Let desktop apps access your microphone"*.
 
 ## Ubuntu / GNOME tray dependencies
 

@@ -21,12 +21,17 @@ dependencies = [
     "unidecode",
     "termcolor",
     "platformdirs",
-    "desktop-ai-core>=0.2.0",
+    "desktop-ai-core>=0.3.1",      # >=0.3.1 carries the portable-tempdir pidfile fix (no more /tmp on Windows)
     # Runs the bundled silero VAD ONNX model (~2 MB shipped in scribe_data).
     # In base deps so silero is available out of the box — see scribe/audio.py.
     # `faster-whisper` already pulls it transitively, so installing with
     # [whisper] is free; standalone adds ~57 MB which is trivial for an STT tool.
     "onnxruntime",
+    # Default run uses the keyboard typer (needs pynput) and the system-tray app
+    # (needs pystray). Both are small, have wheels on all platforms, and back the
+    # README's headline zero-config experience, so they live in base deps.
+    "pynput",
+    "pystray",
 ]
 
 classifiers = [
@@ -82,17 +87,23 @@ keywords = [
 ]
 
 [project.optional-dependencies]
-keyboard = ["pynput"]
+keyboard = ["pynput"]                          # kept for back-compat; pynput is a base dep now
 whisper = ["faster-whisper"]
-whisper-futo = ["pywhispercpp"]
+whisper-futo = ["pywhispercpp"]                # CPU wheels exist but have known Windows DLL
+                                               # issues; keep strictly opt-in (not in [all])
 vosk = ["vosk"]
-app = ["pystray", "PyGObject"]
+# pystray is a base dep now; [app] only adds the Linux-only AppIndicator binding.
+# PyGObject needs GTK system libraries and does not pip-install on Windows/macOS,
+# so the PEP 508 marker skips it everywhere except Linux.
+app = ["PyGObject; sys_platform == 'linux'"]
 openai = ["openai>=2.37.0,<3", "soundfile"]
 groq = ["openai>=2.37.0,<3", "soundfile"]
 # [vad] is now a no-op alias kept for back-compat (`pip install scribe-cli[vad]`
 # was the documented install before onnxruntime moved into base deps).
 vad = []
-all = ["pynput", "faster-whisper", "pywhispercpp", "openai>=2.37.0,<3", "soundfile", "vosk", "pystray"]
+# pynput + pystray are base deps; pywhispercpp intentionally omitted due to
+# Windows build/DLL friction (install via scribe-cli[whisper-futo] if wanted).
+all = ["faster-whisper", "openai>=2.37.0,<3", "soundfile", "vosk", "PyGObject; sys_platform == 'linux'"]
 
 
 [tool.setuptools]
