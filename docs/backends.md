@@ -275,30 +275,13 @@ Once the buffer has grown to at least `--stream-chunk-min` (default
 (default 10 s) regardless of silence, to cap latency. The session
 continues until you stop it manually.
 
-The **first** chunk of a streaming thread uses a different floor:
-`--stream-first-chunk-min` (default 3 s). The bootstrap chunk has no
-prior text to bias Whisper's punctuation/casing, so a longer audio
-window lets the model produce a properly-punctuated transcript whose
-tail then seeds the rolling prompt for every chunk after it.
-Subsequent chunks fall back to `--stream-chunk-min`. The override
-also re-engages right after a context-reset silence (i.e. when a long
-pause cleared the rolling tail — see *Cross-chunk prompt context*
-below). Set `--stream-first-chunk-min` equal to `--stream-chunk-min`
-to disable the override. It's automatically inactive when
-`--stream-context-length 0` (Patient profile), where there is no
-rolling context to bootstrap. Internally clamped to `≤
---stream-chunk-max` so a misconfigured pair can't deadlock the
-chunker.
-
-**Short-utterance safety net.** If the bootstrap chunk floor is
-holding back a commit, a pause that reaches the context-reset
-threshold (default `3 × 0.6 s = 1.8 s`) flushes whatever is in the
-buffer anyway — as long as it clears the lower `--stream-chunk-min`
-floor (the Whisper-hallucination guard, default 1.5 s). The
-rationale: a pause that long means the user has stopped talking; the
-first-chunk override is a quality-bias, not a reason to drop
-their utterance. Inactive when `--stream-context-reset-silence inf`
-(you've explicitly opted out of pause-driven commits).
+The first chunk uses a higher floor (`--stream-first-chunk-min`,
+default 3 s) so the bootstrap chunk has enough audio to seed the
+rolling prompt for the rest. Auto-disabled when
+`--stream-context-length 0` (Patient). If you stop talking before
+the floor is reached, a pause past `--stream-context-reset-silence ×
+--stream-chunk-silence-break` (default 1.8 s) flushes the buffer
+anyway — your utterance is never stranded.
 
 ### Does pseudo-streaming change the API cost?
 
