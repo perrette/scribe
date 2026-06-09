@@ -9,9 +9,9 @@
 
 # Scribe
 
-**Talk. It types.** Scribe is a speech-to-text CLI and tray app that pipes
-transcribed text straight into the focused window. It supports local and
-cloud-based APIs, batch and streaming workflows.
+Scribe is a speech-to-text CLI and tray app that pipes transcribed text
+into the focused window. It supports local and cloud-based APIs, batch and
+streaming workflows.
 
 {%
   include-markdown "../README.md"
@@ -45,7 +45,7 @@ scribe
 
 ## From the same author
 
-A small toolkit for a Markdown-first scientific workflow.
+A few related tools I maintain, useful in a Markdown-based scientific workflow.
 
 **Scientific writing & data**
 

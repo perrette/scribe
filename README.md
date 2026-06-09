@@ -4,9 +4,9 @@
 
 # Scribe  <img src="https://github.com/perrette/scribe/raw/main/scribe_data/share/icon.png" width="48">
 
-**Talk. It types.** Scribe is a speech-to-text CLI and tray app that
-pipes transcribed text straight into the focused window. It supports local and
-cloud-based APIs, batch and streaming workflows.
+Scribe is a speech-to-text CLI and tray app that pipes transcribed text
+into the focused window. It supports local and cloud-based APIs, batch and
+streaming workflows.
 
 <!-- intro-start -->
 - **Five backends, one interface.** Records from your mic and transcribes via
@@ -90,7 +90,7 @@ Full documentation lives at **<https://perrette.github.io/scribe/>**:
 
 ## From the same author
 
-A small toolkit for a Markdown-first scientific workflow.
+A few related tools I maintain, useful in a Markdown-based scientific workflow.
 
 **Scientific writing & data**
 
@@ -109,7 +109,7 @@ A small toolkit for a Markdown-first scientific workflow.
 |--------------------|---------------------------------------------------------------------|
 | Ubuntu 24.04       | Primary dev platform (GNOME, X11 and Wayland).                      |
 | macOS              | Works.                                                              |
-| Windows 11         | Tested and working on Python 3.14 (64-bit / `win_amd64`). Every dependency resolves a ready-made wheel — no toolchain or Python downgrade needed. |
+| Windows 11         | Tested and working on Python 3.14 (64-bit / `win_amd64`). Dependencies resolve pre-built wheels; no C toolchain or Python downgrade needed. |
 
 Wayland keystroke injection is convoluted but
 [solved](https://perrette.github.io/scribe/output/).
