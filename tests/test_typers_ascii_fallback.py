@@ -1,14 +1,15 @@
 """Regression tests for the duplicated-prefix bug in keystroke typers.
 
-wtype / eitype / pynput emit keystrokes left-to-right and abort mid-string
-when the active xkb layout can't produce a character -- but the typeable
-prefix is already out by then. The old recovery (retry the whole string
-transliterated to ASCII) re-typed that prefix, so a chunk like
-"le message dicte" (with an accent) landed as "le message dict" plus
-"le message dicte".
+Keystroke typers emit left-to-right and abort mid-string when the active xkb
+layout can't produce a character -- but the typeable prefix is already out by
+then. The old recovery (retry the whole string transliterated to ASCII)
+re-typed that prefix, so a chunk like "le message dicte" (with an accent)
+landed as "le message dict" plus "le message dicte".
 
-type_ascii_safe types maximal ASCII runs whole and degrades only the
-individual untypable characters, so the prefix is never re-emitted.
+type_ascii_safe (used by the in-process pynput typer) types maximal ASCII runs
+whole and degrades only the individual untypable characters, so the prefix is
+never re-emitted. The subprocess typers (wtype / eitype) avoid the same bug by
+transliterating up front and emitting once per chunk -- see their own modules.
 """
 import pytest
 

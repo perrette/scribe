@@ -16,18 +16,23 @@ def type_ascii_safe(
     """Type ``text`` via ``emit`` while degrading untypable characters to ASCII
     **without re-emitting already-typed text**.
 
-    Keystroke typers (wtype / eitype / pynput) emit left-to-right and abort
-    mid-string when the active xkb layout can't produce a character — but the
-    prefix is already out by then. The naive recovery (retry the whole string
-    transliterated to ASCII) re-types that prefix, so a chunk like
-    "le message dicté" lands as "le message dict" + "le message dicte" — the
-    duplicated-prefix bug.
+    Keystroke typers emit left-to-right and abort mid-string when the active
+    xkb layout can't produce a character — but the prefix is already out by
+    then. The naive recovery (retry the whole string transliterated to ASCII)
+    re-types that prefix, so a chunk like "le message dicté" lands as
+    "le message dict" + "le message dicte" — the duplicated-prefix bug.
 
     Instead, emit maximal ASCII runs in one call each (always layout-typeable)
     and, for each individual non-ASCII character, try it raw and fall back to
     its ASCII transliteration on ``errors``. Unicode survives on layouts that
     support it; the rest degrades per-character with no duplication. Failures
-    on ASCII content are genuine (compositor / daemon) and propagate.
+    on ASCII content are genuine and propagate.
+
+    Used by the in-process ``pynput`` typer, where one ``emit`` per token is
+    cheap. The subprocess typers (``wtype`` / ``eitype``) instead transliterate
+    up front and emit once per chunk — splitting there would spawn a separate
+    short-lived virtual keyboard per token, and Electron/Wayland apps drop
+    input from those.
     """
     for token in _ASCII_RUN_OR_CHAR.findall(text):
         if token.isascii():
