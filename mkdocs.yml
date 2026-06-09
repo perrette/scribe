@@ -1,0 +1,76 @@
+site_name: Scribe
+site_description: Speech-to-text CLI and system-tray app that types transcribed text into the focused window
+site_url: https://perrette.github.io/scribe/
+repo_url: https://github.com/perrette/scribe
+repo_name: perrette/scribe
+edit_uri: edit/main/
+
+# All narrative content already lives as Markdown in docs/ and README.md.
+# Nothing is duplicated here: the homepage pulls the README in via the
+# include-markdown plugin, and every other page is an existing docs/*.md file.
+docs_dir: docs
+
+theme:
+  name: material
+  icon:
+    repo: fontawesome/brands/github
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/weather-night
+        name: Switch to dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/weather-sunny
+        name: Switch to light mode
+  features:
+    - navigation.instant
+    - navigation.tracking
+    - navigation.sections
+    - navigation.top
+    - toc.follow
+    - search.suggest
+    - search.highlight
+    - content.code.copy
+    - content.action.edit
+
+plugins:
+  - search
+  - include-markdown
+
+markdown_extensions:
+  - admonition
+  - attr_list
+  - md_in_html
+  - tables
+  - toc:
+      permalink: true
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.superfences
+  - pymdownx.inlinehilite
+  - pymdownx.snippets
+  - pymdownx.details
+  - pymdownx.emoji:
+      emoji_index: !!python/name:material.extensions.emoji.twemoji
+      emoji_generator: !!python/name:material.extensions.emoji.to_svg
+
+nav:
+  - Home: index.md
+  - Getting started:
+      - Installation: installation.md
+      - Quickstart: quickstart.md
+  - Guides:
+      - Backends: backends.md
+      - Output modes: output.md
+      - System tray & hotkeys: tray.md
+      - Desktop entry & autostart: desktop-install.md
+      - CLI reference: cli.md
+  - Development:
+      - Roadmap — native Wayland (libei): roadmap-libei.md

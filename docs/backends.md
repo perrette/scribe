@@ -76,7 +76,7 @@ streaming models.
 There are many [Vosk models](https://alphacephei.com/vosk/models)
 available; a handful are pre-mapped to common languages (`en`, `fr`,
 `de`, `it`) in
-[`scribe/models.toml`](../scribe/models.toml). Pick one with
+[`scribe/models.toml`](https://github.com/perrette/scribe/blob/main/scribe/models.toml). Pick one with
 `-l <lang>` or browse the full list interactively from the menu.
 
 ## `openai` (OpenAI cloud)
@@ -230,7 +230,7 @@ column in the table above):
   multilingual coverage for English accuracy.
 - **Vosk** — language isn't a runtime parameter; vosk ships a
   separate model per language. `-l fr` looks up the vosk model
-  pre-mapped to French in [`scribe/models.toml`](../scribe/models.toml)
+  pre-mapped to French in [`scribe/models.toml`](https://github.com/perrette/scribe/blob/main/scribe/models.toml)
   and instantiates that one. Vosk has no auto-detect path, so the
   Language menu's `Auto` entry on vosk falls back to a sensible
   default — the tray shows `Auto (🇬🇧 en)` to make this explicit

@@ -37,7 +37,7 @@ scribe has two output paths into the focused app:
    added pain of layout-dependent character handling and 100+ keystrokes
    per utterance.
 
-Both paths live in [`scribe/keyboard.py`](../scribe/keyboard.py).
+Both paths live in [`scribe/keyboard.py`](https://github.com/perrette/scribe/blob/main/scribe/keyboard.py).
 
 ## Target architecture
 
@@ -85,7 +85,7 @@ delegates `paste_text()` to `Typer.paste()`.
 No new functionality; pure refactor so that subsequent phases plug in cleanly.
 
 - Extract `Typer` protocol + `PynputTyper` from
-  [`scribe/keyboard.py`](../scribe/keyboard.py).
+  [`scribe/keyboard.py`](https://github.com/perrette/scribe/blob/main/scribe/keyboard.py).
 - Move `paste_text()` and `safe_type_text()` into `PynputTyper`.
 - `type_text(...)` becomes a thin facade that resolves a typer via
   `pick_typer()` and delegates. Keep the public signature unchanged so

@@ -7,7 +7,7 @@ scribe --help
 ```
 
 The flags are grouped to mirror the source-of-truth in
-[`scribe/app.py`](../scribe/app.py).
+[`scribe/app.py`](https://github.com/perrette/scribe/blob/main/scribe/app.py).
 
 ## Backend
 

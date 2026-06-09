@@ -1,0 +1,44 @@
+<!--
+  Home page. The feature bullets are pulled straight from README.md (single
+  source of truth) via the include-markdown plugin; everything else links into
+  the guide.
+-->
+<p align="center">
+  <img src="https://github.com/perrette/scribe/raw/main/scribe_data/share/icon.png" alt="Scribe" width="96">
+</p>
+
+# Scribe
+
+**Talk. It types.** Scribe is a speech-to-text CLI and tray app that pipes
+transcribed text straight into the focused window. It supports local and
+cloud-based APIs, batch and streaming workflows.
+
+{%
+  include-markdown "../README.md"
+  start="<!-- intro-start -->"
+  end="<!-- intro-end -->"
+%}
+
+<p align="center">
+  <img src="https://raw.githubusercontent.com/perrette/scribe/main/docs/app-tray-menu.png" alt="Scribe tray menu" width="300">
+</p>
+
+## Get started
+
+```bash
+pip install scribe-cli[all]
+scribe
+```
+
+- **[Installation](installation.md)** — PortAudio, extras, Ubuntu / GNOME tray libs, Windows.
+- **[Quickstart](quickstart.md)** — your first dictation in a couple of minutes.
+- **[Backends](backends.md)** — Vosk, Whisper, Whisper FUTO, OpenAI, Groq; streaming vs batch.
+- **[CLI reference](cli.md)** — every `scribe --help` flag with examples.
+
+## Guides
+
+- [Backends in detail](backends.md) — model lists, streaming recipes, vocabulary biasing.
+- [Output modes](output.md) — keystroke vs clipboard vs terminal vs file, Wayland / `eitype`, `--type-direct`.
+- [System tray & global hotkeys](tray.md) — menu tree, icon states, `SIGUSR1`/`SIGUSR2`.
+- [Desktop entry & autostart](desktop-install.md) — `scribe-install` launcher integration.
+- [CLI reference](cli.md) — full flag reference and fine tuning.

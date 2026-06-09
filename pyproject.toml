@@ -104,6 +104,14 @@ vad = []
 # pynput + pystray are base deps; pywhispercpp intentionally omitted due to
 # Windows build/DLL friction (install via scribe-cli[whisper-futo] if wanted).
 all = ["faster-whisper", "openai>=2.37.0,<3", "soundfile", "vosk", "PyGObject; sys_platform == 'linux'"]
+docs = [
+    # Pin below MkDocs 2.0: that release drops the plugin/theme/config system
+    # with no migration path and is incompatible with Material for MkDocs.
+    # The 1.x line is stable and is what Material targets.
+    "mkdocs>=1.5,<2",
+    "mkdocs-material>=9.5",
+    "mkdocs-include-markdown-plugin>=6.0",
+]
 
 
 [tool.setuptools]
@@ -120,6 +128,7 @@ write_to = "scribe/_version.py"
 Homepage = "https://github.com/perrette/scribe"
 Source = "https://github.com/perrette/scribe"
 Issues = "https://github.com/perrette/scribe/issues"
+Documentation = "https://perrette.github.io/scribe/"
 Changelog = "https://github.com/perrette/scribe/releases"
 Funding = "https://github.com/sponsors/perrette"
 
