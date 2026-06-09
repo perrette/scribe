@@ -1,0 +1,1699 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="Speech-to-text CLI and system-tray app that types transcribed text into the focused window">
+      
+      
+      
+        <link rel="canonical" href="https://perrette.github.io/scribe/backends/">
+      
+      
+        <link rel="prev" href="../quickstart/">
+      
+      
+        <link rel="next" href="../output/">
+      
+      
+        
+      
+      
+      <link rel="icon" href="../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.6">
+    
+    
+      
+        <title>Backends - Scribe</title>
+      
+    
+    
+      <link rel="stylesheet" href="../assets/stylesheets/main.484c7ddc.min.css">
+      
+        
+        <link rel="stylesheet" href="../assets/stylesheets/palette.ab4e12ef.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+    <script>__md_scope=new URL("..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#backends-in-detail" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--shadow" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href=".." title="Scribe" class="md-header__button md-logo" aria-label="Scribe" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            Scribe
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Backends
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: light)" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Switch to dark mode"  type="radio" name="__palette" id="__palette_0">
+    
+      <label class="md-header__button md-icon" title="Switch to dark mode" for="__palette_1" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="m17.75 4.09-2.53 1.94.91 3.06-2.63-1.81-2.63 1.81.91-3.06-2.53-1.94L12.44 4l1.06-3 1.06 3zm3.5 6.91-1.64 1.25.59 1.98-1.7-1.17-1.7 1.17.59-1.98L15.75 11l2.06-.05L18.5 9l.69 1.95zm-2.28 4.95c.83-.08 1.72 1.1 1.19 1.85-.32.45-.66.87-1.08 1.27C15.17 23 8.84 23 4.94 19.07c-3.91-3.9-3.91-10.24 0-14.14.4-.4.82-.76 1.27-1.08.75-.53 1.93.36 1.85 1.19-.27 2.86.69 5.83 2.89 8.02a9.96 9.96 0 0 0 8.02 2.89m-1.64 2.02a12.08 12.08 0 0 1-7.8-3.47c-2.17-2.19-3.33-5-3.49-7.82-2.81 3.14-2.7 7.96.31 10.98 3.02 3.01 7.84 3.12 10.98.31"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: dark)" data-md-color-scheme="slate" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Switch to light mode"  type="radio" name="__palette" id="__palette_1">
+    
+      <label class="md-header__button md-icon" title="Switch to light mode" for="__palette_0" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 7a5 5 0 0 1 5 5 5 5 0 0 1-5 5 5 5 0 0 1-5-5 5 5 0 0 1 5-5m0 2a3 3 0 0 0-3 3 3 3 0 0 0 3 3 3 3 0 0 0 3-3 3 3 0 0 0-3-3m0-7 2.39 3.42C13.65 5.15 12.84 5 12 5s-1.65.15-2.39.42zM3.34 7l4.16-.35A7.2 7.2 0 0 0 5.94 8.5c-.44.74-.69 1.5-.83 2.29zm.02 10 1.76-3.77a7.131 7.131 0 0 0 2.38 4.14zM20.65 7l-1.77 3.79a7.02 7.02 0 0 0-2.38-4.15zm-.01 10-4.14.36c.59-.51 1.12-1.14 1.54-1.86.42-.73.69-1.5.83-2.29zM12 22l-2.41-3.44c.74.27 1.55.44 2.41.44.82 0 1.63-.17 2.37-.44z"/></svg>
+      </label>
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+        <div class="md-search__suggest" data-md-component="search-suggest"></div>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/perrette/scribe" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M173.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6m-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3m44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9M252.8 8C114.1 8 8 113.3 8 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C436.2 457.8 504 362.9 504 252 504 113.3 391.5 8 252.8 8M105.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1m-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7m32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1m-11.4-14.7c-1.6 1-1.6 3.6 0 5.9s4.3 3.3 5.6 2.3c1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2"/></svg>
+  </div>
+  <div class="md-source__repository">
+    perrette/scribe
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+
+<nav class="md-nav md-nav--primary" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href=".." title="Scribe" class="md-nav__button md-logo" aria-label="Scribe" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    Scribe
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/perrette/scribe" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M173.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6m-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3m44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9M252.8 8C114.1 8 8 113.3 8 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C436.2 457.8 504 362.9 504 252 504 113.3 391.5 8 252.8 8M105.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1m-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7m32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1m-11.4-14.7c-1.6 1-1.6 3.6 0 5.9s4.3 3.3 5.6 2.3c1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2"/></svg>
+  </div>
+  <div class="md-source__repository">
+    perrette/scribe
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href=".." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Home
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_2" >
+        
+          
+          <label class="md-nav__link" for="__nav_2" id="__nav_2_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Getting started
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_2">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Getting started
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../installation/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Installation
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../quickstart/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Quickstart
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3" checked>
+        
+          
+          <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Guides
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_3">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Guides
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Backends
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Backends
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#at-a-glance" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        At a glance
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#whisper-futo-local-fast-on-short-dictations" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        whisper-futo (local, fast on short dictations)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#whisper-local" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        whisper (local)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#vosk-local-streaming" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        vosk (local, streaming)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#openai-openai-cloud" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        openai (OpenAI cloud)
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="openai (OpenAI cloud)">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#-realtime-delay-gpt-realtime-whisper-only" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        --realtime-delay (gpt-realtime-whisper only)
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#groq-groq-cloud" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        groq (Groq cloud)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#stopping-a-recording" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Stopping a recording
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#vocabulary-biasing" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Vocabulary biasing
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Vocabulary biasing">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#prompt-style-biases-output-style" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Prompt style biases output style
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#language" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Language
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#stream-mode-works-with-any-backend" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Stream mode (works with any backend)
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Stream mode (works with any backend)">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#how-pseudo-streaming-carves-up-a-recording" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        How pseudo-streaming carves up a recording
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#does-pseudo-streaming-change-the-api-cost" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Does pseudo-streaming change the API cost?
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#cross-chunk-prompt-context" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Cross-chunk prompt context
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#streaming-recipes-two-profiles" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Streaming recipes — two profiles
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Streaming recipes — two profiles">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#balanced-default" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Balanced (default)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#patient-auto-clip" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Patient (auto-clip)
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../output/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Output modes
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../tray/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    System tray & hotkeys
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../desktop-install/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Desktop entry & autostart
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../cli/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    CLI reference
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4" >
+        
+          
+          <label class="md-nav__link" for="__nav_4" id="__nav_4_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Development
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_4">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Development
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../roadmap-libei/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Roadmap — native Wayland (libei)
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#at-a-glance" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        At a glance
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#whisper-futo-local-fast-on-short-dictations" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        whisper-futo (local, fast on short dictations)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#whisper-local" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        whisper (local)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#vosk-local-streaming" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        vosk (local, streaming)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#openai-openai-cloud" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        openai (OpenAI cloud)
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="openai (OpenAI cloud)">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#-realtime-delay-gpt-realtime-whisper-only" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        --realtime-delay (gpt-realtime-whisper only)
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#groq-groq-cloud" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        groq (Groq cloud)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#stopping-a-recording" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Stopping a recording
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#vocabulary-biasing" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Vocabulary biasing
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Vocabulary biasing">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#prompt-style-biases-output-style" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Prompt style biases output style
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#language" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Language
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#stream-mode-works-with-any-backend" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Stream mode (works with any backend)
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Stream mode (works with any backend)">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#how-pseudo-streaming-carves-up-a-recording" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        How pseudo-streaming carves up a recording
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#does-pseudo-streaming-change-the-api-cost" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Does pseudo-streaming change the API cost?
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#cross-chunk-prompt-context" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Cross-chunk prompt context
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#streaming-recipes-two-profiles" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Streaming recipes — two profiles
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Streaming recipes — two profiles">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#balanced-default" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Balanced (default)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#patient-auto-clip" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Patient (auto-clip)
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+  
+    <a href="https://github.com/perrette/scribe/edit/main/backends.md" title="Edit this page" class="md-content__button md-icon" rel="edit">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M10 20H6V4h7v5h5v3.1l2-2V8l-6-6H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h4zm10.2-7c.1 0 .3.1.4.2l1.3 1.3c.2.2.2.6 0 .8l-1 1-2.1-2.1 1-1c.1-.1.2-.2.4-.2m0 3.9L14.1 23H12v-2.1l6.1-6.1z"/></svg>
+    </a>
+  
+  
+
+
+<h1 id="backends-in-detail">Backends in detail<a class="headerlink" href="#backends-in-detail" title="Permanent link">&para;</a></h1>
+<p>Scribe ships five speech-to-text backends. They are all picked through
+the same <code>--backend</code> / <code>--model</code> CLI flags (or the <strong>Model</strong> submenu in
+the tray / terminal frontend). Whether a transcription is <em>streaming</em>
+(text appears live as you speak) or <em>batch</em> (text arrives at end of
+recording) depends on the <strong>model</strong> chosen — not the backend.</p>
+<h2 id="at-a-glance">At a glance<a class="headerlink" href="#at-a-glance" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>Backend</th>
+<th><code>--backend</code></th>
+<th>Default model</th>
+<th>Streaming model(s)</th>
+<th>Requires</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Groq (cloud)</td>
+<td><code>groq</code></td>
+<td><code>whisper-large-v3-turbo</code></td>
+<td>—</td>
+<td><code>GROQ_API_KEY</code></td>
+</tr>
+<tr>
+<td>OpenAI (cloud)</td>
+<td><code>openai</code></td>
+<td><code>gpt-4o-mini-transcribe</code></td>
+<td><code>gpt-realtime-whisper</code></td>
+<td><code>OPENAI_API_KEY</code></td>
+</tr>
+<tr>
+<td>Whisper FUTO (local)</td>
+<td><code>whisper-futo</code></td>
+<td><code>small</code></td>
+<td>—</td>
+<td><code>pip install scribe-cli[whisper-futo]</code></td>
+</tr>
+<tr>
+<td>Whisper (local)</td>
+<td><code>whisper</code></td>
+<td><code>small</code></td>
+<td>—</td>
+<td><code>pip install scribe-cli[whisper]</code></td>
+</tr>
+<tr>
+<td>Vosk (local)</td>
+<td><code>vosk</code></td>
+<td>language-dependent</td>
+<td>all Vosk models</td>
+<td><code>pip install scribe-cli[vosk]</code></td>
+</tr>
+</tbody>
+</table>
+<p>Run <code>scribe</code> without arguments and it picks the first backend whose
+dependency / API key is present, preferring cloud over local and the
+faster local option first:
+<code>groq → openai → whisper-futo → whisper → vosk</code>.</p>
+<h2 id="whisper-futo-local-fast-on-short-dictations"><code>whisper-futo</code> (local, fast on short dictations)<a class="headerlink" href="#whisper-futo-local-fast-on-short-dictations" title="Permanent link">&para;</a></h2>
+<p>Runs locally via <a href="https://github.com/ggml-org/whisper.cpp">whisper.cpp</a>
+(through <a href="https://github.com/absadiki/pywhispercpp"><code>pywhispercpp</code></a>)
+using <a href="https://github.com/futo-org/whisper-acft">FUTO's ACFT-finetuned models</a>.
+ACFT (Audio Context Fine-Tuning) lets the encoder run on the actual
+audio length instead of always padding to 30 s — a meaningful speedup
+on short dictations, which is the typical scribe workload.</p>
+<p>The available models offered in the tray menu are
+<code>tiny / base / small</code>. FUTO has not released ACFT weights for
+<code>medium / large / turbo</code>; for those sizes use the <code>whisper</code> backend.</p>
+<p>With <code>--language en</code> (or <code>-l en</code>) scribe auto-substitutes the
+English-only variant (e.g. <code>small</code> → <code>small.en</code>) when it exists.</p>
+<p>Models are auto-downloaded on first use from <code>voiceinput.futo.org</code>
+to <code>$XDG_CACHE_HOME/whisper-futo/</code> (override with
+<code>--download-folder-whisper-futo</code>).</p>
+<p>For audio ≥ 30 s the ACFT speedup tapers off and the encoder window
+collapses to the standard 30 s; quality and speed in that regime are
+similar to the <code>whisper</code> backend. Pick <code>whisper-futo</code> if most of your
+dictations are short, the <code>whisper</code> backend if you regularly do
+multi-minute recordings or need <code>medium</code> / <code>large</code> / <code>turbo</code>.</p>
+<h2 id="whisper-local"><code>whisper</code> (local)<a class="headerlink" href="#whisper-local" title="Permanent link">&para;</a></h2>
+<p>Runs locally via
+<a href="https://github.com/SYSTRAN/faster-whisper"><code>faster-whisper</code></a> and
+defaults to the <code>small</code> model. Excellent at full-utterance
+transcription in
+<a href="https://github.com/openai/whisper?tab=readme-ov-file#available-models-and-languages">many languages</a>,
+but it does not stream — text appears at end-of-recording — and
+execution time depends on model size and hardware.</p>
+<p>The available models offered in the tray menu are
+<code>tiny / base / small / medium / large-v3 / large-v3-turbo</code>. Larger
+models trade speed for accuracy.</p>
+<p>With <code>--language en</code> (or <code>-l en</code>) scribe auto-substitutes the
+English-only variant (e.g. <code>small</code> → <code>small.en</code>) when it exists.</p>
+<h2 id="vosk-local-streaming"><code>vosk</code> (local, streaming)<a class="headerlink" href="#vosk-local-streaming" title="Permanent link">&para;</a></h2>
+<p>Vosk transcribes in real time and is very good at one language at a
+time, but tends to make more mistakes than Whisper and does not produce
+punctuation. It becomes really useful in longer, interactive sessions
+where the live "appears as you speak" UX matters — see
+<a href="../output/">output.md</a> for how the keystroke mode interacts with
+streaming models.</p>
+<p>There are many <a href="https://alphacephei.com/vosk/models">Vosk models</a>
+available; a handful are pre-mapped to common languages (<code>en</code>, <code>fr</code>,
+<code>de</code>, <code>it</code>) in
+<a href="https://github.com/perrette/scribe/blob/main/scribe/models.toml"><code>scribe/models.toml</code></a>. Pick one with
+<code>-l &lt;lang&gt;</code> or browse the full list interactively from the menu.</p>
+<h2 id="openai-openai-cloud"><code>openai</code> (OpenAI cloud)<a class="headerlink" href="#openai-openai-cloud" title="Permanent link">&para;</a></h2>
+<p>The OpenAI backend supports three models:</p>
+<ul>
+<li><code>gpt-4o-mini-transcribe</code> <em>(default)</em> — fast, low-cost batch
+  transcription.</li>
+<li><code>gpt-4o-transcribe</code> — higher-quality batch transcription.</li>
+<li><code>gpt-realtime-whisper</code> <em>(streaming)</em> — partial transcripts arrive
+  as you speak. Same UX as Vosk but using OpenAI's cloud model.</li>
+</ul>
+<p>All three share the same <code>OPENAI_API_KEY</code> and the <code>[openai]</code> extra; no
+extra dependencies. Set the key once:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nb">export</span><span class="w"> </span><span class="nv">OPENAI_API_KEY</span><span class="o">=</span>YOURAPIKEY
+<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>scribe<span class="w"> </span>--backend<span class="w"> </span>openai<span class="w">                          </span><span class="c1"># default: gpt-4o-mini-transcribe</span>
+<a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>scribe<span class="w"> </span>--model<span class="w"> </span>gpt-4o-transcribe<span class="w">                 </span><span class="c1"># batch, higher quality</span>
+<a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>scribe<span class="w"> </span>--model<span class="w"> </span>gpt-realtime-whisper<span class="w">              </span><span class="c1"># streaming</span>
+</code></pre></div>
+<p><code>--model</code> alone auto-routes to the <code>openai</code> backend for any of the
+three models above, so <code>--backend openai</code> is optional.</p>
+<h3 id="-realtime-delay-gpt-realtime-whisper-only"><code>--realtime-delay</code> (gpt-realtime-whisper only)<a class="headerlink" href="#-realtime-delay-gpt-realtime-whisper-only" title="Permanent link">&para;</a></h3>
+<p>The streaming model has a latency-vs-accuracy knob exposed as
+<code>--realtime-delay {minimal,low,medium,high,xhigh}</code> (default <code>medium</code>).
+Lower values emit partial transcripts sooner — at the cost of more
+revisions arriving in the focused window. Higher values batch tokens
+into longer chunks so what gets pasted is more stable.</p>
+<p>See OpenAI's
+<a href="https://developers.openai.com/api/docs/models/gpt-realtime-whisper">gpt-realtime-whisper model card</a>
+for the full picture.</p>
+<h2 id="groq-groq-cloud"><code>groq</code> (Groq cloud)<a class="headerlink" href="#groq-groq-cloud" title="Permanent link">&para;</a></h2>
+<p>Talks to Groq's OpenAI-compatible API and defaults to
+<code>whisper-large-v3-turbo</code>. <strong>Extremely fast</strong> thanks to Groq's
+inference hardware — the recommended cloud backend by default, and
+the natural pick for <code>--stream</code> mode where per-chunk roundtrip
+latency dominates perceived speed:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="nb">export</span><span class="w"> </span><span class="nv">GROQ_API_KEY</span><span class="o">=</span>YOURAPIKEY
+<a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>scribe<span class="w"> </span>--backend<span class="w"> </span>groq<span class="w">          </span><span class="c1"># Clip mode (default)</span>
+<a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a>scribe<span class="w"> </span>--backend<span class="w"> </span>groq<span class="w"> </span>--stream<span class="w"> </span><span class="c1"># live transcription, per-chunk</span>
+</code></pre></div>
+<p>The <code>groq</code> backend reuses the <code>openai</code> Python client under the hood, so
+installing <code>[openai]</code> is enough for both.</p>
+<h2 id="stopping-a-recording">Stopping a recording<a class="headerlink" href="#stopping-a-recording" title="Permanent link">&para;</a></h2>
+<p>For batch models (Whisper local, Whisper-via-API, Groq, <code>gpt-4o-*</code>) the
+recording continues for up to 2 minutes until you stop it manually
+(Stop in the tray, Ctrl+C in the terminal) — the transcription happens
+once when you stop.</p>
+<p>Streaming models (Vosk, <code>gpt-realtime-whisper</code>) emit partials as you
+speak and stop on the same Stop / Ctrl+C action.</p>
+<h2 id="vocabulary-biasing">Vocabulary biasing<a class="headerlink" href="#vocabulary-biasing" title="Permanent link">&para;</a></h2>
+<p><code>--prompt TEXT</code> and <code>--words W [W ...]</code> (plus the <code>--prompt-file</code> /
+<code>--words-file</code> companions) bias the recogniser toward a particular
+style, domain, or word list. The concept is generic across the
+whisper-family backends but each backend exposes it slightly
+differently:</p>
+<table>
+<thead>
+<tr>
+<th>Backend</th>
+<th><code>--prompt</code></th>
+<th><code>--words</code></th>
+<th><code>--language</code></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>whisper</code> (faster-whisper, local)</td>
+<td>passed as <code>initial_prompt=</code></td>
+<td>passed as <code>hotwords=</code> — a <strong>dedicated biasing channel</strong> separate from the prompt</td>
+<td>passed as <code>language=</code> (ISO 639-1); <code>-l en</code> also auto-substitutes <code>small.en</code> etc.</td>
+</tr>
+<tr>
+<td><code>whisper-futo</code> (pywhispercpp, local)</td>
+<td>passed as <code>initial_prompt=</code></td>
+<td>joined onto the prompt string (no separate hotwords channel here)</td>
+<td>passed as <code>language=</code> (ISO 639-1); <code>-l en</code> auto-substitutes <code>small.en</code> etc.</td>
+</tr>
+<tr>
+<td><code>openai</code> batch (<code>gpt-4o*-transcribe</code>)</td>
+<td>passed as <code>prompt=</code></td>
+<td>joined onto the prompt string</td>
+<td>passed as <code>language=</code> hint (ISO 639-1)</td>
+</tr>
+<tr>
+<td><code>groq</code> (<code>whisper-large-v3-turbo</code>)</td>
+<td>passed as <code>prompt=</code></td>
+<td>joined onto the prompt string</td>
+<td>passed as <code>language=</code> hint (ISO 639-1)</td>
+</tr>
+<tr>
+<td><code>openai</code> realtime (<code>gpt-realtime-whisper</code>)</td>
+<td><em>silently ignored</em> — the model rejects the prompt parameter server-side (HTTP 400 <em>"The 'prompt' parameter is not supported for this model."</em>). The kwarg stays accepted for plumbing compatibility but never reaches the API.</td>
+<td>same — joined into the (ignored) prompt</td>
+<td>passed as <code>language=</code> (ISO 639-1)</td>
+</tr>
+<tr>
+<td><code>vosk</code></td>
+<td><em>ignored</em> (no soft prompt)</td>
+<td><em>ignored</em> (Vosk only supports a hard <code>grammar</code> allowlist; not yet exposed)</td>
+<td>picks a per-language model from <code>scribe/models.toml</code>; no runtime parameter</td>
+</tr>
+</tbody>
+</table>
+<p>The whisper-family APIs cap the prompt around ~224 tokens; longer
+hints are silently truncated. Faster-whisper's <code>hotwords</code> channel is
+the one place a separate "dictionary" really exists — everywhere else
+<code>--words</code> is just a convenience to keep your word list out of the
+prompt string in the CLI.</p>
+<h3 id="prompt-style-biases-output-style">Prompt style biases output style<a class="headerlink" href="#prompt-style-biases-output-style" title="Permanent link">&para;</a></h3>
+<p>Whisper mirrors the <em>style</em> of whatever prompt it receives. A
+prompt like <code>"Tierney Comet"</code> (a bare wordlist) biases the model
+toward unpunctuated, list-style output — sentences come out without
+periods. A prompt like <code>"Tierney, Comet."</code> (or any prose ending in a
+period) biases it toward punctuated output. Two practical
+consequences:</p>
+<ul>
+<li><strong><code>--prompt</code> is yours to control.</strong> If your <code>prompt.txt</code> ends with
+  a period and looks like a sentence, your transcripts will be
+  punctuated. If it ends with a bare keyword, they probably won't.
+  This effect is most visible in <strong>Stream mode</strong>, where Whisper sees
+  short audio chunks and leans more heavily on the prompt for style
+  cues.</li>
+<li><strong><code>--words</code> is auto-formatted by scribe.</strong> For backends that fold
+  words into the prompt (<code>whisper-futo</code>, <code>openai</code>, <code>groq</code>), scribe
+  renders the word list as <code>"word1, word2, …, wordN."</code> — comma-
+  separated with a single terminal period — so your <code>words.txt</code> can
+  stay a bare list with no special formatting and the bias still
+  comes out punctuated. Stray punctuation on individual entries is
+  stripped first, so <code>words.txt</code> content is normalised regardless of
+  layout. On <code>whisper</code> (faster-whisper, local), words go to the
+  dedicated <code>hotwords</code> channel and bypass the prompt entirely.</li>
+</ul>
+<p>Both flags read from the corresponding <code>*-file</code> argument when present.
+Inline + file inputs are combined.</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="c1"># Inline</span>
+<a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a>scribe<span class="w"> </span>--prompt<span class="w"> </span><span class="s2">&quot;ML systems infra: K8s, etcd, Envoy.&quot;</span><span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a><span class="w">       </span>--words<span class="w"> </span>kubectl<span class="w"> </span>envoyproxy<span class="w"> </span>etcdctl
+<a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a>
+<a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a><span class="c1"># From files (handy for long-lived glossaries)</span>
+<a id="__codelineno-2-6" name="__codelineno-2-6" href="#__codelineno-2-6"></a>scribe<span class="w"> </span>--prompt-file<span class="w"> </span>~/.config/scribe/prompt.txt<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-2-7" name="__codelineno-2-7" href="#__codelineno-2-7"></a><span class="w">       </span>--words-file<span class="w">  </span>~/.config/scribe/words.txt
+</code></pre></div>
+<p>When <em>no</em> prompt/words flag is given, scribe also auto-loads
+<code>prompt.txt</code> and <code>words.txt</code> from the platform user-config dir
+(<code>~/.config/scribe/</code> on Linux, <code>~/Library/Application Support/scribe/</code>
+on macOS, <code>%LOCALAPPDATA%\scribe\</code> on Windows — resolved via
+<code>platformdirs</code>) if they exist. To suppress the default for one
+invocation, pass an explicit empty value: <code>--prompt ""</code> (or
+<code>--prompt-file ""</code>) suppresses the prompt default; <code>--words</code> with no
+arguments (or <code>--words-file ""</code>) suppresses the words default. Each
+side is independent.</p>
+<h2 id="language">Language<a class="headerlink" href="#language" title="Permanent link">&para;</a></h2>
+<p><code>-l / --language LANG</code> tells the backend which language to expect.
+What that means in practice varies by backend (see the per-backend
+column in the table above):</p>
+<ul>
+<li><strong>Whisper-family</strong> (<code>whisper</code>, <code>whisper-futo</code>, <code>openai</code> batch +
+  realtime, <code>groq</code>) — the language is passed to the model as a hard
+  lock: the decoder generates that language regardless of what it
+  hears acoustically. Accepts any <a href="https://en.wikipedia.org/wiki/List_of_ISO_639-1_codes">ISO 639-1 short code</a>
+  Whisper recognises (~99 languages). When unset, Whisper auto-detects
+  per chunk.</li>
+<li><strong>English-only model variants</strong> — for <code>whisper</code> and <code>whisper-futo</code>,
+  <code>-l en</code> <em>also</em> auto-substitutes the English-only model when one
+  exists (<code>small</code> → <code>small.en</code>, etc.). These variants trade
+  multilingual coverage for English accuracy.</li>
+<li><strong>Vosk</strong> — language isn't a runtime parameter; vosk ships a
+  separate model per language. <code>-l fr</code> looks up the vosk model
+  pre-mapped to French in <a href="https://github.com/perrette/scribe/blob/main/scribe/models.toml"><code>scribe/models.toml</code></a>
+  and instantiates that one. Vosk has no auto-detect path, so the
+  Language menu's <code>Auto</code> entry on vosk falls back to a sensible
+  default — the tray shows <code>Auto (🇬🇧 en)</code> to make this explicit
+  without mutating the stored <code>language=None</code>.</li>
+</ul>
+<p>The tray's <strong>Language</strong> submenu exposes the four curated languages
+(<code>en</code> / <code>fr</code> / <code>de</code> / <code>it</code>) with origin-country flag prefixes
+(🇬🇧 / 🇫🇷 / 🇩🇪 / 🇮🇹). The CLI accepts these plus any other ISO 639-1
+code the active backend recognises.</p>
+<h2 id="stream-mode-works-with-any-backend">Stream mode (works with any backend)<a class="headerlink" href="#stream-mode-works-with-any-backend" title="Permanent link">&para;</a></h2>
+<p><code>--stream</code> (or <strong>Mode: Stream</strong> in the tray) emits transcribed text
+<strong>live as you speak</strong>, regardless of which backend you picked. This
+is the headline v1.0.0 improvement: scribe abstracts over the two
+different mechanisms that backends use to deliver live output, so
+<code>--stream</code> works uniformly across every supported backend.</p>
+<ul>
+<li><strong>Native streaming backends</strong> (Vosk, <code>gpt-realtime-whisper</code>) push
+  partial results from the server as audio is received — scribe just
+  forwards them to the chosen output (focused window / clipboard /
+  terminal / file). These backends are <em>always</em> in Stream mode; the
+  Mode toggle reads "Mode: Stream (native)" for them and is read-only.</li>
+<li><strong>Batch backends</strong> (Whisper local, Whisper FUTO, OpenAI
+  <code>gpt-4o-*-transcribe</code>, Groq <code>whisper-large-v3-turbo</code>) don't accept
+  partial audio. scribe instead cuts the recording buffer on
+  detected silence and issues a separate transcription request for
+  each chunk — internally called <em>pseudo-streaming</em>. The user sees
+  the same live experience.</li>
+</ul>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a>scribe<span class="w"> </span>--stream<span class="w">                       </span><span class="c1"># any backend, live transcription</span>
+<a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a>scribe<span class="w"> </span>--stream<span class="w"> </span>--backend<span class="w"> </span>groq<span class="w">        </span><span class="c1"># Groq + Stream is the sweet spot</span>
+<a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a>scribe<span class="w"> </span>--stream<span class="w"> </span>--backend<span class="w"> </span>whisper<span class="w">     </span><span class="c1"># local, live, no API key</span>
+</code></pre></div>
+<h3 id="how-pseudo-streaming-carves-up-a-recording">How pseudo-streaming carves up a recording<a class="headerlink" href="#how-pseudo-streaming-carves-up-a-recording" title="Permanent link">&para;</a></h3>
+<p>Once the buffer has grown to at least <code>--stream-chunk-min</code> (default
+1.5 s), silence of at least <code>--stream-chunk-silence-break</code> (default
+0.6 s) triggers a chunk cut. A force-cut fires at <code>--stream-chunk-max</code>
+(default 10 s) regardless of silence, to cap latency. The session
+continues until you stop it manually.</p>
+<p>The first chunk uses a higher floor (<code>--stream-first-chunk-min</code>,
+default 3 s) so the bootstrap chunk has enough audio to seed the
+rolling prompt for the rest. Auto-disabled when
+<code>--stream-context-length 0</code> (Patient). If you stop talking before
+the floor is reached, a pause past <code>--stream-context-reset-silence ×
+--stream-chunk-silence-break</code> (default 1.8 s) flushes the buffer
+anyway — your utterance is never stranded.</p>
+<h3 id="does-pseudo-streaming-change-the-api-cost">Does pseudo-streaming change the API cost?<a class="headerlink" href="#does-pseudo-streaming-change-the-api-cost" title="Permanent link">&para;</a></h3>
+<p>For cloud backends, going from one big transcription to N chunked
+requests <strong>does not normally change the bill</strong>:</p>
+<ul>
+<li><strong>Groq</strong> (<code>whisper-large-v3-turbo</code>) is billed per second of audio.
+  Total audio is unchanged → same cost.</li>
+<li><strong>OpenAI <code>whisper-1</code></strong> (legacy) is billed per minute of audio. Same
+  logic, same cost.</li>
+<li><strong>OpenAI <code>gpt-4o-transcribe</code> / <code>gpt-4o-mini-transcribe</code></strong> are token-
+  billed (audio-in + text-out + prompt-in). Audio and output stay
+  identical; the only delta is the rolling cross-chunk <em>prompt</em>
+  context (~200 chars ≈ 50–60 tokens per chunk after the first).
+  At gpt-4o-mini-transcribe input rates this is negligible — well
+  under a cent per long session.</li>
+</ul>
+<p>That said, your real cost depends on your usage and your account's
+pricing tier — <strong>verify on your provider's billing dashboard</strong> if
+cost is a hard constraint.</p>
+<p>Two special values for <code>--stream-chunk-silence-break</code> (set via the
+tray's <strong>Silence break</strong> picker or <code>--stream-chunk-silence-break 0</code>
+at the CLI):</p>
+<ul>
+<li><strong>Auto</strong> (<code>0</code>) — disables the fixed-threshold trigger. At force-cut
+  time scribe picks the <em>longest</em> silence interval within the window
+  whose start position is at least <code>--stream-chunk-min</code> into the chunk,
+  re-cutting there for a more natural word boundary. Falls back to a
+  brute force-cut if no qualifying silence is found.</li>
+<li><strong>Max</strong> — disables silence-based cuts entirely; only the force-cut at
+  <code>--stream-chunk-max</code> fires. Useful when you want uniform chunk sizes
+  regardless of speech patterns. (Only selectable from the tray picker.)</li>
+</ul>
+<p>Stream mode is off by default — the default <code>Clip</code> mode transcribes the
+whole recording at end (<code>--clip</code>). The tray menu surfaces the same
+toggle as the top-level <strong>Mode: Stream / Clip</strong> item. Native
+streamers (vosk, <code>gpt-realtime-whisper</code>) are always streaming and the
+menu shows <strong>Mode: Stream (native)</strong> for them.</p>
+<h3 id="cross-chunk-prompt-context">Cross-chunk prompt context<a class="headerlink" href="#cross-chunk-prompt-context" title="Permanent link">&para;</a></h3>
+<p>In Stream mode (pseudo-streaming) scribe automatically augments
+each chunk's prompt with the trailing ~200 characters of the
+<em>previous</em> chunk's transcription. This rolling tail is concatenated
+onto whatever static <code>--prompt</code> / <code>--words</code> you configured and
+reaches the backend through the same channel as the static prompt
+(the vocabulary biasing table above). The motivation is cross-chunk
+continuity:</p>
+<ul>
+<li><strong>Capitalization drift</strong> — without context, a chunk that starts
+  right after a period might come back lowercased.</li>
+<li><strong>Article gender (FR/IT/ES/…)</strong> — <code>"la nouveau"</code> → <code>"le nouveau"</code>
+  once the prior chunk has established the noun.</li>
+<li><strong>Language lock</strong> — <code>whisper.cpp</code> auto-detects language per call;
+  feeding the previous chunk's tokens keeps the language stable
+  across cuts.</li>
+</ul>
+<p>Whisper's prompt window is capped at ~224 tokens; 200 chars of French
+sits well under that and leaves room for your static prompt + words
+list.</p>
+<p>The rolling tail is <strong>dropped</strong> when the silence between two
+utterances exceeds <code>--stream-context-reset-silence</code> ×
+<code>--stream-chunk-silence-break</code> (default 3 × 0.6 s = 1.8 s) — a long
+pause is treated as a new sentence/idea boundary, where carrying a
+possibly-bad prior chunk forward biases the next one more than it
+helps. Use <code>--stream-context-reset-silence inf</code> to keep context across
+arbitrarily long pauses.</p>
+<p>Short pauses (mid-sentence punctuation) keep the context; the cut at
+the start of every new recording also clears it.</p>
+<h3 id="streaming-recipes-two-profiles">Streaming recipes — two profiles<a class="headerlink" href="#streaming-recipes-two-profiles" title="Permanent link">&para;</a></h3>
+<p>The defaults stream phrases in as you talk; the Patient profile waits
+for natural pauses and transcribes one utterance at a time. They make
+opposite trade-offs around the same fundamental tension: short audio
+windows give Whisper less to work with, so cross-chunk <em>context</em>
+matters more in Balanced, less in Patient.</p>
+<h4 id="balanced-default">Balanced (default)<a class="headerlink" href="#balanced-default" title="Permanent link">&para;</a></h4>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a>scribe<span class="w"> </span>--stream
+</code></pre></div>
+<p>Phrases commit every ~10 s or on a 0.6 s pause, with a 200-char
+rolling prompt carrying earlier text forward as context for each new
+chunk. Whisper sees short audio windows in isolation; the rolling
+context partially compensates by telling the model what was just
+said. Good live-feel, small per-chunk accuracy hit vs. Patient.</p>
+<h4 id="patient-auto-clip">Patient (auto-clip)<a class="headerlink" href="#patient-auto-clip" title="Permanent link">&para;</a></h4>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a>scribe<span class="w"> </span>--stream<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a><span class="w">       </span>--stream-chunk-min<span class="w"> </span><span class="m">0</span>.5<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a><span class="w">       </span>--stream-chunk-max<span class="w"> </span><span class="m">300</span><span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-5-4" name="__codelineno-5-4" href="#__codelineno-5-4"></a><span class="w">       </span>--stream-chunk-silence-break<span class="w"> </span><span class="m">2</span><span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-5-5" name="__codelineno-5-5" href="#__codelineno-5-5"></a><span class="w">       </span>--stream-context-length<span class="w"> </span><span class="m">0</span>
+</code></pre></div>
+<p>Each utterance is a complete self-contained sentence. scribe waits
+for a 2 s pause, transcribes the whole thing at once, then waits for
+the next one. No rolling context (<code>context-length 0</code>) because each
+chunk is already a full utterance — there's nothing short to
+compensate for. Highest per-chunk accuracy; no text appears until
+you finish talking.</p>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+          <button type="button" class="md-top md-icon" data-md-component="top" hidden>
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8z"/></svg>
+  Back to top
+</button>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "..", "features": ["navigation.instant", "navigation.tracking", "navigation.sections", "navigation.top", "toc.follow", "search.suggest", "search.highlight", "content.code.copy", "content.action.edit"], "search": "../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+    
+    
+      <script src="../assets/javascripts/bundle.79ae519e.min.js"></script>
+      
+    
+  </body>
+</html>
