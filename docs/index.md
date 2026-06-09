@@ -42,3 +42,18 @@ scribe
 - [System tray & global hotkeys](tray.md) — menu tree, icon states, `SIGUSR1`/`SIGUSR2`.
 - [Desktop entry & autostart](desktop-install.md) — `scribe-install` launcher integration.
 - [CLI reference](cli.md) — full flag reference and fine tuning.
+
+## From the same author
+
+A small toolkit for a Markdown-first scientific workflow.
+
+**Scientific writing & data**
+
+- [**texmark**](https://perrette.github.io/texmark/) — write scientific articles in Markdown and submit them to any journal (Markdown → LaTeX/PDF).
+- [**papers**](https://perrette.github.io/papers/) — command-line BibTeX bibliography and PDF library manager.
+- [**datamanifest**](https://perrette.github.io/datamanifest/) — declarative, reproducible dataset management. *(See also the [datamanifest.toml](https://perrette.github.io/datamanifest.toml/) format spec and the [DataManifest.jl](https://awi-esc.github.io/DataManifest.jl/) Julia port.)*
+
+**Voice helpers** — handy for dictating and proofreading drafts by ear
+
+- [**scribe**](https://perrette.github.io/scribe/) — speech-to-text dictation (Whisper).
+- [**bard**](https://perrette.github.io/bard/) — text-to-speech reader (Kokoro / Piper).
