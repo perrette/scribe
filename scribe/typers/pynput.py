@@ -1,10 +1,9 @@
 import os
 import platform
-import logging
-import unidecode
 from pynput.keyboard import Controller, Key
 
 from scribe.typers import TYPERS
+from scribe.typers.base import type_ascii_safe
 
 _TYPE_ERRORS = (KeyError, Controller.InvalidKeyException, Controller.InvalidCharacterException)
 
@@ -39,15 +38,12 @@ class PynputTyper:
         return None
 
     def type(self, text: str) -> None:
-        try:
-            self._keyboard.type(text)
-        except _TYPE_ERRORS:
-            asciitext = unidecode.unidecode(text)
-            logging.warning(f"Cannot type {text!r} -> convert to {asciitext!r}")
-            try:
-                self._keyboard.type(asciitext)
-            except _TYPE_ERRORS:
-                logging.warning(f"Skipping untypable text {text!r}")
+        # _keyboard.type() emits left-to-right and raises mid-string on a char
+        # the platform can't produce, leaving the prefix already typed. Retrying
+        # the whole transliterated string (the old behaviour) re-typed that
+        # prefix — the duplicated-prefix bug. type_ascii_safe emits ASCII runs
+        # whole and degrades only the individual untypable chars to ASCII.
+        type_ascii_safe(self._keyboard.type, text, _TYPE_ERRORS)
 
     def paste(self) -> None:
         os_name = platform.system()

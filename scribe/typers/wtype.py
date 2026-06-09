@@ -1,12 +1,11 @@
 from __future__ import annotations
 
-import logging
 import os
 import shutil
 import subprocess
 
 from scribe.typers import TYPERS
-from scribe.typers.base import Typer
+from scribe.typers.base import Typer, type_ascii_safe
 
 
 class WtypeTyper:
@@ -38,30 +37,21 @@ class WtypeTyper:
             return False
         return True
 
-    def type(self, text: str) -> None:
+    def _emit(self, text: str) -> None:
         try:
             subprocess.run(["wtype", "--", text], check=True, capture_output=True)
         except subprocess.CalledProcessError as e:
-            # wtype refuses chars not in the active xkb layout. Retry with
-            # diacritics stripped so streaming-keyboard mode degrades
-            # gracefully on French / German / etc. text.
-            import unidecode  # local import to keep cold-start cheap
-            ascii_text = unidecode.unidecode(text)
-            if ascii_text == text:
-                raise RuntimeError(
-                    f"wtype failed: {e.stderr.decode(errors='replace')}"
-                ) from e
-            logging.warning(
-                f"wtype cannot type {text!r}; retrying as ASCII {ascii_text!r}"
-            )
-            try:
-                subprocess.run(
-                    ["wtype", "--", ascii_text], check=True, capture_output=True
-                )
-            except subprocess.CalledProcessError as e2:
-                raise RuntimeError(
-                    f"wtype failed: {e2.stderr.decode(errors='replace')}"
-                ) from e2
+            raise RuntimeError(
+                f"wtype failed: {e.stderr.decode(errors='replace')}"
+            ) from e
+
+    def type(self, text: str) -> None:
+        # wtype refuses chars not in the active xkb layout, aborting AFTER
+        # emitting the typeable prefix. type_ascii_safe types ASCII runs whole
+        # and falls back to ASCII per non-typeable char, so French / German /
+        # etc. text degrades gracefully without re-emitting the prefix (the
+        # duplicated-prefix bug a naive whole-string ASCII retry produced).
+        type_ascii_safe(self._emit, text, (RuntimeError,))
 
     def paste(self) -> None:
         try:
