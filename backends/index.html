@@ -1372,9 +1372,12 @@ latency dominates perceived speed:</p>
 installing <code>[openai]</code> is enough for both.</p>
 <h2 id="stopping-a-recording">Stopping a recording<a class="headerlink" href="#stopping-a-recording" title="Permanent link">&para;</a></h2>
 <p>For batch models (Whisper local, Whisper-via-API, Groq, <code>gpt-4o-*</code>) the
-recording continues for up to 2 minutes until you stop it manually
-(Stop in the tray, Ctrl+C in the terminal) — the transcription happens
-once when you stop.</p>
+recording continues until you stop it manually (Stop in the tray,
+Ctrl+C in the terminal), with a safety stop after <code>--clip-timeout</code>
+seconds (10 minutes by default) — the transcription happens once when
+you stop. Silent pauses are capped at <code>--clip-max-silence</code> seconds
+(2 by default) in the audio sent for transcription, so dead air does
+not count toward what the cloud APIs bill by duration.</p>
 <p>Streaming models (Vosk, <code>gpt-realtime-whisper</code>) emit partials as you
 speak and stop on the same Stop / Ctrl+C action.</p>
 <h2 id="vocabulary-biasing">Vocabulary biasing<a class="headerlink" href="#vocabulary-biasing" title="Permanent link">&para;</a></h2>

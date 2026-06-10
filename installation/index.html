@@ -945,7 +945,11 @@ Wayland), macOS, and Windows; on Android it works under Termux for
 clipboard / terminal output.</p>
 <h2 id="system-dependencies">System dependencies<a class="headerlink" href="#system-dependencies" title="Permanent link">&para;</a></h2>
 <p>Scribe records audio via PortAudio (through <code>sounddevice</code>) and reads /
-writes the clipboard via <code>xclip</code> on Linux. On Ubuntu:</p>
+writes the clipboard via <code>xclip</code> on Linux — preferred over <code>wl-copy</code>
+on Wayland, where the latter briefly steals keyboard focus on GNOME
+&lt; 47 and breaks pasting into Electron apps (see
+<a href="../output/#clipboard-backend-on-wayland">Clipboard backend on Wayland</a>).
+On Ubuntu:</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>sudo<span class="w"> </span>apt-get<span class="w"> </span>install<span class="w"> </span>portaudio19-dev<span class="w"> </span>xclip
 </code></pre></div>
 <p>On macOS use Homebrew:</p>

@@ -569,6 +569,17 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#clipboard-backend-on-wayland" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Clipboard backend on Wayland
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#-type-direct-bypass-the-clipboard" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -904,6 +915,17 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#clipboard-backend-on-wayland" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Clipboard backend on Wayland
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#-type-direct-bypass-the-clipboard" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1093,6 +1115,21 @@ the moment scribe fires the paste: the terminal then sees
 <code>Ctrl+Shift+V</code> and pastes normally. No code change needed — just
 remember Shift for terminal targets, nothing for GUI apps where plain
 <code>Ctrl+V</code> already works (including VS Code's editor pane).</p>
+<h3 id="clipboard-backend-on-wayland">Clipboard backend on Wayland<a class="headerlink" href="#clipboard-backend-on-wayland" title="Permanent link">&para;</a></h3>
+<p>The paste path writes the clipboard through <code>pyperclip</code>, which on a
+Wayland session would normally use <code>wl-copy</code>. On compositors without a
+data-control protocol (GNOME &lt; 47), <code>wl-copy</code> has to create a temporary
+invisible window and briefly take keyboard focus in order to own the
+selection. Most apps tolerate that focus blip, but Electron apps often
+don't return focus to the input field inside the page afterwards, so
+the synthesised Ctrl+V lands nowhere.</p>
+<p>Scribe therefore prefers <code>xclip</code> whenever XWayland is available: the
+clipboard is set through XWayland with no focus change, and the
+compositor syncs the X and Wayland selections both ways, so every app
+— X11-hosted or Wayland-native — sees the same text. The clipboard is
+a single session-global resource owned by the compositor; which tool
+set it is invisible to the app you paste into. When <code>xclip</code> or
+XWayland is missing, scribe falls back to <code>wl-copy</code>.</p>
 <h3 id="-type-direct-bypass-the-clipboard"><code>--type-direct</code> — bypass the clipboard<a class="headerlink" href="#-type-direct-bypass-the-clipboard" title="Permanent link">&para;</a></h3>
 <p>In keystroke mode <code>--type-direct</code> (or <strong>Options → Keyboard → Input
 mode → keystroke</strong> in the menu) types the transcription as raw
@@ -1256,8 +1293,9 @@ emit one chunk per silence cut (already coarse enough).</p>
 <p>The transcription is copied to the system clipboard at end of recording
 and you press Ctrl+V (or Ctrl+Shift+V in a terminal) yourself. No
 keystrokes are synthesised, so there is no typer-backend involvement
-and no Wayland portal prompt — <code>pyperclip</code> / <code>wl-copy</code> is all that is
-needed.</p>
+and no Wayland portal prompt — <code>pyperclip</code> (backed by <code>xclip</code> or
+<code>wl-copy</code>, see <a href="#clipboard-backend-on-wayland">Clipboard backend on Wayland</a>)
+is all that is needed.</p>
 <p>As with keystroke mode, the clipboard is left holding the
 transcription after scribe finishes; save any previous clipboard
 contents elsewhere first if you want to keep them.</p>

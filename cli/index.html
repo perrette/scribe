@@ -1267,8 +1267,13 @@ silence-chunking knobs; they have their own end-of-utterance signal.</p>
 </tr>
 <tr>
 <td><code>--clip-timeout SECS</code></td>
-<td><code>120</code></td>
-<td>Auto-stop after this many seconds in Clip mode (default <code>120</code>).</td>
+<td><code>600</code></td>
+<td>Auto-stop after this many seconds in Clip mode (default <code>600</code>).</td>
+</tr>
+<tr>
+<td><code>--clip-max-silence SECS</code></td>
+<td><code>2.0</code></td>
+<td>In Clip mode, cap each silent pause at this many seconds in the audio sent for transcription (default <code>2.0</code>). Remote APIs bill by audio duration, so trimmed silence is not paid for; pauses up to the cap are kept for punctuation cues. <code>0</code> disables trimming.</td>
 </tr>
 <tr>
 <td><code>--stream-timeout SECS</code></td>
