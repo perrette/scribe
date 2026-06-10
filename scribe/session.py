@@ -24,6 +24,9 @@ class RecordingSession:
         self.cancelled = False
         self.audio_buffer = b''
         self.silence_buffer = b''
+        # Clip mode: bytes of silence dropped by the clip_max_silence cap,
+        # for the live partial line and end-of-recording accounting.
+        self.trimmed_silence_bytes = 0
         # Pseudo-streaming Auto mode: log of (start_ms_from_chunk_start,
         # duration_ms) for every silence pause seen since the last cut.
         # Cleared on reset() so each chunk starts with an empty log.
@@ -59,6 +62,7 @@ class RecordingSession:
     def reset(self):
         self.audio_buffer = b''
         self.silence_buffer = b''
+        self.trimmed_silence_bytes = 0
         self.silence_intervals = []
         self.silence_start_ms = None
         self.start_time = time.time()

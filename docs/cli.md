@@ -125,6 +125,7 @@ silence-chunking knobs; they have their own end-of-utterance signal.
 | `--stream-chunk-silence-break SECS` | `0.6` | Silence duration that triggers a chunk cut (default `0.6`). Special value `0` enables Auto mode (best-silence-in-window at force-cut time). |
 | `--stream-context-reset-silence X` | `3.0`  | Multiplier of `--stream-chunk-silence-break` above which the rolling cross-chunk prompt context is discarded (default `3.0`, i.e. 1.8 s at default silence-break). Use `inf` to never reset. |
 | `--clip-timeout SECS`             | `600`   | Auto-stop after this many seconds in Clip mode (default `600`). |
+| `--clip-max-silence SECS`         | `2.0`   | In Clip mode, cap each silent pause at this many seconds in the audio sent for transcription (default `2.0`). Remote APIs bill by audio duration, so trimmed silence is not paid for; pauses up to the cap are kept for punctuation cues. `0` disables trimming. |
 | `--stream-timeout SECS`           | `None`  | Auto-stop after this many seconds in Stream mode (`None` = Always On, no auto-stop). Tray equivalent: **Stream timeout** in the Stream (advanced) submenu. |
 
 Native streamers (vosk, `gpt-realtime-whisper`) are always streaming

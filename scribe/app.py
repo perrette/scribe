@@ -249,7 +249,8 @@ def _build_backend_kwargs(backend, model, language, samplerate, duration,
                           stream_chunk_min, stream_first_chunk_min,
                           stream_context_reset_silence,
                           stream_context_length,
-                          prompt_text, words, dry_run=False, debug=False):
+                          prompt_text, words, clip_max_silence=2.0,
+                          dry_run=False, debug=False):
     composed_prompt, composed_hotwords = compose_prompt_for_backend(backend, prompt_text, words)
 
     vad_kwargs = dict(vad_mode=vad_mode, vad_threshold=vad_threshold,
@@ -271,6 +272,7 @@ def _build_backend_kwargs(backend, model, language, samplerate, duration,
                     stream_first_chunk_min=stream_first_chunk_min,
                     stream_context_reset_silence=stream_context_reset_silence,
                     stream_context_length=stream_context_length,
+                    clip_max_silence=clip_max_silence,
                     prompt=composed_prompt,
                     hotwords=composed_hotwords,
                     model_kwargs={"download_root": download_folder_whisper},
@@ -291,6 +293,7 @@ def _build_backend_kwargs(backend, model, language, samplerate, duration,
                     stream_first_chunk_min=stream_first_chunk_min,
                     stream_context_reset_silence=stream_context_reset_silence,
                     stream_context_length=stream_context_length,
+                    clip_max_silence=clip_max_silence,
                     prompt=composed_prompt,
                     download_folder=download_folder_whisper_futo,
                     dry_run=dry_run, debug=debug,
@@ -307,6 +310,7 @@ def _build_backend_kwargs(backend, model, language, samplerate, duration,
                       stream_first_chunk_min=stream_first_chunk_min,
                       stream_context_reset_silence=stream_context_reset_silence,
                       stream_context_length=stream_context_length,
+                      clip_max_silence=clip_max_silence,
                       prompt=composed_prompt,
                       dry_run=dry_run, debug=debug,
                       **vad_kwargs)
@@ -318,6 +322,8 @@ def _build_backend_kwargs(backend, model, language, samplerate, duration,
             # see options it doesn't act on.
             kwargs.pop("pseudo_streaming", None)
             kwargs.pop("stream_chunk_max", None)
+            # Clip-mode silence capping is likewise batch-only.
+            kwargs.pop("clip_max_silence", None)
         return kwargs
     raise ValueError(f"Unknown backend: {backend}")
 
@@ -333,6 +339,7 @@ def get_transcriber(model=None, backend=None, dummy=False, interactive=True, lan
                     stream_chunk_min=1.5, stream_first_chunk_min=3.0,
                     stream_context_reset_silence=3.0,
                     stream_context_length=200,
+                    clip_max_silence=2.0,
                     prompt=None, prompt_file=None, words=None, words_file=None,
                     dry_run=False, debug=False, **kwargs):
     if dummy:
@@ -375,7 +382,9 @@ def get_transcriber(model=None, backend=None, dummy=False, interactive=True, lan
                                           stream_chunk_min, stream_first_chunk_min,
                                           stream_context_reset_silence,
                                           stream_context_length,
-                                          prompt_text, word_list, dry_run=dry_run, debug=debug)
+                                          prompt_text, word_list,
+                                          clip_max_silence=clip_max_silence,
+                                          dry_run=dry_run, debug=debug)
     try:
         return _build_transcriber(backend, **backend_kwargs)
     except Exception as error:
@@ -576,6 +585,12 @@ def get_parser():
     group.add_argument("--clip-timeout", default=600.0, type=float,
                        help="Auto-stop Clip recording after this many seconds "
                             "(default: %(default)s).")
+    group.add_argument("--clip-max-silence", default=2.0, type=float,
+                       help="In Clip mode, cap each silent pause at this many "
+                            "seconds in the audio sent for transcription "
+                            "(default: %(default)s). Remote APIs bill by audio "
+                            "duration, so trimmed silence is not paid for. "
+                            "Set to 0 to disable trimming.")
     group.add_argument("--stream-timeout", default=None, type=float,
                        help="Auto-stop Stream recording after this many seconds "
                             "(default: always on — no auto-stop).")

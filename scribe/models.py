@@ -36,6 +36,7 @@ class AbstractTranscriber(STTBackend):
                  stream_chunk_min=1.5, stream_first_chunk_min=3.0,
                  stream_context_reset_silence=3.0,
                  stream_context_length=200,
+                 clip_max_silence=2.0,
                  dry_run=False, debug=False):
         self.model_name = model_name
         self.language = language
@@ -121,6 +122,13 @@ class AbstractTranscriber(STTBackend):
         # context entirely (each chunk transcribes without any cross-
         # chunk prompt) — the OFF semantic surfaced as a picker value.
         self.stream_context_length = stream_context_length
+        # Clip mode: cap each silent pause at this many seconds in the
+        # accumulated recording. Remote APIs bill by audio duration (the
+        # WAV sent is uncompressed), and Whisper reads no meaning into
+        # pauses beyond a couple of seconds — long silences only add cost,
+        # local processing time, and hallucination risk. 0 (or negative)
+        # disables trimming and accumulates the recording verbatim.
+        self.clip_max_silence = clip_max_silence
         # When True, each backend logs a one-line summary of the request
         # being sent (model, language, prompt, audio length) just before
         # the network/SDK call. Driven by the `--debug` CLI flag — off by
@@ -150,7 +158,7 @@ class AbstractTranscriber(STTBackend):
         """Lazily construct the SilenceGate from current vad_* settings.
         Lazy because the silero gate loads an ONNX model on first use (~80
         ms) and we want that cost only when something actually needs it
-        — e.g. batch backends with pseudo_streaming=False never touch it.
+        — e.g. clip mode with --clip-max-silence 0 never touches it.
         Invalidated on `_invalidate_silence_gate()` so menu/settings changes
         take effect on the next use."""
         if self._silence_gate is None:
@@ -209,8 +217,10 @@ class AbstractTranscriber(STTBackend):
     def transcribe_realtime_audio(self, audio_bytes=b""):
         """Generic adapter for batch backends. Two modes:
 
-        - Default (pseudo_streaming=False): accumulate the whole recording
-          into session.audio_buffer; finalize() runs one transcription.
+        - Default (pseudo_streaming=False): accumulate the recording into
+          session.audio_buffer; finalize() runs one transcription. Silent
+          pauses are capped at clip_max_silence seconds each (see __init__)
+          so dead air never inflates what is sent for transcription.
         - Pseudo-streaming (pseudo_streaming=True, experimental): cut the
           running buffer into chunks. Silence-cut when a pause >= silence
           duration is detected; force-cut at stream_chunk_max seconds.
@@ -224,9 +234,46 @@ class AbstractTranscriber(STTBackend):
         session = self.session
 
         if not self.pseudo_streaming:
-            session.audio_buffer += audio_bytes
-            return {"partial": f"{len(session.audio_buffer)} bytes received "
-                               f"(duration: {session.get_elapsed():.2f} seconds)"}
+            # Clip mode. Divert gate-silent blocks to session.silence_buffer
+            # and, when speech resumes, re-add only its tail — each pause in
+            # the accumulated audio is at most clip_max_silence seconds.
+            # Keeping the *tail* of the pause preserves the stretch right
+            # before the next word's onset (the word-boundary protection the
+            # streaming path gets from its 0.5 s re-add); trailing silence at
+            # stop-recording is dropped entirely since finalize() only reads
+            # audio_buffer.
+            if self.clip_max_silence <= 0:
+                session.audio_buffer += audio_bytes
+            elif self.silence_gate.is_silent(
+                    audio_bytes, in_utterance=bool(session.audio_buffer)):
+                session.silence_buffer += audio_bytes
+                max_silence_bytes = (
+                    int(self.clip_max_silence * self.samplerate) * 2)
+                if len(session.silence_buffer) > max_silence_bytes:
+                    session.trimmed_silence_bytes = (
+                        getattr(session, "trimmed_silence_bytes", 0)
+                        + len(session.silence_buffer) - max_silence_bytes)
+                    session.silence_buffer = \
+                        session.silence_buffer[-max_silence_bytes:]
+                # Same waiting semantics as the streaming path: the tray
+                # icon flips back to plain "recording" after a silence-
+                # break worth of quiet. silence-break can be 0 (Auto) or
+                # None (Max) — fall back to the 0.6 s default.
+                session.waiting = (
+                    time.time() - session.last_sound_time
+                    >= (self.stream_chunk_silence_break or 0.6))
+            else:
+                session.audio_buffer += session.silence_buffer + audio_bytes
+                session.silence_buffer = b''
+                session.last_sound_time = time.time()
+                session.waiting = False
+            partial = (f"{len(session.audio_buffer)} bytes received "
+                       f"(duration: {session.get_elapsed():.2f} seconds")
+            trimmed_s = (getattr(session, "trimmed_silence_bytes", 0)
+                         / (self.samplerate * 2))
+            if trimmed_s:
+                partial += f", trimmed {trimmed_s:.1f}s silence"
+            return {"partial": partial + ")"}
 
         # Auto-mode handover: if the previous call's force-cut produced
         # trailing audio (the post-silence remainder we couldn't fit in
