@@ -9,7 +9,11 @@ clipboard / terminal output.
 ## System dependencies
 
 Scribe records audio via PortAudio (through `sounddevice`) and reads /
-writes the clipboard via `xclip` on Linux. On Ubuntu:
+writes the clipboard via `xclip` on Linux — preferred over `wl-copy`
+on Wayland, where the latter briefly steals keyboard focus on GNOME
+< 47 and breaks pasting into Electron apps (see
+[Clipboard backend on Wayland](output.md#clipboard-backend-on-wayland)).
+On Ubuntu:
 
 ```bash
 sudo apt-get install portaudio19-dev xclip

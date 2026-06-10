@@ -52,6 +52,24 @@ the moment scribe fires the paste: the terminal then sees
 remember Shift for terminal targets, nothing for GUI apps where plain
 `Ctrl+V` already works (including VS Code's editor pane).
 
+### Clipboard backend on Wayland
+
+The paste path writes the clipboard through `pyperclip`, which on a
+Wayland session would normally use `wl-copy`. On compositors without a
+data-control protocol (GNOME < 47), `wl-copy` has to create a temporary
+invisible window and briefly take keyboard focus in order to own the
+selection. Most apps tolerate that focus blip, but Electron apps often
+don't return focus to the input field inside the page afterwards, so
+the synthesised Ctrl+V lands nowhere.
+
+Scribe therefore prefers `xclip` whenever XWayland is available: the
+clipboard is set through XWayland with no focus change, and the
+compositor syncs the X and Wayland selections both ways, so every app
+— X11-hosted or Wayland-native — sees the same text. The clipboard is
+a single session-global resource owned by the compositor; which tool
+set it is invisible to the app you paste into. When `xclip` or
+XWayland is missing, scribe falls back to `wl-copy`.
+
 ### `--type-direct` — bypass the clipboard
 
 In keystroke mode `--type-direct` (or **Options → Keyboard → Input
@@ -214,8 +232,9 @@ scribe --mode clipboard
 The transcription is copied to the system clipboard at end of recording
 and you press Ctrl+V (or Ctrl+Shift+V in a terminal) yourself. No
 keystrokes are synthesised, so there is no typer-backend involvement
-and no Wayland portal prompt — `pyperclip` / `wl-copy` is all that is
-needed.
+and no Wayland portal prompt — `pyperclip` (backed by `xclip` or
+`wl-copy`, see [Clipboard backend on Wayland](#clipboard-backend-on-wayland))
+is all that is needed.
 
 As with keystroke mode, the clipboard is left holding the
 transcription after scribe finishes; save any previous clipboard

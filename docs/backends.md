@@ -134,9 +134,12 @@ installing `[openai]` is enough for both.
 ## Stopping a recording
 
 For batch models (Whisper local, Whisper-via-API, Groq, `gpt-4o-*`) the
-recording continues for up to 2 minutes until you stop it manually
-(Stop in the tray, Ctrl+C in the terminal) — the transcription happens
-once when you stop.
+recording continues until you stop it manually (Stop in the tray,
+Ctrl+C in the terminal), with a safety stop after `--clip-timeout`
+seconds (10 minutes by default) — the transcription happens once when
+you stop. Silent pauses are capped at `--clip-max-silence` seconds
+(2 by default) in the audio sent for transcription, so dead air does
+not count toward what the cloud APIs bill by duration.
 
 Streaming models (Vosk, `gpt-realtime-whisper`) emit partials as you
 speak and stop on the same Stop / Ctrl+C action.
