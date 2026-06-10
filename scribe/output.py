@@ -61,6 +61,8 @@ class ClipboardOutput(Output):
 
     def on_chunk(self, chunk_text: str, fulltext: str) -> None:
         import pyperclip
+        from scribe.keyboard import configure_clipboard
+        configure_clipboard()
         pyperclip.copy(fulltext.strip())
 
     def on_finalize(self, fulltext: str) -> None:
@@ -148,6 +150,8 @@ class KeyboardOutput(Output):
 
     def on_chunk(self, chunk_text: str, fulltext: str) -> None:
         import pyperclip
+        from scribe.keyboard import configure_clipboard
+        configure_clipboard()
         if self.is_streaming and not self.type_direct:
             # Live paste-per-chunk: copy this chunk to clipboard and fire
             # Ctrl+V. Universal Unicode support (clipboard handles any
