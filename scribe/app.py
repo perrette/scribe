@@ -323,7 +323,7 @@ def _build_backend_kwargs(backend, model, language, samplerate, duration,
 
 
 def get_transcriber(model=None, backend=None, dummy=False, interactive=True, language=None,
-                    samplerate=None, clip_timeout=120.0, stream_timeout=None,
+                    samplerate=None, clip_timeout=600.0, stream_timeout=None,
                     silence_db=None, stream_chunk_silence_break=0.6, realtime_commit_silence=0.6,
                     vad_mode="auto", vad_threshold=0.5, vad_min_silence_ms=300,
                     download_folder_vosk=None, download_folder_whisper=None,
@@ -573,7 +573,7 @@ def get_parser():
                             "(default: %(default)s). 0 disables the rolling context "
                             "entirely — each chunk is transcribed without any "
                             "cross-chunk prompt.")
-    group.add_argument("--clip-timeout", default=120.0, type=float,
+    group.add_argument("--clip-timeout", default=600.0, type=float,
                        help="Auto-stop Clip recording after this many seconds "
                             "(default: %(default)s).")
     group.add_argument("--stream-timeout", default=None, type=float,
