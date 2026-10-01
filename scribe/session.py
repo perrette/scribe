@@ -168,6 +168,17 @@ class RecordingSession:
                 microphone.q.queue.clear()
                 result = {"text": ""}
             else:
+                # The loop above polls the queue every 100 ms, so blocks
+                # captured just before stop can still be waiting here. Feed
+                # them to batch backends before finalizing so the last words
+                # aren't lost. A pseudo-streaming silence cut at this point
+                # is moot: finalize() runs right after anyway.
+                if not streaming:
+                    try:
+                        while not microphone.q.empty():
+                            self.backend.transcribe_realtime_audio(microphone.q.get())
+                    except SilenceDetected:
+                        pass
                 try:
                     result = self.backend.finalize()
                 except Exception as exc:

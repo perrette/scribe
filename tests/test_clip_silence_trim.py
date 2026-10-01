@@ -90,14 +90,38 @@ def test_short_pause_kept_verbatim():
     assert sess.trimmed_silence_bytes == 0
 
 
-def test_trailing_silence_dropped():
+def test_trailing_silence_capped_at_stop():
     sess = make_session()
     backend = make_backend(sess, clip_max_silence=2.0)
     backend.transcribe_realtime_audio(loud_chunk(1.0))
     for _ in range(50):  # 5 s of trailing silence, never followed by speech
         backend.transcribe_realtime_audio(silent_chunk(0.1))
-    # finalize() reads audio_buffer only — the pause stays out of it.
     assert secs(sess.audio_buffer) == 1.0
+    # At stop, the retained tail (<= clip_max_silence) is appended so a
+    # quiet word ending misread as silence still reaches the backend.
+    backend.flush_trailing_silence()
+    assert secs(sess.audio_buffer) == 3.0
+    assert sess.silence_buffer == b''
+
+
+def test_quiet_word_ending_kept_at_stop():
+    sess = make_session()
+    backend = make_backend(sess, clip_max_silence=2.0)
+    backend.transcribe_realtime_audio(loud_chunk(1.0))
+    # A trailing-off word ending, below the dB gate threshold.
+    quiet = loud_chunk(0.3, amplitude=100)
+    backend.transcribe_realtime_audio(quiet)
+    backend.flush_trailing_silence()
+    assert sess.audio_buffer.endswith(quiet)
+
+
+def test_flush_noop_when_nothing_spoken():
+    sess = make_session()
+    backend = make_backend(sess, clip_max_silence=2.0)
+    for _ in range(10):
+        backend.transcribe_realtime_audio(silent_chunk(0.1))
+    backend.flush_trailing_silence()
+    assert sess.audio_buffer == b''
 
 
 def test_zero_disables_trimming():

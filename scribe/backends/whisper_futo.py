@@ -199,6 +199,7 @@ class WhisperFutoTranscriber(AbstractTranscriber):
         return {"text": text}
 
     def finalize(self):
+        self.flush_trailing_silence()
         if len(self.session.audio_buffer) == 0:
             return {"text": ""}
         result = self.transcribe_audio(self.session.audio_buffer)

@@ -482,6 +482,20 @@ class AbstractTranscriber(STTBackend):
     def clear_streaming_context(self):
         self._streaming_context = ""
 
+    def flush_trailing_silence(self):
+        """Clip mode: move the silence held since the last speech block into
+        audio_buffer before finalize() transcribes it. The silence gate can
+        classify a quiet word ending as silence, and Whisper tends to drop
+        the last word when the audio stops right at the end of speech.
+        silence_buffer is already capped at clip_max_silence seconds, so at
+        most that much is appended. No-op when nothing was spoken, so a
+        silent recording still finalizes to empty text."""
+        session = self.session
+        if self.pseudo_streaming or not session.audio_buffer:
+            return
+        session.audio_buffer += session.silence_buffer
+        session.silence_buffer = b''
+
     def transcribe_audio(self, audio_data):
         raise NotImplementedError()
 
