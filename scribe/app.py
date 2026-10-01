@@ -467,6 +467,12 @@ def get_parser():
                             "is the ^V control character. Cost: slower for long text; on wtype/ydotool "
                             "non-ASCII characters fall back to their ASCII equivalents (eitype is "
                             "Unicode-correct).")
+    group.add_argument("--typer-delay", default=2, type=int,
+                       help="With --type-direct, delay in milliseconds between key events "
+                            "for the eitype and wtype typers (default: %(default)s). Some "
+                            "apps drop keystrokes that arrive faster than they can read them "
+                            "(e.g. the Claude Code prompt loses the end of the text at 0). "
+                            "Costs about 2 x delay per character.")
     group.add_argument("-o", "--output-file",
                        default=DEFAULT_OUTPUT_FILE,
                        help=f"Path the transcription is appended to when "
@@ -675,6 +681,7 @@ def _resolve_output(o, *, is_streaming, backend_obj):
         typer=getattr(o, "typer", None) if mode == "keystroke" else None,
         type_direct=getattr(o, "type_direct", False),
         output_file=getattr(o, "output_file", None) if mode == "file" else None,
+        typer_delay=getattr(o, "typer_delay", 0),
         is_streaming=is_streaming,
         backend_obj=backend_obj,
     )

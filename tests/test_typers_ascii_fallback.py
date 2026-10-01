@@ -78,3 +78,26 @@ def test_unrenderable_char_is_skipped_not_fatal():
 
     type_ascii_safe(emit, "xéy", (LayoutError,))
     assert "".join(typed) == "xy"
+
+
+def _record_subprocess(monkeypatch, module):
+    calls = []
+    monkeypatch.setattr(module.subprocess, "run",
+                        lambda cmd, **kw: calls.append(cmd))
+    return calls
+
+
+def test_subprocess_typers_pass_key_delay(monkeypatch):
+    # --typer-delay reaches eitype/wtype as `-d MS`; some apps (the Claude
+    # Code prompt) drop the end of text typed as one zero-delay burst.
+    import scribe.typers.eitype as eitype_mod
+    import scribe.typers.wtype as wtype_mod
+    for module, cls in ((eitype_mod, eitype_mod.EitypeTyper),
+                        (wtype_mod, wtype_mod.WtypeTyper)):
+        calls = _record_subprocess(monkeypatch, module)
+        typer = cls()
+        typer.type("hi")
+        typer.key_delay_ms = 2
+        typer.type("hi")
+        assert calls == [[cls.name, "--", "hi"],
+                         [cls.name, "-d", "2", "--", "hi"]]

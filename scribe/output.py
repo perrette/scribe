@@ -194,7 +194,7 @@ class KeyboardOutput(Output):
 
 def make_output(mode: str, *, typer: Optional[str], type_direct: bool,
                 output_file: Optional[str], is_streaming: bool,
-                backend_obj=None) -> Output:
+                backend_obj=None, typer_delay: int = 0) -> Output:
     """Resolve ``(mode, typer, type_direct, output_file, is_streaming)``
     into the right Output subclass.
 
@@ -230,6 +230,8 @@ def make_output(mode: str, *, typer: Optional[str], type_direct: bool,
     if type_direct:
         from scribe.typers import pick_typer
         typer_obj = pick_typer(typer if typer and typer != "auto" else None)
+        if hasattr(typer_obj, "key_delay_ms"):
+            typer_obj.key_delay_ms = typer_delay
     else:
         typer_obj = None
     return KeyboardOutput(

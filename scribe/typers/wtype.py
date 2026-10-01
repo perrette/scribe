@@ -13,6 +13,9 @@ from scribe.typers.base import Typer
 
 class WtypeTyper:
     name = "wtype"
+    # Milliseconds between key events (`wtype -d`). Set from --typer-delay
+    # by scribe.output.make_output; 0 sends the whole string as one burst.
+    key_delay_ms: int = 0
 
     def compatible(self) -> bool:
         """Linux Wayland on a wlroots-based compositor (Sway, Hyprland, …).
@@ -42,7 +45,10 @@ class WtypeTyper:
 
     def _emit(self, text: str) -> None:
         try:
-            subprocess.run(["wtype", "--", text], check=True, capture_output=True)
+            cmd = ["wtype"]
+            if self.key_delay_ms > 0:
+                cmd += ["-d", str(self.key_delay_ms)]
+            subprocess.run(cmd + ["--", text], check=True, capture_output=True)
         except subprocess.CalledProcessError as e:
             raise RuntimeError(
                 f"wtype failed: {e.stderr.decode(errors='replace')}"

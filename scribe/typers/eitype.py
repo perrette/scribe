@@ -12,6 +12,9 @@ from scribe.typers.base import Typer
 
 class EitypeTyper:
     name = "eitype"
+    # Milliseconds between key events (`eitype -d`). Set from --typer-delay
+    # by scribe.output.make_output; 0 sends the whole string as one burst.
+    key_delay_ms: int = 0
 
     def compatible(self) -> bool:
         """Linux Wayland session; libei is a Wayland-specific protocol."""
@@ -29,7 +32,10 @@ class EitypeTyper:
 
     def _emit(self, text: str) -> None:
         try:
-            subprocess.run(["eitype", "--", text], check=True, capture_output=True)
+            cmd = ["eitype"]
+            if self.key_delay_ms > 0:
+                cmd += ["-d", str(self.key_delay_ms)]
+            subprocess.run(cmd + ["--", text], check=True, capture_output=True)
         except subprocess.CalledProcessError as e:
             raise RuntimeError(
                 f"eitype failed: {e.stderr.decode(errors='replace')}"
